@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,17 +10,54 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Activity, Users, Clock, Syringe, PlusCircle, FileText } from 'lucide-react'
-import { summaryStats, mockPatients } from '@/lib/mock-data'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
+import { api } from '@/services/api'
+import { Appointment } from '@/lib/types'
+import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Index() {
+  const [stats, setStats] = useState({ totalPatients: 0, appointmentsToday: 0, pendingReturns: 0 })
+  const [upcoming, setUpcoming] = useState<Appointment[]>([])
+
+  const loadData = async () => {
+    const pts = await api.getPatients()
+    const apps = await api.getAppointments()
+
+    const todayStr = new Date().toISOString().split('T')[0]
+    const todayApps = apps.filter((a) => a.date.startsWith(todayStr))
+    const pending = apps.filter((a) => a.status === 'scheduled' && a.type === 'return')
+
+    setStats({
+      totalPatients: pts.length,
+      appointmentsToday: todayApps.length,
+      pendingReturns: pending.length,
+    })
+    setUpcoming(apps.filter((a) => a.status === 'scheduled').slice(0, 5))
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+  useRealtime('patients', () => loadData())
+  useRealtime('appointments', () => loadData())
+
+  const getTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      return: 'Retorno',
+      vaccine: 'Vacina',
+      surgery: 'Cirurgia',
+      consultation: 'Consulta',
+    }
+    return labels[type] || type
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Bem-vindo ao VetSaaS. {summaryStats.totalRegistrations} registros totais no sistema.
+          Bem-vindo ao VetSaaS. {stats.totalPatients} pacientes registrados.
         </p>
       </div>
 
@@ -32,22 +70,18 @@ export default function Index() {
             <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">
-              {summaryStats.appointmentsToday}
-            </div>
+            <div className="text-3xl font-bold text-slate-900">{stats.appointmentsToday}</div>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Novos Pacientes (Mês)
+              Pacientes Cadastrados
             </CardTitle>
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">
-              +{summaryStats.newPatientsMonth}
-            </div>
+            <div className="text-3xl font-bold text-slate-900">{stats.totalPatients}</div>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm bg-white">
@@ -58,18 +92,20 @@ export default function Index() {
             <Clock className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{summaryStats.pendingReturns}</div>
+            <div className="text-3xl font-bold text-amber-600">{stats.pendingReturns}</div>
           </CardContent>
         </Card>
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Vacinas Vencendo
+              Vacinas Programadas
             </CardTitle>
             <Syringe className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600">{summaryStats.vaccinesExpiring}</div>
+            <div className="text-3xl font-bold text-red-600">
+              {upcoming.filter((a) => a.type === 'vaccine').length}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -77,7 +113,7 @@ export default function Index() {
       <div className="grid gap-6 md:grid-cols-7">
         <Card className="md:col-span-5 border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Próximos Atendimentos</CardTitle>
+            <CardTitle className="text-lg">Próximos Agendamentos</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
@@ -90,45 +126,49 @@ export default function Index() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockPatients.map((patient) => (
-                  <TableRow key={patient.id} className="hover:bg-slate-50 transition-colors">
+                {upcoming.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
+                      Nenhum agendamento futuro.
+                    </TableCell>
+                  </TableRow>
+                )}
+                {upcoming.map((app) => (
+                  <TableRow key={app.id} className="hover:bg-slate-50 transition-colors">
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 overflow-hidden">
-                          {patient.photoUrl && (
-                            <img
-                              src={patient.photoUrl}
-                              alt={patient.name}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
                         <div>
-                          <div className="font-semibold text-slate-900">{patient.name}</div>
+                          <div className="font-semibold text-slate-900">
+                            {app.expand?.patient_id?.name || 'Desconhecido'}
+                          </div>
                           <div className="text-xs text-muted-foreground">
-                            {patient.species} - {patient.breed}
+                            {app.expand?.patient_id?.species}
                           </div>
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{patient.owner.name}</TableCell>
+                    <TableCell className="text-sm">
+                      {app.expand?.patient_id?.expand?.tutor_id?.name || '-'}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"
                         className="bg-amber-50 text-amber-700 border-amber-200"
                       >
-                        Retorno
+                        {getTypeLabel(app.type)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary hover:text-primary/80"
-                      >
-                        <Link to={`/pacientes/${patient.id}`}>Ver Ficha</Link>
-                      </Button>
+                      {app.expand?.patient_id?.id && (
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          className="text-primary hover:text-primary/80"
+                        >
+                          <Link to={`/pacientes/${app.expand.patient_id.id}`}>Ver Ficha</Link>
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -148,8 +188,7 @@ export default function Index() {
               asChild
             >
               <Link to="/pacientes">
-                <PlusCircle className="w-5 h-5" />
-                Cadastrar Tutor/Animal
+                <PlusCircle className="w-5 h-5" /> Cadastrar Tutor/Animal
               </Link>
             </Button>
             <Button
@@ -157,9 +196,8 @@ export default function Index() {
               className="w-full justify-start gap-3 h-12 text-primary font-medium bg-primary-foreground/90 hover:bg-white"
               asChild
             >
-              <Link to="/pacientes">
-                <FileText className="w-5 h-5" />
-                Registrar Ficha Clínica
+              <Link to="/agenda">
+                <FileText className="w-5 h-5" /> Ver Agenda Completa
               </Link>
             </Button>
           </CardContent>
