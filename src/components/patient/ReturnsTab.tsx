@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -31,12 +32,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { format } from 'date-fns'
+import { useToast } from '@/hooks/use-toast'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 export function ReturnsTab({ patient }: { patient: Patient }) {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({ date: '', time: '10:00', type: 'return', notes: '' })
+  const { toast } = useToast()
 
   const loadApps = async () => {
     setAppointments(await api.getPatientAppointments(patient.id))
@@ -61,14 +65,36 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
       })
       setIsDialogOpen(false)
       setFormData({ date: '', time: '10:00', type: 'return', notes: '' })
+      toast({
+        title: 'Agendamento criado',
+        description: 'O agendamento foi salvo com sucesso.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar',
+        description: getErrorMessage(error),
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
   }
 
   const handleComplete = async (id: string) => {
-    await api.updateAppointment(id, { status: 'completed' })
-    loadApps()
+    try {
+      await api.updateAppointment(id, { status: 'completed' })
+      toast({
+        title: 'Concluído',
+        description: 'O status do agendamento foi atualizado.',
+      })
+      loadApps()
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: getErrorMessage(error),
+        variant: 'destructive',
+      })
+    }
   }
 
   const getTypeLabel = (type: string) => {
@@ -135,10 +161,11 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
               </div>
               <div className="space-y-2">
                 <Label>Observações</Label>
-                <Input
+                <Textarea
                   placeholder="Notas..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="min-h-[80px]"
                 />
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
