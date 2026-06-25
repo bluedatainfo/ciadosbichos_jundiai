@@ -36,9 +36,29 @@ export const api = {
     return pb.collection('clinical_records').create(formData)
   },
 
-  getAppointments: (patientId?: string) => {
-    const filter = patientId ? `patient_id = "${patientId}"` : ''
-    return pb.collection('appointments').getFullList({ filter, sort: 'date', expand: 'patient_id' })
+  getAppointments: (
+    params?: string | { patientId?: string; status?: string; startDate?: Date; endDate?: Date },
+  ) => {
+    const filterParts: string[] = []
+    if (typeof params === 'string') {
+      if (params && params !== 'all') filterParts.push(`patient_id = "${params}"`)
+    } else if (params) {
+      if (params.patientId && params.patientId !== 'all')
+        filterParts.push(`patient_id = "${params.patientId}"`)
+      if (params.status && params.status !== 'all') filterParts.push(`status = "${params.status}"`)
+      if (params.startDate) {
+        const start = params.startDate.toISOString().split('T')[0] + ' 00:00:00.000Z'
+        filterParts.push(`date >= "${start}"`)
+      }
+      if (params.endDate) {
+        const end = params.endDate.toISOString().split('T')[0] + ' 23:59:59.999Z'
+        filterParts.push(`date <= "${end}"`)
+      }
+    }
+    const filter = filterParts.join(' && ')
+    return pb
+      .collection('appointments')
+      .getFullList({ filter, sort: 'date', expand: 'patient_id.tutor_id' })
   },
   updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
   createAppointment: (data: any) => pb.collection('appointments').create(data),

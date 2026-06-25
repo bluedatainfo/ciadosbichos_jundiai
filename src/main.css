@@ -75,3 +75,32 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  @page {
+    size: auto;
+    margin: 10mm;
+  }
+  body {
+    background-color: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  [data-sidebar='sidebar'],
+  header.sticky {
+    display: none !important;
+  }
+  [data-sidebar='inset'],
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  /* Hide standard toaster containers */
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+}
