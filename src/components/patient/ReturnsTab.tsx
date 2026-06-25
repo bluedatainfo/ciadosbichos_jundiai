@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Patient, Appointment } from '@/lib/types'
 import { api } from '@/services/api'
+import pb from '@/lib/pocketbase/client'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,7 +44,15 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
   const { toast } = useToast()
 
   const loadApps = async () => {
-    setAppointments(await api.getPatientAppointments(patient.id))
+    try {
+      const records = await pb.collection('appointments').getFullList<Appointment>({
+        filter: `patient_id = "${patient.id}"`,
+        sort: '-date',
+      })
+      setAppointments(records)
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   useEffect(() => {
@@ -190,7 +199,7 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
             {appointments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                  Nenhum agendamento futuro.
+                  Nenhum agendamento encontrado para este paciente
                 </TableCell>
               </TableRow>
             ) : (

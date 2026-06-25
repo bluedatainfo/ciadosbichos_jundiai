@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-25T18:27:30.418Z",
+  "generatedAt": "2026-06-25T19:21:46.644Z",
   "collections": [
     {
       "name": "users",
@@ -345,7 +345,8 @@
       "indexes": [
         "CREATE INDEX `idx_appointments_date` ON `appointments` (date)",
         "CREATE INDEX `idx_appointments_status` ON `appointments` (status)",
-        "CREATE INDEX `idx_appointments_type` ON `appointments` (type)"
+        "CREATE INDEX `idx_appointments_type` ON `appointments` (type)",
+        "CREATE INDEX `idx_appointments_patient_id` ON `appointments` (patient_id)"
       ]
     },
     {
