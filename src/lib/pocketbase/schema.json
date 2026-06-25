@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-25T15:07:29.566Z",
+  "generatedAt": "2026-06-25T16:48:38.139Z",
   "collections": [
     {
       "name": "users",
@@ -118,7 +118,10 @@
           "system": false
         }
       ],
-      "indexes": []
+      "indexes": [
+        "CREATE INDEX `idx_tutors_name` ON `tutors` (name)",
+        "CREATE INDEX `idx_tutors_cpf` ON `tutors` (cpf)"
+      ]
     },
     {
       "name": "patients",
@@ -202,7 +205,11 @@
           "system": false
         }
       ],
-      "indexes": ["CREATE INDEX `idx_patients_last_visit` ON `patients` (last_visit)"]
+      "indexes": [
+        "CREATE INDEX `idx_patients_last_visit` ON `patients` (last_visit)",
+        "CREATE INDEX `idx_patients_name` ON `patients` (name)",
+        "CREATE INDEX `idx_patients_breed` ON `patients` (breed)"
+      ]
     },
     {
       "name": "clinical_records",
@@ -316,7 +323,11 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": []
+      "indexes": [
+        "CREATE INDEX `idx_appointments_date` ON `appointments` (date)",
+        "CREATE INDEX `idx_appointments_status` ON `appointments` (status)",
+        "CREATE INDEX `idx_appointments_type` ON `appointments` (type)"
+      ]
     }
   ]
 }

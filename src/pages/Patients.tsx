@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Sheet,
   SheetContent,
@@ -32,12 +33,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Plus, SlidersHorizontal, ChevronRight } from 'lucide-react'
+import { Search, Plus, ChevronRight } from 'lucide-react'
 
 export default function Patients() {
-  const [searchTerm, setSearchTerm] = useState('')
+  const [patientSearch, setPatientSearch] = useState('')
+  const [debouncedPatientSearch, setDebouncedPatientSearch] = useState('')
+  const [tutorSearch, setTutorSearch] = useState('')
+  const [debouncedTutorSearch, setDebouncedTutorSearch] = useState('')
+
   const [patients, setPatients] = useState<Patient[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
+  const [allTutors, setAllTutors] = useState<Tutor[]>([])
 
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [tutorMode, setTutorMode] = useState<'existing' | 'new'>('existing')
@@ -57,15 +63,35 @@ export default function Patients() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
 
-  const loadData = async () => {
-    setPatients(await api.getPatients())
-    setTutors(await api.getTutors())
-  }
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPatientSearch(patientSearch), 500)
+    return () => clearTimeout(t)
+  }, [patientSearch])
 
   useEffect(() => {
-    loadData()
+    const t = setTimeout(() => setDebouncedTutorSearch(tutorSearch), 500)
+    return () => clearTimeout(t)
+  }, [tutorSearch])
+
+  const loadPatients = async () => setPatients(await api.getPatients(debouncedPatientSearch))
+  const loadTutors = async () => setTutors(await api.getTutors(debouncedTutorSearch))
+  const loadAllTutors = async () => setAllTutors(await api.getTutors())
+
+  useEffect(() => {
+    loadPatients()
+  }, [debouncedPatientSearch])
+  useEffect(() => {
+    loadTutors()
+  }, [debouncedTutorSearch])
+  useEffect(() => {
+    loadAllTutors()
   }, [])
-  useRealtime('patients', () => loadData())
+
+  useRealtime('patients', () => loadPatients())
+  useRealtime('tutors', () => {
+    loadTutors()
+    loadAllTutors()
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -115,15 +141,6 @@ export default function Patients() {
       setLoading(false)
     }
   }
-
-  const filteredPatients = patients.filter((p) => {
-    const search = searchTerm.toLowerCase()
-    return (
-      p.name.toLowerCase().includes(search) ||
-      p.expand?.tutor_id?.name.toLowerCase().includes(search) ||
-      p.expand?.tutor_id?.phone.includes(search)
-    )
-  })
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -177,7 +194,7 @@ export default function Patients() {
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {tutors.map((t) => (
+                      {allTutors.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
                           {t.name} ({t.phone})
                         </SelectItem>
@@ -275,93 +292,157 @@ export default function Patients() {
         </Sheet>
       </div>
 
-      <Card className="border-none shadow-sm">
-        <CardContent className="p-0">
-          <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center justify-between bg-white rounded-t-lg">
-            <div className="relative w-full max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por nome ou telefone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 bg-slate-50 border-slate-200 w-full"
-              />
-            </div>
-            <Button variant="outline" className="w-full sm:w-auto gap-2 text-slate-600">
-              <SlidersHorizontal className="w-4 h-4" /> Filtros
-            </Button>
-          </div>
+      <Tabs defaultValue="patients" className="w-full">
+        <TabsList className="mb-4 bg-slate-100">
+          <TabsTrigger value="patients">Lista de Pacientes</TabsTrigger>
+          <TabsTrigger value="tutors">Lista de Tutores</TabsTrigger>
+        </TabsList>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                  <TableHead>Paciente</TableHead>
-                  <TableHead>Espécie/Raça</TableHead>
-                  <TableHead>Tutor</TableHead>
-                  <TableHead>Telefone</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPatients.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                      Nenhum paciente encontrado.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredPatients.map((patient) => (
-                    <TableRow
-                      key={patient.id}
-                      className="group hover:bg-slate-50 cursor-pointer transition-colors"
-                      asChild
-                    >
-                      <Link to={`/pacientes/${patient.id}`} className="contents">
-                        <TableCell>
-                          <div className="font-semibold text-slate-900 group-hover:text-primary transition-colors">
-                            {patient.name}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2 items-center">
-                            <Badge
-                              variant="secondary"
-                              className={
-                                patient.species === 'Cão'
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'bg-purple-50 text-purple-700'
-                              }
-                            >
-                              {patient.species}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">{patient.breed}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-700">
-                          {patient.expand?.tutor_id?.name}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-500">
-                          {patient.expand?.tutor_id?.phone}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <ChevronRight className="w-4 h-4 text-slate-400" />
-                          </Button>
-                        </TableCell>
-                      </Link>
+        <TabsContent value="patients" className="mt-0">
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-0">
+              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center bg-white rounded-t-lg">
+                <div className="relative w-full max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar paciente por nome, raça ou espécie..."
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    className="pl-9 bg-slate-50 border-slate-200 w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                      <TableHead>Paciente</TableHead>
+                      <TableHead>Espécie/Raça</TableHead>
+                      <TableHead>Tutor</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {patients.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                          Nenhum paciente encontrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      patients.map((patient) => (
+                        <TableRow
+                          key={patient.id}
+                          className="group hover:bg-slate-50 cursor-pointer transition-colors"
+                          asChild
+                        >
+                          <Link to={`/pacientes/${patient.id}`} className="contents">
+                            <TableCell>
+                              <div className="font-semibold text-slate-900 group-hover:text-primary transition-colors">
+                                {patient.name}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2 items-center">
+                                <Badge
+                                  variant="secondary"
+                                  className={
+                                    patient.species?.toLowerCase() === 'cão' ||
+                                    patient.species?.toLowerCase() === 'cachorro'
+                                      ? 'bg-blue-50 text-blue-700'
+                                      : 'bg-purple-50 text-purple-700'
+                                  }
+                                >
+                                  {patient.species}
+                                </Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {patient.breed}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-700">
+                              {patient.expand?.tutor_id?.name}
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-500">
+                              {patient.expand?.tutor_id?.phone}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                              </Button>
+                            </TableCell>
+                          </Link>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tutors" className="mt-0">
+          <Card className="border-none shadow-sm">
+            <CardContent className="p-0">
+              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center bg-white rounded-t-lg">
+                <div className="relative w-full max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar tutor por nome ou CPF..."
+                    value={tutorSearch}
+                    onChange={(e) => setTutorSearch(e.target.value)}
+                    className="pl-9 bg-slate-50 border-slate-200 w-full"
+                  />
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                      <TableHead>Nome</TableHead>
+                      <TableHead>CPF</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Email</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tutors.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                          Nenhum tutor encontrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      tutors.map((tutor) => (
+                        <TableRow key={tutor.id} className="hover:bg-slate-50 transition-colors">
+                          <TableCell className="font-medium text-slate-900">{tutor.name}</TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {tutor.cpf || '-'}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {tutor.phone || '-'}
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-600">
+                            {tutor.email || '-'}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

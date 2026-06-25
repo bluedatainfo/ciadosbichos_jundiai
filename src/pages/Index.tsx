@@ -9,37 +9,35 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Activity, Users, Clock, Syringe, PlusCircle, FileText } from 'lucide-react'
+import { Users, UserSquare, Calendar, AlertCircle, PlusCircle, FileText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/services/api'
 import { Appointment } from '@/lib/types'
 import { useRealtime } from '@/hooks/use-realtime'
+import { format } from 'date-fns'
 
 export default function Index() {
-  const [stats, setStats] = useState({ totalPatients: 0, appointmentsToday: 0, pendingReturns: 0 })
-  const [upcoming, setUpcoming] = useState<Appointment[]>([])
+  const [stats, setStats] = useState({
+    totalPatients: 0,
+    totalTutors: 0,
+    appointmentsToday: 0,
+    upcomingReturnsWeek: 0,
+  })
+  const [recent, setRecent] = useState<Appointment[]>([])
 
   const loadData = async () => {
-    const pts = await api.getPatients()
-    const apps = await api.getAppointments()
-
-    const todayStr = new Date().toISOString().split('T')[0]
-    const todayApps = apps.filter((a) => a.date.startsWith(todayStr))
-    const pending = apps.filter((a) => a.status === 'scheduled' && a.type === 'return')
-
-    setStats({
-      totalPatients: pts.length,
-      appointmentsToday: todayApps.length,
-      pendingReturns: pending.length,
-    })
-    setUpcoming(apps.filter((a) => a.status === 'scheduled').slice(0, 5))
+    const s = await api.getDashboardStats()
+    const r = await api.getRecentAppointments()
+    setStats(s)
+    setRecent(r)
   }
 
   useEffect(() => {
     loadData()
   }, [])
   useRealtime('patients', () => loadData())
+  useRealtime('tutors', () => loadData())
   useRealtime('appointments', () => loadData())
 
   const getTypeLabel = (type: string) => {
@@ -56,23 +54,10 @@ export default function Index() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Bem-vindo ao VetSaaS. {stats.totalPatients} pacientes registrados.
-        </p>
+        <p className="text-muted-foreground mt-1">Visão geral da operação da clínica.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="border-none shadow-sm bg-white">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Atendimentos Hoje
-            </CardTitle>
-            <Activity className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{stats.appointmentsToday}</div>
-          </CardContent>
-        </Card>
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -84,28 +69,40 @@ export default function Index() {
             <div className="text-3xl font-bold text-slate-900">{stats.totalPatients}</div>
           </CardContent>
         </Card>
+
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Retornos Pendentes
+              Tutores Cadastrados
             </CardTitle>
-            <Clock className="h-4 w-4 text-amber-500" />
+            <UserSquare className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{stats.pendingReturns}</div>
+            <div className="text-3xl font-bold text-slate-900">{stats.totalTutors}</div>
           </CardContent>
         </Card>
+
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Vacinas Programadas
+              Atendimentos Hoje
             </CardTitle>
-            <Syringe className="h-4 w-4 text-red-500" />
+            <Calendar className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600">
-              {upcoming.filter((a) => a.type === 'vaccine').length}
-            </div>
+            <div className="text-3xl font-bold text-slate-900">{stats.appointmentsToday}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-white">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Retornos (7 dias)
+            </CardTitle>
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-amber-600">{stats.upcomingReturnsWeek}</div>
           </CardContent>
         </Card>
       </div>
@@ -113,49 +110,67 @@ export default function Index() {
       <div className="grid gap-6 md:grid-cols-7">
         <Card className="md:col-span-5 border-none shadow-sm">
           <CardHeader>
-            <CardTitle className="text-lg">Próximos Agendamentos</CardTitle>
+            <CardTitle className="text-lg">Atendimentos Recentes</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead>Data</TableHead>
                   <TableHead>Paciente</TableHead>
-                  <TableHead>Tutor</TableHead>
                   <TableHead>Motivo</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ação</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {upcoming.length === 0 && (
+                {recent.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-muted-foreground">
-                      Nenhum agendamento futuro.
+                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
+                      Nenhum agendamento recente.
                     </TableCell>
                   </TableRow>
                 )}
-                {upcoming.map((app) => (
+                {recent.map((app) => (
                   <TableRow key={app.id} className="hover:bg-slate-50 transition-colors">
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <div className="font-semibold text-slate-900">
-                            {app.expand?.patient_id?.name || 'Desconhecido'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {app.expand?.patient_id?.species}
-                          </div>
-                        </div>
+                    <TableCell className="font-medium text-sm">
+                      {format(new Date(app.date), 'dd/MM/yyyy HH:mm')}
+                    </TableCell>
+                    <TableCell>
+                      <div className="font-medium text-slate-900">
+                        {app.expand?.patient_id?.name || 'Desconhecido'}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Tutor: {app.expand?.patient_id?.expand?.tutor_id?.name || '-'}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">
-                      {app.expand?.patient_id?.expand?.tutor_id?.name || '-'}
+                    <TableCell>
+                      <Badge variant="outline" className="bg-slate-50">
+                        {getTypeLabel(app.type)}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant="outline"
-                        className="bg-amber-50 text-amber-700 border-amber-200"
+                        variant={
+                          app.status === 'scheduled'
+                            ? 'default'
+                            : app.status === 'completed'
+                              ? 'secondary'
+                              : 'destructive'
+                        }
+                        className={
+                          app.status === 'scheduled'
+                            ? 'bg-amber-100 text-amber-800'
+                            : app.status === 'completed'
+                              ? 'bg-green-100 text-green-800'
+                              : ''
+                        }
                       >
-                        {getTypeLabel(app.type)}
+                        {app.status === 'scheduled'
+                          ? 'Agendado'
+                          : app.status === 'completed'
+                            ? 'Concluído'
+                            : 'Cancelado'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -166,7 +181,7 @@ export default function Index() {
                           size="sm"
                           className="text-primary hover:text-primary/80"
                         >
-                          <Link to={`/pacientes/${app.expand.patient_id.id}`}>Ver Ficha</Link>
+                          <Link to={`/pacientes/${app.expand.patient_id.id}`}>Ficha</Link>
                         </Button>
                       )}
                     </TableCell>
