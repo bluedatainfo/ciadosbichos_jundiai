@@ -26,13 +26,11 @@ export const api = {
       .collection('appointments')
       .getFullList<Appointment>({ expand: 'patient_id.tutor_id', sort: 'date' }),
   getPatientAppointments: (patientId: string) =>
-    pb
-      .collection('appointments')
-      .getFullList<Appointment>({
-        filter: `patient_id = '${patientId}'`,
-        sort: '-date',
-        expand: 'patient_id',
-      }),
+    pb.collection('appointments').getFullList<Appointment>({
+      filter: `patient_id = '${patientId}'`,
+      sort: '-date',
+      expand: 'patient_id',
+    }),
   createAppointment: (data: Partial<Appointment>) =>
     pb.collection('appointments').create<Appointment>(data),
   updateAppointment: (id: string, data: Partial<Appointment>) =>

@@ -2,9 +2,12 @@ export type Tutor = {
   id: string
   name: string
   phone: string
+  phone_secondary?: string
   email: string
   cpf: string
   address: string
+  cep?: string
+  additional_info?: string
 }
 
 export type Patient = {
@@ -15,6 +18,8 @@ export type Patient = {
   birth_date: string
   gender: 'Macho' | 'Fêmea'
   weight: number
+  pelagem?: string
+  last_visit?: string
   tutor_id: string
   created: string
   expand?: {
