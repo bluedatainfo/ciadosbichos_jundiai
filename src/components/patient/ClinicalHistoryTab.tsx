@@ -4,7 +4,9 @@ import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Activity } from 'lucide-react'
+import { Plus, Activity, Paperclip } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
+import pb from '@/lib/pocketbase/client'
 import {
   Dialog,
   DialogContent,
@@ -17,10 +19,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 
 export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
+  const { user } = useAuth()
+  const isAttendant = user?.role === 'attendant'
   const [records, setRecords] = useState<ClinicalRecord[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({ description: '', diagnosis: '', treatment: '' })
+  const [files, setFiles] = useState<File[]>([])
 
   const loadRecords = async () => {
     setRecords(await api.getClinicalRecords(patient.id))
@@ -35,9 +40,10 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.createClinicalRecord({ patient_id: patient.id, ...formData })
+      await api.createClinicalRecord({ patient_id: patient.id, ...formData, files })
       setIsDialogOpen(false)
       setFormData({ description: '', diagnosis: '', treatment: '' })
+      setFiles([])
     } finally {
       setLoading(false)
     }
@@ -46,48 +52,58 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
       <div className="flex justify-end">
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-primary hover:bg-primary/90">
-              <Plus className="w-4 h-4" /> Nova Evolução Clínica
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nova Evolução</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label>Sintomas / Queixa</Label>
-                <Textarea
-                  required
-                  placeholder="Descreva as observações"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Diagnóstico</Label>
-                <Input
-                  placeholder="Diagnóstico"
-                  value={formData.diagnosis}
-                  onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Tratamento Prescrito</Label>
-                <Textarea
-                  placeholder="Medicações, procedimentos..."
-                  value={formData.treatment}
-                  onChange={(e) => setFormData({ ...formData, treatment: e.target.value })}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Salvando...' : 'Salvar Registro'}
+        {!isAttendant && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2 bg-primary hover:bg-primary/90">
+                <Plus className="w-4 h-4" /> Nova Evolução Clínica
               </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Evolução</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSave} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Sintomas / Queixa</Label>
+                  <Textarea
+                    required
+                    placeholder="Descreva as observações"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Diagnóstico</Label>
+                  <Input
+                    placeholder="Diagnóstico"
+                    value={formData.diagnosis}
+                    onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tratamento Prescrito</Label>
+                  <Textarea
+                    placeholder="Medicações, procedimentos..."
+                    value={formData.treatment}
+                    onChange={(e) => setFormData({ ...formData, treatment: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Anexos (Exames, Laudos)</Label>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(e) => setFiles(Array.from(e.target.files || []))}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Salvando...' : 'Salvar Registro'}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -122,6 +138,26 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
                   </h4>
                   <p className="text-slate-800 whitespace-pre-wrap">{record.treatment || '-'}</p>
                 </div>
+                {record.files && record.files.length > 0 && (
+                  <div className="space-y-2 mt-4 col-span-full border-t pt-4">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                      Anexos
+                    </h4>
+                    <div className="flex flex-wrap gap-3">
+                      {record.files.map((file) => (
+                        <a
+                          key={file}
+                          href={pb.files.getURL(record, file)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md"
+                        >
+                          <Paperclip className="w-4 h-4" /> {file}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))

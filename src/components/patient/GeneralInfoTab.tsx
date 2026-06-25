@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Save, Loader2 } from 'lucide-react'
+import { Save, Loader2, MessageCircle, UploadCloud } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 
@@ -34,6 +34,8 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     additional_info: tutor?.additional_info || '',
   })
 
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+
   const [patientData, setPatientData] = useState({
     name: patient.name,
     species: patient.species,
@@ -43,6 +45,14 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     birth_date: patient.birth_date ? patient.birth_date.split(' ')[0] : '',
     pelagem: patient.pelagem || '',
   })
+
+  const openWhatsApp = (phone: string) => {
+    const cleanPhone = phone.replace(/\D/g, '')
+    if (cleanPhone) {
+      const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+      window.open(`https://wa.me/${number}`, '_blank')
+    }
+  }
 
   const createdDate = patient.created ? format(new Date(patient.created), 'dd/MM/yyyy') : ''
   const lastVisitDate = patient.last_visit
@@ -85,6 +95,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
         gender: patientData.gender as any,
         birth_date: patientData.birth_date ? new Date(patientData.birth_date).toISOString() : '',
         pelagem: patientData.pelagem,
+        ...(photoFile ? { photo: photoFile } : {}),
       })
       if (tutor) {
         await api.updateTutor(tutor.id, {
@@ -133,7 +144,18 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label>Telefone</Label>
+              <Label className="flex items-center gap-2">
+                Telefone
+                {tutorData.phone && (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsApp(tutorData.phone)}
+                    className="text-green-600 hover:text-green-700"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </Label>
               <Input
                 value={tutorData.phone}
                 onChange={(e) => setTutorData({ ...tutorData, phone: e.target.value })}
@@ -141,7 +163,18 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               />
             </div>
             <div className="space-y-1">
-              <Label>Telefone Secundário</Label>
+              <Label className="flex items-center gap-2">
+                Telefone Secundário
+                {tutorData.phone_secondary && (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsApp(tutorData.phone_secondary)}
+                    className="text-green-600 hover:text-green-700"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </Label>
               <Input
                 value={tutorData.phone_secondary}
                 onChange={(e) => setTutorData({ ...tutorData, phone_secondary: e.target.value })}
@@ -202,6 +235,22 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           </CardHeader>
           <CardContent className="space-y-4 pt-6">
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1 col-span-2">
+                <Label>Foto do Paciente</Label>
+                <div className="flex items-center gap-4">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
+                    className="bg-white flex-1"
+                  />
+                  {photoFile && (
+                    <span className="text-sm text-muted-foreground truncate max-w-[150px]">
+                      {photoFile.name}
+                    </span>
+                  )}
+                </div>
+              </div>
               <div className="space-y-1">
                 <Label>Data de Cadastro</Label>
                 <Input

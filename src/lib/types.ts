@@ -10,6 +10,25 @@ export type Tutor = {
   additional_info?: string
 }
 
+export type User = {
+  id: string
+  name: string
+  email: string
+  role: 'admin' | 'veterinarian' | 'attendant'
+  avatar?: string
+}
+
+export type InventoryItem = {
+  id: string
+  name: string
+  category: string
+  quantity: number
+  unit: string
+  min_stock: number
+  created: string
+  updated: string
+}
+
 export type Patient = {
   id: string
   name: string
@@ -19,6 +38,7 @@ export type Patient = {
   gender: 'Macho' | 'Fêmea'
   weight: number
   pelagem?: string
+  photo?: string
   last_visit?: string
   tutor_id: string
   created: string
@@ -33,6 +53,7 @@ export type ClinicalRecord = {
   description: string
   diagnosis: string
   treatment: string
+  files?: string[]
   created: string
 }
 

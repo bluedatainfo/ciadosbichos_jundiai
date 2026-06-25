@@ -1,88 +1,46 @@
 import pb from '@/lib/pocketbase/client'
-import { Patient, Tutor, ClinicalRecord, Appointment } from '@/lib/types'
 
 export const api = {
-  getTutors: (searchTerm?: string) => {
-    let filter = ''
-    if (searchTerm) {
-      filter = `name ~ "${searchTerm}" || cpf ~ "${searchTerm}"`
+  getPatient: (id: string) => pb.collection('patients').getOne(id, { expand: 'tutor_id' }),
+  getPatients: () =>
+    pb.collection('patients').getFullList({ expand: 'tutor_id', sort: '-created' }),
+  updatePatient: (id: string, data: any) => {
+    const formData = new FormData()
+    for (const key in data) {
+      if (data[key] !== undefined && data[key] !== null) {
+        formData.append(key, data[key])
+      }
     }
-    return pb.collection('tutors').getFullList<Tutor>({ sort: 'name', filter })
+    return pb.collection('patients').update(id, formData)
   },
-  createTutor: (data: Partial<Tutor>) => pb.collection('tutors').create<Tutor>(data),
-  updateTutor: (id: string, data: Partial<Tutor>) =>
-    pb.collection('tutors').update<Tutor>(id, data),
+  createPatient: (data: any) => pb.collection('patients').create(data),
+  deletePatient: (id: string) => pb.collection('patients').delete(id),
 
-  getPatients: (searchTerm?: string) => {
-    let filter = ''
-    if (searchTerm) {
-      filter = `name ~ "${searchTerm}" || breed ~ "${searchTerm}" || species ~ "${searchTerm}"`
-    }
-    return pb
-      .collection('patients')
-      .getFullList<Patient>({ expand: 'tutor_id', sort: '-created', filter })
-  },
-  getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
-  createPatient: (data: Partial<Patient>) => pb.collection('patients').create<Patient>(data),
-  updatePatient: (id: string, data: Partial<Patient>) =>
-    pb.collection('patients').update<Patient>(id, data),
+  getTutors: () => pb.collection('tutors').getFullList({ sort: '-created' }),
+  updateTutor: (id: string, data: any) => pb.collection('tutors').update(id, data),
+  createTutor: (data: any) => pb.collection('tutors').create(data),
 
   getClinicalRecords: (patientId: string) =>
     pb
       .collection('clinical_records')
-      .getFullList<ClinicalRecord>({ filter: `patient_id = '${patientId}'`, sort: '-created' }),
-  createClinicalRecord: (data: Partial<ClinicalRecord>) =>
-    pb.collection('clinical_records').create<ClinicalRecord>(data),
-
-  getAppointments: (statusFilter?: string) => {
-    let filter = ''
-    if (statusFilter && statusFilter !== 'all') {
-      filter = `status = '${statusFilter}'`
+      .getFullList({ filter: `patient_id = "${patientId}"`, sort: '-created' }),
+  createClinicalRecord: (data: any) => {
+    const formData = new FormData()
+    for (const key in data) {
+      if (key === 'files' && Array.isArray(data[key])) {
+        data[key].forEach((file: File) => formData.append('files', file))
+      } else if (data[key] !== undefined && data[key] !== null) {
+        formData.append(key, data[key])
+      }
     }
-    return pb
-      .collection('appointments')
-      .getFullList<Appointment>({ expand: 'patient_id.tutor_id', sort: 'date', filter })
-  },
-  getPatientAppointments: (patientId: string) =>
-    pb.collection('appointments').getFullList<Appointment>({
-      filter: `patient_id = '${patientId}'`,
-      sort: '-date',
-      expand: 'patient_id',
-    }),
-  createAppointment: (data: Partial<Appointment>) =>
-    pb.collection('appointments').create<Appointment>(data),
-  updateAppointment: (id: string, data: Partial<Appointment>) =>
-    pb.collection('appointments').update<Appointment>(id, data),
-
-  getDashboardStats: async () => {
-    const patientsRes = await pb.collection('patients').getList(1, 1)
-    const tutorsRes = await pb.collection('tutors').getList(1, 1)
-
-    const now = new Date()
-    const todayStr = now.toISOString().split('T')[0]
-    const appointmentsTodayRes = await pb.collection('appointments').getList(1, 1, {
-      filter: `date >= '${todayStr} 00:00:00' && date <= '${todayStr} 23:59:59'`,
-    })
-
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const nextWeekStr = nextWeek.toISOString().split('T')[0]
-    const returnsRes = await pb.collection('appointments').getList(1, 1, {
-      filter: `type = 'return' && status = 'scheduled' && date >= '${todayStr} 00:00:00' && date <= '${nextWeekStr} 23:59:59'`,
-    })
-
-    return {
-      totalPatients: patientsRes.totalItems,
-      totalTutors: tutorsRes.totalItems,
-      appointmentsToday: appointmentsTodayRes.totalItems,
-      upcomingReturnsWeek: returnsRes.totalItems,
-    }
+    return pb.collection('clinical_records').create(formData)
   },
 
-  getRecentAppointments: async () => {
-    const res = await pb.collection('appointments').getList<Appointment>(1, 5, {
-      sort: '-date',
-      expand: 'patient_id.tutor_id',
-    })
-    return res.items
+  getAppointments: (patientId?: string) => {
+    const filter = patientId ? `patient_id = "${patientId}"` : ''
+    return pb.collection('appointments').getFullList({ filter, sort: 'date', expand: 'patient_id' })
   },
+  updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
+  createAppointment: (data: any) => pb.collection('appointments').create(data),
+  deleteAppointment: (id: string) => pb.collection('appointments').delete(id),
 }

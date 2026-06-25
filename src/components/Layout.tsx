@@ -31,15 +31,32 @@ import {
   Bell,
   UserCircle,
   LogOut,
+  Package,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
 const menuItems = [
-  { title: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { title: 'Pacientes & Tutores', path: '/pacientes', icon: Users },
-  { title: 'Agenda de Retornos', path: '/agenda', icon: CalendarDays },
-  { title: 'Configurações', path: '/configuracoes', icon: Settings },
+  {
+    title: 'Dashboard',
+    path: '/',
+    icon: LayoutDashboard,
+    roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  {
+    title: 'Pacientes & Tutores',
+    path: '/pacientes',
+    icon: Users,
+    roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  {
+    title: 'Agenda de Retornos',
+    path: '/agenda',
+    icon: CalendarDays,
+    roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  { title: 'Estoque', path: '/estoque', icon: Package, roles: ['admin', 'veterinarian'] },
+  { title: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },
 ]
 
 export default function Layout() {
@@ -62,23 +79,25 @@ export default function Layout() {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {menuItems.map((item) => (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={
-                          location.pathname === item.path ||
-                          (item.path !== '/' && location.pathname.startsWith(item.path))
-                        }
-                        tooltip={item.title}
-                      >
-                        <Link to={item.path} className="flex items-center gap-3">
-                          <item.icon className="w-5 h-5" />
-                          <span className="font-medium">{item.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                  {menuItems
+                    .filter((item) => item.roles.includes(user?.role || 'attendant'))
+                    .map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={
+                            location.pathname === item.path ||
+                            (item.path !== '/' && location.pathname.startsWith(item.path))
+                          }
+                          tooltip={item.title}
+                        >
+                          <Link to={item.path} className="flex items-center gap-3">
+                            <item.icon className="w-5 h-5" />
+                            <span className="font-medium">{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>

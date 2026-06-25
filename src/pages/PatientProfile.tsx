@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft, User, Activity, Printer } from 'lucide-react'
+import pb from '@/lib/pocketbase/client'
 import { GeneralInfoTab } from '@/components/patient/GeneralInfoTab'
 import { ReturnsTab } from '@/components/patient/ReturnsTab'
 import { ClinicalHistoryTab } from '@/components/patient/ClinicalHistoryTab'
@@ -52,6 +53,8 @@ export default function PatientProfile() {
     )
   }
 
+  const photoUrl = patient?.photo ? pb.files.getURL(patient, patient.photo) : null
+
   const getAge = (dateStr: string) => {
     if (!dateStr) return '-'
     const diff = Date.now() - new Date(dateStr).getTime()
@@ -92,8 +95,12 @@ export default function PatientProfile() {
           <CardContent className="p-0">
             <div className="bg-gradient-to-r from-primary/10 to-transparent h-24 absolute w-full top-0 left-0" />
             <div className="relative p-6 flex flex-col md:flex-row gap-6 items-start md:items-center">
-              <div className="w-24 h-24 rounded-2xl bg-slate-100 shadow-md border-4 border-white overflow-hidden flex-shrink-0 flex items-center justify-center z-10">
-                <Activity className="w-8 h-8 text-slate-300" />
+              <div className="w-24 h-24 rounded-2xl bg-slate-100 shadow-md border-4 border-white overflow-hidden flex-shrink-0 flex items-center justify-center z-10 relative">
+                {photoUrl ? (
+                  <img src={photoUrl} alt={patient.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Activity className="w-8 h-8 text-slate-300" />
+                )}
               </div>
 
               <div className="flex-1 space-y-2 z-10">
