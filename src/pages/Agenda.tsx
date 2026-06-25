@@ -21,8 +21,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { format } from 'date-fns'
-import { CheckCircle, Clock, AlertTriangle } from 'lucide-react'
+import { CheckCircle, Clock, AlertTriangle, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+const openWhatsApp = (phone: string) => {
+  const cleanPhone = phone?.replace(/\D/g, '') || ''
+  if (cleanPhone) {
+    const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+    window.open(`https://wa.me/${number}`, '_blank')
+  }
+}
 
 export default function Agenda() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -128,8 +136,25 @@ export default function Agenda() {
                         {app.expand?.patient_id?.name || 'Desconhecido'}
                       </TableCell>
                       <TableCell>
-                        {app.expand?.patient_id?.expand?.tutor_id?.name} (
-                        {app.expand?.patient_id?.expand?.tutor_id?.phone})
+                        <div className="flex items-center gap-2">
+                          <div>
+                            {app.expand?.patient_id?.expand?.tutor_id?.name}
+                            <span className="text-muted-foreground ml-1 text-xs">
+                              ({app.expand?.patient_id?.expand?.tutor_id?.phone})
+                            </span>
+                          </div>
+                          {app.expand?.patient_id?.expand?.tutor_id?.phone && (
+                            <button
+                              onClick={() =>
+                                openWhatsApp(app.expand?.patient_id?.expand?.tutor_id?.phone!)
+                              }
+                              className="text-green-600 hover:text-green-700 p-1"
+                              title="Contatar via WhatsApp"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge

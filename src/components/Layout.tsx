@@ -32,6 +32,7 @@ import {
   UserCircle,
   LogOut,
   Package,
+  UserCog,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -55,7 +56,13 @@ const menuItems = [
     icon: CalendarDays,
     roles: ['admin', 'veterinarian', 'attendant'],
   },
-  { title: 'Estoque', path: '/estoque', icon: Package, roles: ['admin', 'veterinarian'] },
+  {
+    title: 'Estoque',
+    path: '/estoque',
+    icon: Package,
+    roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  { title: 'Equipe & Usuários', path: '/usuarios', icon: UserCog, roles: ['admin'] },
   { title: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },
 ]
 

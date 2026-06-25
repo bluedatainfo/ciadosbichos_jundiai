@@ -4,7 +4,7 @@ import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Activity, Paperclip } from 'lucide-react'
+import { Plus, Activity, Paperclip, Trash2, UploadCloud } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import pb from '@/lib/pocketbase/client'
 import {
@@ -17,9 +17,11 @@ import {
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { useToast } from '@/hooks/use-toast'
 
 export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   const { user } = useAuth()
+  const { toast } = useToast()
   const isAttendant = user?.role === 'attendant'
   const [records, setRecords] = useState<ClinicalRecord[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -44,6 +46,36 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
       setIsDialogOpen(false)
       setFormData({ description: '', diagnosis: '', treatment: '' })
       setFiles([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleAddAttachment = async (recordId: string, fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return
+    setLoading(true)
+    try {
+      const form = new FormData()
+      Array.from(fileList).forEach((f) => form.append('files+', f))
+      await pb.collection('clinical_records').update(recordId, form)
+      toast({ title: 'Arquivos anexados com sucesso' })
+      loadRecords()
+    } catch (err: any) {
+      toast({ title: 'Erro ao anexar', description: err.message, variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeleteAttachment = async (recordId: string, filename: string) => {
+    if (!confirm('Deseja excluir este anexo?')) return
+    setLoading(true)
+    try {
+      await pb.collection('clinical_records').update(recordId, { 'files-': [filename] })
+      toast({ title: 'Anexo excluído' })
+      loadRecords()
+    } catch (err: any) {
+      toast({ title: 'Erro ao excluir', description: err.message, variant: 'destructive' })
     } finally {
       setLoading(false)
     }
@@ -138,22 +170,55 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
                   </h4>
                   <p className="text-slate-800 whitespace-pre-wrap">{record.treatment || '-'}</p>
                 </div>
-                {record.files && record.files.length > 0 && (
+                {((record.files && record.files.length > 0) || !isAttendant) && (
                   <div className="space-y-2 mt-4 col-span-full border-t pt-4">
-                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                      Anexos
-                    </h4>
-                    <div className="flex flex-wrap gap-3">
-                      {record.files.map((file) => (
-                        <a
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                        Anexos
+                      </h4>
+                      {!isAttendant && (
+                        <div className="relative">
+                          <Input
+                            type="file"
+                            multiple
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={(e) => {
+                              handleAddAttachment(record.id, e.target.files)
+                              e.target.value = ''
+                            }}
+                            disabled={loading}
+                          />
+                          <Button size="sm" variant="outline" className="gap-2 h-8">
+                            <UploadCloud className="w-3.5 h-3.5" /> Adicionar
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-3 mt-2">
+                      {record.files?.map((file) => (
+                        <div
                           key={file}
-                          href={pb.files.getURL(record, file)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md"
+                          className="flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md border border-primary/10"
                         >
-                          <Paperclip className="w-4 h-4" /> {file}
-                        </a>
+                          <a
+                            href={pb.files.getURL(record, file)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5"
+                          >
+                            <Paperclip className="w-4 h-4" />{' '}
+                            {file.length > 20 ? file.substring(0, 20) + '...' : file}
+                          </a>
+                          {!isAttendant && (
+                            <button
+                              onClick={() => handleDeleteAttachment(record.id, file)}
+                              className="text-red-500 hover:text-red-700 ml-1 p-1"
+                              disabled={loading}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>

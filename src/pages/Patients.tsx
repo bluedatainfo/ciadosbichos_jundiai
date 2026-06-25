@@ -33,7 +33,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Plus, ChevronRight } from 'lucide-react'
+import { Search, Plus, ChevronRight, MessageCircle } from 'lucide-react'
+
+const openWhatsApp = (phone: string) => {
+  const cleanPhone = phone?.replace(/\D/g, '') || ''
+  if (cleanPhone) {
+    const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+    window.open(`https://wa.me/${number}`, '_blank')
+  }
+}
 
 export default function Patients() {
   const [patientSearch, setPatientSearch] = useState('')
@@ -366,7 +374,22 @@ export default function Patients() {
                               {patient.expand?.tutor_id?.name}
                             </TableCell>
                             <TableCell className="text-sm text-slate-500">
-                              {patient.expand?.tutor_id?.phone}
+                              <div className="flex items-center gap-2">
+                                {patient.expand?.tutor_id?.phone || '-'}
+                                {patient.expand?.tutor_id?.phone && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                      openWhatsApp(patient.expand?.tutor_id?.phone!)
+                                    }}
+                                    className="text-green-600 hover:text-green-700 p-1"
+                                    title="Contatar via WhatsApp"
+                                  >
+                                    <MessageCircle className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="text-right">
                               <Button
@@ -428,7 +451,18 @@ export default function Patients() {
                             {tutor.cpf || '-'}
                           </TableCell>
                           <TableCell className="text-sm text-slate-600">
-                            {tutor.phone || '-'}
+                            <div className="flex items-center gap-2">
+                              {tutor.phone || '-'}
+                              {tutor.phone && (
+                                <button
+                                  onClick={() => openWhatsApp(tutor.phone!)}
+                                  className="text-green-600 hover:text-green-700 p-1"
+                                  title="Contatar via WhatsApp"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-slate-600">
                             {tutor.email || '-'}
