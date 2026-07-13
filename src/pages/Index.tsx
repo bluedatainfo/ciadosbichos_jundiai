@@ -22,15 +22,18 @@ export default function Index() {
     totalPatients: 0,
     totalTutors: 0,
     appointmentsToday: 0,
-    upcomingReturnsWeek: 0,
+    lowStockCount: 0,
   })
   const [recent, setRecent] = useState<Appointment[]>([])
 
   const loadData = async () => {
-    const s = await api.getDashboardStats()
-    const r = await api.getRecentAppointments()
-    setStats(s)
-    setRecent(r)
+    try {
+      const [s, r] = await Promise.all([api.getDashboardStats(), api.getRecentAppointments()])
+      setStats(s)
+      setRecent(r)
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+    }
   }
 
   useEffect(() => {
@@ -97,12 +100,12 @@ export default function Index() {
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Retornos (7 dias)
+              Itens em Falta
             </CardTitle>
             <AlertCircle className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{stats.upcomingReturnsWeek}</div>
+            <div className="text-3xl font-bold text-amber-600">{stats.lowStockCount}</div>
           </CardContent>
         </Card>
       </div>

@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import type { Appointment } from '@/lib/types'
 
 export const api = {
   getPatient: (id: string) => pb.collection('patients').getOne(id, { expand: 'tutor_id' }),
@@ -63,4 +64,34 @@ export const api = {
   updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
   createAppointment: (data: any) => pb.collection('appointments').create(data),
   deleteAppointment: (id: string) => pb.collection('appointments').delete(id),
+
+  getDashboardStats: async () => {
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const startOfDay = `${dateStr} 00:00:00.000Z`
+    const endOfDay = `${dateStr} 23:59:59.999Z`
+
+    const [tutorsRes, patientsRes, appointmentsRes, inventoryRes] = await Promise.all([
+      pb.collection('tutors').getList(1, 1),
+      pb.collection('patients').getList(1, 1),
+      pb
+        .collection('appointments')
+        .getList(1, 1, { filter: `date >= "${startOfDay}" && date <= "${endOfDay}"` }),
+      pb.collection('inventory').getList(1, 1, { filter: `quantity < min_stock` }),
+    ])
+
+    return {
+      totalPatients: patientsRes.totalItems,
+      totalTutors: tutorsRes.totalItems,
+      appointmentsToday: appointmentsRes.totalItems,
+      lowStockCount: inventoryRes.totalItems,
+    }
+  },
+
+  getRecentAppointments: async (): Promise<Appointment[]> => {
+    const res = await pb
+      .collection('appointments')
+      .getList(1, 5, { sort: '-created', expand: 'patient_id.tutor_id' })
+    return res.items as unknown as Appointment[]
+  },
 }
