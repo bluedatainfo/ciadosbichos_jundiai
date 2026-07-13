@@ -10,6 +10,7 @@ import Agenda from '@/pages/Agenda'
 import Settings from '@/pages/Settings'
 import Inventory from '@/pages/Inventory'
 import UsersPage from '@/pages/Users'
+import Import from '@/pages/Import'
 import Login from '@/pages/Login'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
@@ -37,6 +38,7 @@ const AppRoutes = () => {
         <Route path="/pacientes/:id" element={<PatientProfile />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/estoque" element={<Inventory />} />
+        <Route path="/importacao" element={<Import />} />
         <Route path="/usuarios" element={<UsersPage />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>

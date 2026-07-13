@@ -33,6 +33,7 @@ import {
   LogOut,
   Package,
   UserCog,
+  Upload,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -63,6 +64,7 @@ const menuItems = [
     roles: ['admin', 'veterinarian', 'attendant'],
   },
   { title: 'Equipe & Usuários', path: '/usuarios', icon: UserCog, roles: ['admin'] },
+  { title: 'Importação de Dados', path: '/importacao', icon: Upload, roles: ['admin'] },
   { title: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },
 ]
 
