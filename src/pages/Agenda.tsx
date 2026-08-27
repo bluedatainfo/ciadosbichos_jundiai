@@ -244,10 +244,9 @@ export default function Agenda() {
                           <Clock className="w-4 h-4 text-muted-foreground print:hidden" />
                           {app.date ? format(new Date(app.date), 'dd/MM/yyyy HH:mm') : '-'}
                           {isAlert(app) && (
-                            <AlertTriangle
-                              className="w-4 h-4 text-red-500 animate-pulse ml-1 print:hidden"
-                              title="Retorno em menos de 48h!"
-                            />
+                            <span title="Retorno em menos de 48h!">
+                              <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse ml-1 print:hidden" />
+                            </span>
                           )}
                         </div>
                       </TableCell>

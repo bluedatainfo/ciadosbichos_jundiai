@@ -64,7 +64,7 @@ export default function UsersPage() {
     name: '',
     email: '',
     password: '',
-    role: 'attendant' as const,
+    role: 'attendant' as 'admin' | 'veterinarian' | 'attendant',
   }
 
   const [formData, setFormData] = useState(initialFormData)
@@ -106,6 +106,7 @@ export default function UsersPage() {
         password: formData.password,
         passwordConfirm: formData.password,
         role: formData.role,
+        emailVisibility: true,
       }
       await pb.collection('users').create(data)
       setIsCreateOpen(false)
@@ -142,6 +143,7 @@ export default function UsersPage() {
         name: formData.name,
         email: formData.email,
         role: formData.role,
+        emailVisibility: true,
       }
       if (formData.password) {
         data.password = formData.password

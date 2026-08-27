@@ -1,10 +1,18 @@
 import pb from '@/lib/pocketbase/client'
-import type { Appointment } from '@/lib/types'
+import type { Appointment, Patient, Tutor, ClinicalRecord } from '@/lib/types'
 
 export const api = {
-  getPatient: (id: string) => pb.collection('patients').getOne(id, { expand: 'tutor_id' }),
-  getPatients: () =>
-    pb.collection('patients').getFullList({ expand: 'tutor_id', sort: '-created' }),
+  getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
+  getPatients: (search?: string) => {
+    const filter = search
+      ? `name ~ "${search}" || breed ~ "${search}" || species ~ "${search}"`
+      : ''
+    return pb.collection('patients').getFullList<Patient>({
+      filter,
+      expand: 'tutor_id',
+      sort: '-created',
+    })
+  },
   updatePatient: (id: string, data: any) => {
     const formData = new FormData()
     for (const key in data) {
@@ -17,14 +25,20 @@ export const api = {
   createPatient: (data: any) => pb.collection('patients').create(data),
   deletePatient: (id: string) => pb.collection('patients').delete(id),
 
-  getTutors: () => pb.collection('tutors').getFullList({ sort: '-created' }),
+  getTutors: (search?: string) => {
+    const filter = search ? `name ~ "${search}" || cpf ~ "${search}"` : ''
+    return pb.collection('tutors').getFullList<Tutor>({
+      filter,
+      sort: '-created',
+    })
+  },
   updateTutor: (id: string, data: any) => pb.collection('tutors').update(id, data),
   createTutor: (data: any) => pb.collection('tutors').create(data),
 
   getClinicalRecords: (patientId: string) =>
     pb
       .collection('clinical_records')
-      .getFullList({ filter: `patient_id = "${patientId}"`, sort: '-created' }),
+      .getFullList<ClinicalRecord>({ filter: `patient_id = "${patientId}"`, sort: '-created' }),
   createClinicalRecord: (data: any) => {
     const formData = new FormData()
     for (const key in data) {
@@ -59,7 +73,7 @@ export const api = {
     const filter = filterParts.join(' && ')
     return pb
       .collection('appointments')
-      .getFullList({ filter, sort: 'date', expand: 'patient_id.tutor_id' })
+      .getFullList<Appointment>({ filter, sort: 'date', expand: 'patient_id.tutor_id' })
   },
   updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
   createAppointment: (data: any) => pb.collection('appointments').create(data),

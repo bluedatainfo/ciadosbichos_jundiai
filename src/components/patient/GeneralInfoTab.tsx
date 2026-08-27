@@ -318,7 +318,9 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Label>Sexo</Label>
                 <Select
                   value={patientData.gender}
-                  onValueChange={(v) => setPatientData({ ...patientData, gender: v })}
+                  onValueChange={(v: 'Macho' | 'Fêmea') =>
+                    setPatientData({ ...patientData, gender: v })
+                  }
                 >
                   <SelectTrigger className="bg-white">
                     <SelectValue />

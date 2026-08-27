@@ -344,54 +344,60 @@ export default function Patients() {
                         <TableRow
                           key={patient.id}
                           className="group hover:bg-slate-50 cursor-pointer transition-colors"
-                          asChild
                         >
-                          <Link to={`/pacientes/${patient.id}`} className="contents">
-                            <TableCell>
-                              <div className="font-semibold text-slate-900 group-hover:text-primary transition-colors">
-                                {patient.name}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2 items-center">
-                                <Badge
-                                  variant="secondary"
-                                  className={
-                                    patient.species?.toLowerCase() === 'cão' ||
-                                    patient.species?.toLowerCase() === 'cachorro'
-                                      ? 'bg-blue-50 text-blue-700'
-                                      : 'bg-purple-50 text-purple-700'
-                                  }
-                                >
-                                  {patient.species}
-                                </Badge>
-                                <span className="text-sm text-muted-foreground">
-                                  {patient.breed}
-                                </span>
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-700">
+                          <TableCell>
+                            <Link
+                              to={`/pacientes/${patient.id}`}
+                              className="font-semibold text-slate-900 group-hover:text-primary transition-colors block"
+                            >
+                              {patient.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              to={`/pacientes/${patient.id}`}
+                              className="flex gap-2 items-center"
+                            >
+                              <Badge
+                                variant="secondary"
+                                className={
+                                  patient.species?.toLowerCase() === 'cão' ||
+                                  patient.species?.toLowerCase() === 'cachorro'
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-purple-50 text-purple-700'
+                                }
+                              >
+                                {patient.species}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">{patient.breed}</span>
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-700">
+                            <Link to={`/pacientes/${patient.id}`} className="block">
                               {patient.expand?.tutor_id?.name}
-                            </TableCell>
-                            <TableCell className="text-sm text-slate-500">
-                              <div className="flex items-center gap-2">
-                                {patient.expand?.tutor_id?.phone || '-'}
-                                {patient.expand?.tutor_id?.phone && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                      openWhatsApp(patient.expand?.tutor_id?.phone!)
-                                    }}
-                                    className="text-green-600 hover:text-green-700 p-1"
-                                    title="Contatar via WhatsApp"
-                                  >
-                                    <MessageCircle className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-sm text-slate-500">
+                            <div className="flex items-center gap-2">
+                              {patient.expand?.tutor_id?.phone || '-'}
+                              {patient.expand?.tutor_id?.phone && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    openWhatsApp(patient.expand?.tutor_id?.phone!)
+                                  }}
+                                  className="text-green-600 hover:text-green-700 p-1"
+                                  title="Contatar via WhatsApp"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link to={`/pacientes/${patient.id}`} tabIndex={-1}>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -399,8 +405,8 @@ export default function Patients() {
                               >
                                 <ChevronRight className="w-4 h-4 text-slate-400" />
                               </Button>
-                            </TableCell>
-                          </Link>
+                            </Link>
+                          </TableCell>
                         </TableRow>
                       ))
                     )}

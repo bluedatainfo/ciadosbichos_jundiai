@@ -77,7 +77,7 @@ export function ImportReport({ report, entityType, onRestart }: ImportReportProp
                     <span className="text-slate-600">
                       {typeof err === 'string'
                         ? err
-                        : `Linha ${err.row ?? idx + 1}: ${err.message ?? 'Erro desconhecido'}`}
+                        : `Linha ${err.row ?? idx + 1}: ${Array.isArray(err.errors) ? err.errors.join(', ') : 'Erro desconhecido'}`}
                     </span>
                   </div>
                 ))}
