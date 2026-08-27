@@ -97,6 +97,9 @@ routerAdd('GET', '/api/public-booking/available-slots', (e) => {
 
     const startParts = interval.start.split(':').map((p) => parseInt(p, 10))
     const endParts = interval.end.split(':').map((p) => parseInt(p, 10))
+    if (isNaN(startParts[0]) || isNaN(startParts[1]) || isNaN(endParts[0]) || isNaN(endParts[1])) {
+      continue
+    }
 
     let currentMinutes = startParts[0] * 60 + startParts[1]
     const endMinutes = endParts[0] * 60 + endParts[1]

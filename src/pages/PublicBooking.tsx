@@ -88,7 +88,93 @@ export default function PublicBooking() {
     fetchConfig()
   }, [])
 
-  // 2. Carregar horários disponíveis para a data selecionada
+  // 2. Carregar horários disponíveis para a data selecionada (com fallback direto caso o endpoint customizado falhe)
+  const calculateSlotsLocally = async (
+    date: Date,
+    dateStr: string,
+    currentBhList: BusinessHours[],
+  ) => {
+    const dow = date.getDay()
+    const bhRecord = currentBhList.find((b) => b.day_of_week === dow)
+
+    if (!bhRecord || !bhRecord.is_open) {
+      setAvailableSlots([])
+      setDayMessage('Clínica fechada para atendimentos nesta data.')
+      return
+    }
+
+    const slotDuration = bhRecord.slot_duration_minutes || 30
+    let intervals: { start: string; end: string }[] = []
+    if (Array.isArray(bhRecord.intervals)) {
+      intervals = bhRecord.intervals
+    } else if (typeof bhRecord.intervals === 'string') {
+      try {
+        intervals = JSON.parse(bhRecord.intervals)
+      } catch {
+        intervals = []
+      }
+    }
+
+    if (intervals.length === 0) {
+      setAvailableSlots([])
+      setDayMessage('Nenhum horário de atendimento configurado para este dia.')
+      return
+    }
+
+    // Buscar agendamentos existentes no dia via PocketBase SDK
+    const startDay = `${dateStr} 00:00:00.000Z`
+    const endDay = `${dateStr} 23:59:59.999Z`
+
+    let occupiedTimes = new Set<string>()
+    try {
+      const existingApps = await api.getAppointments({
+        startDate: new Date(dateStr + 'T00:00:00'),
+        endDate: new Date(dateStr + 'T23:59:59'),
+      })
+      for (const app of existingApps) {
+        if (app.status !== 'cancelled' && app.date) {
+          const appDate = new Date(app.date)
+          const h = String(appDate.getUTCHours()).padStart(2, '0')
+          const m = String(appDate.getUTCMinutes()).padStart(2, '0')
+          occupiedTimes.add(`${h}:${m}`)
+        }
+      }
+    } catch (e) {
+      console.warn('Erro ao consultar agendamentos locais:', e)
+    }
+
+    const localSlots: AvailableSlot[] = []
+    for (const interval of intervals) {
+      if (!interval.start || !interval.end) continue
+      const [startH, startM] = interval.start.split(':').map((p) => parseInt(p, 10))
+      const [endH, endM] = interval.end.split(':').map((p) => parseInt(p, 10))
+      if (isNaN(startH) || isNaN(startM) || isNaN(endH) || isNaN(endM)) continue
+
+      let currentMin = startH * 60 + startM
+      const endMin = endH * 60 + endM
+
+      while (currentMin + slotDuration <= endMin) {
+        const h = Math.floor(currentMin / 60)
+        const m = currentMin % 60
+        const timeStr = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+        const isOccupied = occupiedTimes.has(timeStr)
+
+        localSlots.push({
+          time: timeStr,
+          available: !isOccupied,
+        })
+        currentMin += slotDuration
+      }
+    }
+
+    setAvailableSlots(localSlots)
+    if (localSlots.length === 0) {
+      setDayMessage('Nenhum horário de atendimento configurado para este dia.')
+    } else if (localSlots.every((s) => !s.available)) {
+      setDayMessage('Todos os horários para este dia já foram preenchidos.')
+    }
+  }
+
   const fetchSlotsForDate = async (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd')
     setLoadingSlots(true)
@@ -108,13 +194,22 @@ export default function PublicBooking() {
           setDayMessage('Todos os horários para este dia já foram preenchidos.')
         }
       } else {
-        setAvailableSlots([])
-        setDayMessage('Não há horários disponíveis para esta data.')
+        await calculateSlotsLocally(date, dateStr, businessHours)
       }
     } catch (err: any) {
-      console.error('Erro ao buscar slots:', err)
-      setAvailableSlots([])
-      setDayMessage('Não foi possível carregar os horários. Tente novamente.')
+      console.warn('Erro ao chamar hook de slots, executando cálculo direto:', err)
+      try {
+        let currentBh = businessHours
+        if (currentBh.length === 0) {
+          currentBh = await api.getBusinessHours()
+          setBusinessHours(currentBh)
+        }
+        await calculateSlotsLocally(date, dateStr, currentBh)
+      } catch (fallbackErr) {
+        console.error('Falha no fallback de cálculo de slots:', fallbackErr)
+        setAvailableSlots([])
+        setDayMessage('Não foi possível carregar os horários. Tente novamente.')
+      }
     } finally {
       setLoadingSlots(false)
     }

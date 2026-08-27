@@ -114,7 +114,7 @@ routerAdd('POST', '/api/public-booking/create', (e) => {
       tutorRecord.set('phone', tutorPhone)
       if (tutorEmail) tutorRecord.set('email', tutorEmail)
       tutorRecord.set('additional_info', 'Cadastrado via Agendamento Online')
-      $app.save(tutorRecord)
+      $app.saveNoValidate(tutorRecord)
     } catch (err) {
       return e.json(500, { error: 'Erro ao cadastrar tutor: ' + err.message })
     }
@@ -147,7 +147,7 @@ routerAdd('POST', '/api/public-booking/create', (e) => {
       if (petBreed) patientRecord.set('breed', petBreed)
       patientRecord.set('tutor_id', tutorRecord.id)
       patientRecord.set('gender', 'Macho') // default
-      $app.save(patientRecord)
+      $app.saveNoValidate(patientRecord)
     } catch (err) {
       return e.json(500, { error: 'Erro ao cadastrar paciente: ' + err.message })
     }
@@ -167,7 +167,7 @@ routerAdd('POST', '/api/public-booking/create', (e) => {
       'notes',
       notes ? 'Agendamento Online: ' + notes : 'Agendamento Online pelo Tutor',
     )
-    $app.save(appointmentRecord)
+    $app.saveNoValidate(appointmentRecord)
   } catch (err) {
     return e.json(500, { error: 'Erro ao criar agendamento: ' + err.message })
   }
