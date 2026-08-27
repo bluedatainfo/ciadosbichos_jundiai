@@ -1,7 +1,37 @@
 import pb from '@/lib/pocketbase/client'
-import type { Appointment, Patient, Tutor, ClinicalRecord } from '@/lib/types'
+import type {
+  Appointment,
+  Patient,
+  Tutor,
+  ClinicalRecord,
+  BusinessHours,
+  AvailableSlotsResponse,
+  PublicBookingPayload,
+  PublicBookingResult,
+} from '@/lib/types'
 
 export const api = {
+  // Configurações de Horários de Atendimento
+  getBusinessHours: () =>
+    pb.collection('business_hours').getFullList<BusinessHours>({
+      sort: 'day_of_week',
+    }),
+  updateBusinessHours: (id: string, data: Partial<BusinessHours>) =>
+    pb.collection('business_hours').update<BusinessHours>(id, data),
+
+  // Agendamento Online Público
+  getAvailableSlots: async (dateStr: string): Promise<AvailableSlotsResponse> => {
+    return pb.send<AvailableSlotsResponse>('/api/public-booking/available-slots', {
+      method: 'GET',
+      query: { date: dateStr },
+    })
+  },
+  createPublicBooking: async (data: PublicBookingPayload): Promise<PublicBookingResult> => {
+    return pb.send<PublicBookingResult>('/api/public-booking/create', {
+      method: 'POST',
+      body: data,
+    })
+  },
   getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
   getPatients: (search?: string) => {
     const filter = search

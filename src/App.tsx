@@ -12,6 +12,7 @@ import Inventory from '@/pages/Inventory'
 import UsersPage from '@/pages/Users'
 import Import from '@/pages/Import'
 import Login from '@/pages/Login'
+import PublicBooking from '@/pages/PublicBooking'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 
@@ -26,6 +27,8 @@ const AppRoutes = () => {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/agendamento" element={<PublicBooking />} />
+      <Route path="/agendamento-online" element={<PublicBooking />} />
       <Route
         element={
           <ProtectedRoute>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T14:07:48.359Z",
+  "generatedAt": "2026-08-27T16:21:13.017Z",
   "collections": [
     {
       "name": "users",
@@ -340,6 +340,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "source",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["internal", "public"]
         }
       ],
       "indexes": [
@@ -409,6 +416,64 @@
         "CREATE INDEX idx_inventory_name ON inventory (name)",
         "CREATE INDEX idx_inventory_category ON inventory (category)"
       ]
+    },
+    {
+      "name": "business_hours",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "day_of_week",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "day_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "is_open",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "slot_duration_minutes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "intervals",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_business_hours_day ON business_hours (day_of_week)"]
     }
   ]
 }

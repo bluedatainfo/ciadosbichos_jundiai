@@ -32,6 +32,8 @@ import {
   CalendarIcon,
   Printer,
   FileText,
+  Globe,
+  ExternalLink,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -88,12 +90,21 @@ export default function Agenda() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 print:hidden">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Agenda de Retornos</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+            Agenda de Atendimentos
+          </h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie retornos, vacinas e consultas agendadas.
+            Gerencie retornos, vacinas e consultas agendadas (internas e online).
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs">
+            <a href="/agendamento" target="_blank" rel="noreferrer">
+              <Globe className="w-3.5 h-3.5 text-primary" />
+              Página de Agendamento
+              <ExternalLink className="w-3 h-3 text-muted-foreground" />
+            </a>
+          </Button>
           <Button variant="outline" onClick={handlePrint} className="gap-2">
             <Printer className="w-4 h-4" /> Imprimir
           </Button>
@@ -242,7 +253,19 @@ export default function Agenda() {
                       <TableCell className="font-medium whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-muted-foreground print:hidden" />
-                          {app.date ? format(new Date(app.date), 'dd/MM/yyyy HH:mm') : '-'}
+                          <span>
+                            {app.date ? format(new Date(app.date), 'dd/MM/yyyy HH:mm') : '-'}
+                          </span>
+                          {app.source === 'public' && (
+                            <Badge
+                              variant="outline"
+                              className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 print:hidden gap-1 font-medium"
+                              title="Agendado online pelo tutor"
+                            >
+                              <Globe className="w-2.5 h-2.5 text-blue-600" />
+                              Online
+                            </Badge>
+                          )}
                           {isAlert(app) && (
                             <span title="Retorno em menos de 48h!">
                               <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse ml-1 print:hidden" />

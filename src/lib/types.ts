@@ -63,8 +63,65 @@ export type Appointment = {
   date: string
   type: 'return' | 'vaccine' | 'surgery' | 'consultation'
   status: 'scheduled' | 'completed' | 'cancelled'
+  source?: 'internal' | 'public'
   notes: string
   expand?: {
     patient_id: Patient
   }
+}
+
+export type TimeInterval = {
+  start: string // "08:00"
+  end: string // "12:00"
+}
+
+export type BusinessHours = {
+  id: string
+  day_of_week: number // 0 (Domingo) a 6 (Sábado)
+  day_name: string
+  is_open: boolean
+  slot_duration_minutes: number
+  intervals: TimeInterval[]
+  created: string
+  updated: string
+}
+
+export type AvailableSlot = {
+  time: string
+  available: boolean
+}
+
+export type AvailableSlotsResponse = {
+  date: string
+  day_of_week: number
+  day_name?: string
+  is_open: boolean
+  slot_duration_minutes: number
+  slots: AvailableSlot[]
+  message?: string
+}
+
+export type PublicBookingPayload = {
+  tutor_name: string
+  tutor_phone: string
+  tutor_email?: string
+  pet_name: string
+  pet_species: string
+  pet_breed?: string
+  date: string // "YYYY-MM-DD"
+  time: string // "HH:mm"
+  notes?: string
+}
+
+export type PublicBookingResult = {
+  success: boolean
+  appointment_id: string
+  date: string
+  time: string
+  tutor_name: string
+  tutor_phone: string
+  pet_name: string
+  species: string
+  notes?: string
+  error?: string
 }
