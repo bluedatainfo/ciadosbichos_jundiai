@@ -41,7 +41,7 @@ export function FileUpload({ onFile, fileName }: FileUploadProps) {
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.xlsx,.xls"
+        accept=".csv,.txt,.xlsx,.xls"
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
@@ -62,7 +62,10 @@ export function FileUpload({ onFile, fileName }: FileUploadProps) {
           <p className="font-medium text-slate-600">
             Arraste um arquivo aqui ou clique para selecionar
           </p>
-          <p className="text-xs text-muted-foreground">Formatos aceitos: .csv, .xlsx</p>
+          <p className="text-xs text-muted-foreground">
+            Formatos aceitos: <strong>.csv</strong>, <strong>.txt</strong> (delimitado por vírgula
+            ou ponto-e-vírgula)
+          </p>
         </div>
       )}
     </div>

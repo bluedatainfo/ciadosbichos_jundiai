@@ -8,6 +8,11 @@ export type Tutor = {
   address: string
   cep?: string
   additional_info?: string
+  rg?: string
+  indication?: string
+  city?: string
+  state?: string
+  neighborhood?: string
 }
 
 export type User = {
@@ -40,11 +45,26 @@ export type Patient = {
   pelagem?: string
   photo?: string
   last_visit?: string
+  ctrl?: string
+  microchip?: string
+  deceased?: boolean
+  status_notes?: string
+  registration_date?: string
   tutor_id: string
   created: string
   expand?: {
     tutor_id: Tutor
   }
+}
+
+export type Vaccine = {
+  id: string
+  patient_id: string
+  name: string
+  date?: string
+  notes?: string
+  created: string
+  updated: string
 }
 
 export type ClinicalRecord = {

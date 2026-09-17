@@ -1,4 +1,4 @@
-routerAdd('GET', '/api/public-booking/available-slots', (e) => {
+routerAdd('GET', '/backend/v1/public-booking/available-slots', (e) => {
   const dateStr = e.requestInfo().query.date // expected YYYY-MM-DD
   if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return e.json(400, { error: 'Parâmetro date é obrigatório no formato YYYY-MM-DD' })

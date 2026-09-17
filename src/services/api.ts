@@ -21,13 +21,13 @@ export const api = {
 
   // Agendamento Online Público
   getAvailableSlots: async (dateStr: string): Promise<AvailableSlotsResponse> => {
-    return pb.send<AvailableSlotsResponse>('/api/public-booking/available-slots', {
+    return pb.send<AvailableSlotsResponse>('/backend/v1/public-booking/available-slots', {
       method: 'GET',
       query: { date: dateStr },
     })
   },
   createPublicBooking: async (data: PublicBookingPayload): Promise<PublicBookingResult> => {
-    return pb.send<PublicBookingResult>('/api/public-booking/create', {
+    return pb.send<PublicBookingResult>('/backend/v1/public-booking/create', {
       method: 'POST',
       body: data,
     })
@@ -108,6 +108,13 @@ export const api = {
   updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
   createAppointment: (data: any) => pb.collection('appointments').create(data),
   deleteAppointment: (id: string) => pb.collection('appointments').delete(id),
+
+  getVaccines: (patientId: string) =>
+    pb.collection('vaccines').getFullList<import('@/lib/types').Vaccine>({
+      filter: `patient_id = "${patientId}"`,
+      sort: '-date',
+    }),
+  createVaccine: (data: any) => pb.collection('vaccines').create(data),
 
   getDashboardStats: async () => {
     const now = new Date()

@@ -370,6 +370,11 @@ export default function Patients() {
                                 {patient.species}
                               </Badge>
                               <span className="text-sm text-muted-foreground">{patient.breed}</span>
+                              {patient.deceased && (
+                                <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                  Óbito
+                                </Badge>
+                              )}
                             </Link>
                           </TableCell>
                           <TableCell className="text-sm text-slate-700">

@@ -1,5 +1,5 @@
-routerAdd('POST', '/api/public-booking/create', (e) => {
-  console.log('Receiving request on POST /api/public-booking/create')
+routerAdd('POST', '/backend/v1/public-booking/create', (e) => {
+  console.log('Receiving request on POST /backend/v1/public-booking/create')
   const data = e.requestInfo().body
 
   // Validação básica dos dados recebidos

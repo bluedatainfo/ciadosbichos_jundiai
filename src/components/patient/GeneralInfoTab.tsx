@@ -32,6 +32,11 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     cep: tutor?.cep || '',
     address: tutor?.address || '',
     additional_info: tutor?.additional_info || '',
+    rg: tutor?.rg || '',
+    city: tutor?.city || '',
+    state: tutor?.state || '',
+    neighborhood: tutor?.neighborhood || '',
+    indication: tutor?.indication || '',
   })
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -44,6 +49,10 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     gender: patient.gender,
     birth_date: patient.birth_date ? patient.birth_date.split(' ')[0] : '',
     pelagem: patient.pelagem || '',
+    microchip: patient.microchip || '',
+    ctrl: patient.ctrl || '',
+    deceased: patient.deceased || false,
+    status_notes: patient.status_notes || '',
   })
 
   const openWhatsApp = (phone: string) => {
@@ -95,6 +104,10 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
         gender: patientData.gender as any,
         birth_date: patientData.birth_date ? new Date(patientData.birth_date).toISOString() : '',
         pelagem: patientData.pelagem,
+        microchip: patientData.microchip,
+        ctrl: patientData.ctrl,
+        deceased: patientData.deceased,
+        status_notes: patientData.status_notes,
         ...(photoFile ? { photo: photoFile } : {}),
       })
       if (tutor) {
@@ -107,6 +120,11 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           cep: tutorData.cep,
           address: tutorData.address,
           additional_info: tutorData.additional_info,
+          rg: tutorData.rg,
+          city: tutorData.city,
+          state: tutorData.state,
+          neighborhood: tutorData.neighborhood,
+          indication: tutorData.indication,
         })
       }
       toast({ title: 'Sucesso', description: 'Dados gerais atualizados com sucesso.' })
@@ -182,14 +200,42 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               />
             </div>
           </div>
-          <div className="space-y-1">
-            <Label>Email</Label>
-            <Input
-              type="email"
-              value={tutorData.email}
-              onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
-              className="bg-white"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={tutorData.email}
+                onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>RG</Label>
+              <Input
+                value={tutorData.rg}
+                onChange={(e) => setTutorData({ ...tutorData, rg: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label>Bairro</Label>
+              <Input
+                value={tutorData.neighborhood}
+                onChange={(e) => setTutorData({ ...tutorData, neighborhood: e.target.value })}
+                className="bg-white"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Indicação (Quem indicou)</Label>
+              <Input
+                value={tutorData.indication}
+                onChange={(e) => setTutorData({ ...tutorData, indication: e.target.value })}
+                className="bg-white"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1 relative">
@@ -341,6 +387,59 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   className="bg-white"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+              <div className="space-y-1">
+                <Label>Microchip</Label>
+                <Input
+                  placeholder="Número do chip"
+                  value={patientData.microchip}
+                  onChange={(e) => setPatientData({ ...patientData, microchip: e.target.value })}
+                  className="bg-white font-mono text-xs"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Código Legado (CTRL)</Label>
+                <Input
+                  value={patientData.ctrl}
+                  onChange={(e) => setPatientData({ ...patientData, ctrl: e.target.value })}
+                  className="bg-white font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="deceased-check"
+                  checked={patientData.deceased}
+                  onChange={(e) => setPatientData({ ...patientData, deceased: e.target.checked })}
+                  className="rounded border-slate-300 text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer"
+                />
+                <Label
+                  htmlFor="deceased-check"
+                  className="font-semibold text-red-700 cursor-pointer"
+                >
+                  Marcar animal como Óbito / Falecido
+                </Label>
+              </div>
+              {patientData.deceased && (
+                <div className="space-y-1 pl-6">
+                  <Label className="text-xs text-muted-foreground">
+                    Observação de Óbito (DBTX)
+                  </Label>
+                  <Input
+                    placeholder="Ex: Óbito em dd/mm/aaaa, eutanásia, etc."
+                    value={patientData.status_notes}
+                    onChange={(e) =>
+                      setPatientData({ ...patientData, status_notes: e.target.value })
+                    }
+                    className="bg-white text-xs"
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

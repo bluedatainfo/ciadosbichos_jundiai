@@ -6,11 +6,12 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, User, Activity, Printer } from 'lucide-react'
+import { ArrowLeft, User, Activity, Printer, Syringe } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { GeneralInfoTab } from '@/components/patient/GeneralInfoTab'
 import { ReturnsTab } from '@/components/patient/ReturnsTab'
 import { ClinicalHistoryTab } from '@/components/patient/ClinicalHistoryTab'
+import { VaccinesTab } from '@/components/patient/VaccinesTab'
 import { format } from 'date-fns'
 
 export default function PatientProfile() {
@@ -113,6 +114,16 @@ export default function PatientProfile() {
                   <div className="flex items-center gap-1 font-medium text-slate-800">
                     {patient.species} - {patient.breed}
                   </div>
+                  {patient.deceased && (
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
+                      Óbito
+                    </span>
+                  )}
+                  {patient.ctrl && (
+                    <span className="text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600 font-mono">
+                      CTRL: {patient.ctrl}
+                    </span>
+                  )}
                   <div className="w-1 h-1 rounded-full bg-slate-300" />
                   <div>{patient.gender}</div>
                   <div className="w-1 h-1 rounded-full bg-slate-300" />
@@ -151,6 +162,12 @@ export default function PatientProfile() {
             >
               Retornos / Agenda
             </TabsTrigger>
+            <TabsTrigger
+              value="vacinas"
+              className="px-6 py-2.5 rounded-md data-[state=active]:bg-primary data-[state=active]:text-primary-foreground font-medium flex items-center gap-2"
+            >
+              <Syringe className="w-4 h-4" /> Vacinas
+            </TabsTrigger>
           </TabsList>
           <div className="bg-white/50 rounded-xl">
             <TabsContent value="gerais" className="mt-0 outline-none">
@@ -161,6 +178,9 @@ export default function PatientProfile() {
             </TabsContent>
             <TabsContent value="retornos" className="mt-0 outline-none">
               <ReturnsTab patient={patient} />
+            </TabsContent>
+            <TabsContent value="vacinas" className="mt-0 outline-none">
+              <VaccinesTab patientId={patient.id} />
             </TabsContent>
           </div>
         </Tabs>

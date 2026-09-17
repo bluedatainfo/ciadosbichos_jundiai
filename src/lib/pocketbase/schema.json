@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T16:46:14.868Z",
+  "generatedAt": "2026-09-17T21:19:49.295Z",
   "collections": [
     {
       "name": "users",
@@ -123,6 +123,36 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "rg",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "indication",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "city",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "neighborhood",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -216,12 +246,43 @@
           "type": "file",
           "required": false,
           "system": false
+        },
+        {
+          "name": "ctrl",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "microchip",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deceased",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status_notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registration_date",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX `idx_patients_last_visit` ON `patients` (last_visit)",
         "CREATE INDEX `idx_patients_name` ON `patients` (name)",
-        "CREATE INDEX `idx_patients_breed` ON `patients` (breed)"
+        "CREATE INDEX `idx_patients_breed` ON `patients` (breed)",
+        "CREATE INDEX `idx_patients_ctrl` ON `patients` (ctrl)"
       ]
     },
     {
@@ -474,6 +535,62 @@
         }
       ],
       "indexes": ["CREATE UNIQUE INDEX idx_business_hours_day ON business_hours (day_of_week)"]
+    },
+    {
+      "name": "vaccines",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "patient_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "patients"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_vaccines_patient_id ON vaccines (patient_id)",
+        "CREATE INDEX idx_vaccines_date ON vaccines (date)"
+      ]
     }
   ]
 }
