@@ -46,6 +46,7 @@ export type Patient = {
   photo?: string
   last_visit?: string
   ctrl?: string
+  import_key?: string
   microchip?: string
   deceased?: boolean
   status_notes?: string

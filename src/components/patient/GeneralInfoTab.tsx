@@ -51,6 +51,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     pelagem: patient.pelagem || '',
     microchip: patient.microchip || '',
     ctrl: patient.ctrl || '',
+    import_key: patient.import_key || '',
     deceased: patient.deceased || false,
     status_notes: patient.status_notes || '',
   })
@@ -408,6 +409,19 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 />
               </div>
             </div>
+
+            {patientData.import_key && (
+              <div className="pt-2">
+                <Label className="text-xs text-muted-foreground">
+                  Chave de Importação do Legado
+                </Label>
+                <Input
+                  value={patientData.import_key}
+                  readOnly
+                  className="bg-slate-50 text-slate-500 font-mono text-[11px]"
+                />
+              </div>
+            )}
 
             <div className="space-y-2 pt-2 border-t">
               <div className="flex items-center gap-2">

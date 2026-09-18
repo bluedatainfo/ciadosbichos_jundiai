@@ -16,8 +16,10 @@ import {
   normalizeDeceased,
   extractClinicalHistory,
   extractVaccinesFromRow,
+  getTutorDedupeKey,
+  getPatientCompositeBaseKey,
 } from '@/lib/access-migration-utils'
-import { Users, PawPrint, FileText, Syringe, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Users, PawPrint, FileText, Syringe, AlertCircle, CheckCircle2, Key } from 'lucide-react'
 
 interface AccessDataPreviewProps {
   rows: Record<string, string>[]
@@ -46,9 +48,23 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
     const clinical = extractClinicalHistory(selectedRow.TEXTO || selectedRow.texto)
     const vaccines = extractVaccinesFromRow(selectedRow)
 
+    const tutorDedupeKey = getTutorDedupeKey(
+      tutorNome || 'Tutor Não Informado',
+      selectedRow.CPF || selectedRow.cpf,
+    )
+    const compositeBaseKey = getPatientCompositeBaseKey({
+      tutorDedupeKey,
+      anim: animalNome,
+      espe: selectedRow.ESPE || selectedRow.espe,
+      nasc: selectedRow.NASC || selectedRow.nasc,
+      pela: selectedRow.PELA || selectedRow.pela,
+    })
+
     return {
       tutorNome,
       animalNome,
+      tutorDedupeKey,
+      compositeBaseKey,
       espe,
       sexo,
       deceased,
@@ -209,6 +225,13 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
                     <p className="text-slate-500 text-[11px]">
                       Pelagem: {selectedRow.PELA || selectedRow.pela || '-'} | Chip:{' '}
                       {selectedRow.CHIP || selectedRow.chip || '-'}
+                    </p>
+                    <p
+                      className="text-[10px] text-slate-500 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 flex items-center gap-1 mt-1 truncate"
+                      title={parsedDetail.compositeBaseKey}
+                    >
+                      <Key className="w-3 h-3 text-primary shrink-0" /> Chave Composta:{' '}
+                      {parsedDetail.compositeBaseKey}#1
                     </p>
                   </div>
 

@@ -124,8 +124,8 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
               <p className="text-2xl font-black text-emerald-900 mt-2">{report.patientsCreated}</p>
               <p className="text-xs text-emerald-600 mt-1">
                 {report.patientsSkipped > 0
-                  ? `${report.patientsSkipped} já existiam/ignorados`
-                  : 'Criados com sucesso'}
+                  ? `Criados (${report.patientsSkipped} já existentes mantidos)`
+                  : 'Criados (1 por linha do lote)'}
               </p>
             </div>
 

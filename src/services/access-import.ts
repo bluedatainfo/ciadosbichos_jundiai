@@ -8,6 +8,8 @@ import {
   extractClinicalHistory,
   extractVaccinesFromRow,
   getTutorDedupeKey,
+  getPatientCompositeBaseKey,
+  buildPatientImportKey,
 } from '@/lib/access-migration-utils'
 
 export interface AccessImportProgress {
@@ -78,8 +80,12 @@ export async function processAccessImport(
   // Cache em memória para resolução rápida de desduplicação durante a importação
   // key -> tutor record id
   const tutorIdCache = new Map<string, string>()
-  // key (ctrl ou tutorId:patientName) -> patient record id
+  // key (import_key persistida) -> patient record id
   const patientIdCache = new Map<string, string>()
+
+  // Contador de ocorrências por baseKey para a execução atual
+  // Ex: baseKey -> número de vezes que essa combinação já apareceu nesta execução (1, 2, 3...)
+  const runOccurrenceCounters = new Map<string, number>()
 
   // Pré-popular cache com tutores existentes no banco (se existirem)
   try {
@@ -94,15 +100,15 @@ export async function processAccessImport(
     console.warn('Não foi possível pré-carregar tutores:', err)
   }
 
-  // Pré-popular cache com pacientes existentes indexados por CTRL
+  // Pré-popular cache com pacientes existentes indexados por import_key
   try {
     const existingPatients = await pb.collection('patients').getFullList({
-      fields: 'id,ctrl,name,tutor_id',
+      fields: 'id,import_key,name,tutor_id',
     })
     for (const p of existingPatients) {
-      const cleanCtrl = p.ctrl ? p.ctrl.trim() : ''
-      if (cleanCtrl) {
-        patientIdCache.set(`ctrl:${cleanCtrl}`, p.id)
+      const cleanKey = p.import_key ? p.import_key.trim() : ''
+      if (cleanKey) {
+        patientIdCache.set(cleanKey, p.id)
       }
     }
   } catch (err) {
@@ -210,30 +216,44 @@ export async function processAccessImport(
         }
 
         // -------------------------------------------------------------
-        // 2. PACIENTE (ANIMAL): Vinculado ao tutor
+        // 2. PACIENTE (ANIMAL): Desduplicação por Chave Composta
+        // Chave: tutor + ANIM + ESPE (+ NASC e PELA quando existirem)
+        // com contador de ocorrências sequencial por linha.
+        // Colisões exatas no arquivo criam pacientes separados (#1, #2, ...),
+        // e reimportar o mesmo lote reconhece a chave exata (#1, #2, ...) já gravada,
+        // evitando duplicatas.
         // -------------------------------------------------------------
-        // TODA linha com dados de animal gera um paciente, mesmo com campos faltando
-        // (nome do animal vira "Sem nome" se vazio, datas inválidas viram vazias, etc.).
-        // Apenas desduplica se houver CTRL idêntico já importado no banco ou nesta execução
-        // (evitando duplicar ao reimportar o mesmo arquivo). Animais do mesmo tutor com
-        // o mesmo nome NÃO são descartados, pois podem ser pacientes diferentes.
         const animalName = animNome || 'Sem nome'
-        const ctrlKey = ctrl ? `ctrl:${ctrl}` : null
+        const espeRaw = row.ESPE || row.espe
+        const racaRaw = sanitizeText(row.RACA || row.raca)
+        const pelaRaw = sanitizeText(row.PELA || row.pela)
+        const sexoRaw = row.SEXO || row.sexo
+        const nascRaw = row.NASC || row.nasc
+        const chipRaw = sanitizeText(row.CHIP || row.chip)
+        const vivoRaw = row.VIVO || row.vivo
+        const dbtxRaw = row.DBTX || row.dbtx
+        const ultvRaw = row.ULTV || row.ultv
+        const dtrgRaw = row.DTRG || row.dtrg
 
-        let patientId = ctrlKey ? patientIdCache.get(ctrlKey) : null
+        // Montar a base da chave composta
+        const baseKey = getPatientCompositeBaseKey({
+          tutorDedupeKey: dedupeKey,
+          anim: animalName,
+          espe: espeRaw,
+          nasc: nascRaw,
+          pela: pelaRaw,
+        })
+
+        // Incrementar o contador de ocorrências desta baseKey na execução atual
+        const currentCount = (runOccurrenceCounters.get(baseKey) || 0) + 1
+        runOccurrenceCounters.set(baseKey, currentCount)
+
+        // Chave composta final com o contador de ocorrência (ex: "name:joao|mel|canino|nasc:01021990#1")
+        const importKey = buildPatientImportKey(baseKey, currentCount)
+
+        let patientId = patientIdCache.get(importKey)
 
         if (!patientId) {
-          const espeRaw = row.ESPE || row.espe
-          const racaRaw = sanitizeText(row.RACA || row.raca)
-          const pelaRaw = sanitizeText(row.PELA || row.pela)
-          const sexoRaw = row.SEXO || row.sexo
-          const nascRaw = row.NASC || row.nasc
-          const chipRaw = sanitizeText(row.CHIP || row.chip)
-          const vivoRaw = row.VIVO || row.vivo
-          const dbtxRaw = row.DBTX || row.dbtx
-          const ultvRaw = row.ULTV || row.ultv
-          const dtrgRaw = row.DTRG || row.dtrg
-
           const species = normalizeSpecies(espeRaw)
           const gender = normalizeGender(sexoRaw)
           const birthDate = normalizeDate(nascRaw)
@@ -251,6 +271,7 @@ export async function processAccessImport(
             tutor_id: tutorId,
             weight: 0,
             ctrl,
+            import_key: importKey,
             microchip: chipRaw,
             deceased,
             status_notes: dbtxRaw ? sanitizeText(dbtxRaw) : '',
@@ -259,7 +280,7 @@ export async function processAccessImport(
           })
 
           patientId = patientRecord.id
-          if (ctrlKey) patientIdCache.set(ctrlKey, patientId)
+          patientIdCache.set(importKey, patientId)
           patientsCreated++
         } else {
           patientsSkipped++

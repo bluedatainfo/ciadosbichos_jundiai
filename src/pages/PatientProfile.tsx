@@ -124,6 +124,14 @@ export default function PatientProfile() {
                       CTRL: {patient.ctrl}
                     </span>
                   )}
+                  {patient.import_key && (
+                    <span
+                      className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-mono truncate max-w-[220px]"
+                      title={patient.import_key}
+                    >
+                      Chave: {patient.import_key}
+                    </span>
+                  )}
                   <div className="w-1 h-1 rounded-full bg-slate-300" />
                   <div>{patient.gender}</div>
                   <div className="w-1 h-1 rounded-full bg-slate-300" />

@@ -349,3 +349,58 @@ export function getTutorDedupeKey(name: string, cpf?: string): string {
     .trim()
   return `name:${cleanName}`
 }
+
+/**
+ * Normaliza um texto para uso em chave de composição (sem acentos, minúsculo, sem pontuações extras)
+ */
+export function normalizeKeyText(val: string | null | undefined): string {
+  return sanitizeText(val)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+    .trim()
+}
+
+/**
+ * Gera a base da chave composta para o paciente da importação legada:
+ * tutor + ANIM + ESPE (+ NASC e PELA quando existirem)
+ *
+ * Formato base:
+ * tutorKey|anim|espe[|nasc][|pela]
+ */
+export function getPatientCompositeBaseKey(params: {
+  tutorDedupeKey: string
+  anim?: string
+  espe?: string
+  nasc?: string
+  pela?: string
+}): string {
+  const tutorKey = params.tutorDedupeKey || 'tutor:none'
+  const anim = normalizeKeyText(params.anim) || 'semnome'
+  const espe = normalizeKeyText(normalizeSpecies(params.espe)) || 'canino'
+
+  const parts = [tutorKey, anim, espe]
+
+  const nascClean = normalizeKeyText(params.nasc)
+  if (nascClean) {
+    parts.push(`nasc:${nascClean}`)
+  }
+
+  const pelaClean = normalizeKeyText(params.pela)
+  if (pelaClean) {
+    parts.push(`pela:${pelaClean}`)
+  }
+
+  return parts.join('|')
+}
+
+/**
+ * Constrói a chave final com contador de ocorrências (ex: `#1`, `#2`)
+ * Colisões exatas no mesmo arquivo ganham contador sequencial incrementado,
+ * garantindo pacientes separados na ordem do arquivo, enquanto reimportações
+ * encontram a mesma chave `#N` e não duplicam.
+ */
+export function buildPatientImportKey(baseKey: string, occurrenceNumber: number = 1): string {
+  return `${baseKey}#${occurrenceNumber}`
+}

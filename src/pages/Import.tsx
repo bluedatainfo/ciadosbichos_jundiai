@@ -212,10 +212,11 @@ export default function Import() {
                   <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
                     Importa o arquivo delimitado com tabela única contendo colunas{' '}
                     <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono text-primary font-semibold">
-                      CTRL, NOME, ANIM, ESPE, TEXTO, VAC1-5...
+                      NOME, ANIM, ESPE, NASC, PELA, TEXTO, VAC1-5...
                     </code>
-                    . Realiza desduplicação automática de tutores, extração cronológica do histórico
-                    clínico, vacinas e marcação de óbito.
+                    . Cria cada paciente de forma individual por linha com chave composta única,
+                    desduplicação inteligente de tutores, extração cronológica do histórico clínico
+                    individualizado e vacinas.
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1">
                     <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
@@ -448,7 +449,7 @@ export default function Import() {
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
                 {mode === 'access_legacy'
-                  ? 'Desduplicando tutores, cadastrando animais e desmembrando histórico clínico e vacinas.'
+                  ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
                   : 'Gravando registros no banco de dados.'}
               </p>
             </div>
