@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Syringe,
+  CalendarCheck,
   Download,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -100,7 +101,7 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
           </div>
 
           {/* Cards de Métricas */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
@@ -124,8 +125,8 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
               <p className="text-2xl font-black text-emerald-900 mt-2">{report.patientsCreated}</p>
               <p className="text-xs text-emerald-600 mt-1">
                 {report.patientsSkipped > 0
-                  ? `Criados (${report.patientsSkipped} já existentes mantidos)`
-                  : 'Criados (1 por linha do lote)'}
+                  ? `Criados (${report.patientsSkipped} já existentes)`
+                  : 'Criados (1 por linha)'}
               </p>
             </div>
 
@@ -139,7 +140,7 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
               <p className="text-2xl font-black text-amber-900 mt-2">
                 {report.clinicalEntriesCreated}
               </p>
-              <p className="text-xs text-amber-600 mt-1">Evoluções extraídas por data</p>
+              <p className="text-xs text-amber-600 mt-1">Evoluções exclusivas por animal</p>
             </div>
 
             <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-4">
@@ -151,6 +152,19 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
               </div>
               <p className="text-2xl font-black text-purple-900 mt-2">{report.vaccinesCreated}</p>
               <p className="text-xs text-purple-600 mt-1">Vacinações gravadas (VAC1-5)</p>
+            </div>
+
+            <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-teal-700 uppercase tracking-wider">
+                  Retornos / Agenda
+                </span>
+                <CalendarCheck className="w-5 h-5 text-teal-600" />
+              </div>
+              <p className="text-2xl font-black text-teal-900 mt-2">
+                {report.appointmentsCreated || 0}
+              </p>
+              <p className="text-xs text-teal-600 mt-1">Histórico em agendamentos</p>
             </div>
           </div>
 

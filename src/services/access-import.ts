@@ -7,6 +7,7 @@ import {
   normalizeDeceased,
   extractClinicalHistory,
   extractVaccinesFromRow,
+  extractAppointmentsFromRow,
   getTutorDedupeKey,
   getPatientCompositeBaseKey,
   buildPatientImportKey,
@@ -22,6 +23,7 @@ export interface AccessImportProgress {
   patientsCreated: number
   clinicalEntriesCreated: number
   vaccinesCreated: number
+  appointmentsCreated: number
   failed: number
   statusMessage: string
 }
@@ -43,6 +45,7 @@ export interface AccessImportReport {
   patientsSkipped: number
   clinicalEntriesCreated: number
   vaccinesCreated: number
+  appointmentsCreated: number
   failed: number
   errors: AccessBatchError[]
   durationSeconds: number
@@ -75,13 +78,21 @@ export async function processAccessImport(
   let patientsSkipped = 0
   let clinicalEntriesCreated = 0
   let vaccinesCreated = 0
+  let appointmentsCreated = 0
   const errors: AccessBatchError[] = []
 
   // Cache em memória para resolução rápida de desduplicação durante a importação
   // key -> tutor record id
   const tutorIdCache = new Map<string, string>()
   // key (import_key persistida) -> patient record id
+  // ATENÇÃO: NÃO reaproveitar pacientes de importações legadas anteriores
+  // se o objetivo for garantir isolamento estrito por linha.
+  // Indexamos por import_key apenas os pacientes criados ou carregados nesta execução.
   const patientIdCache = new Map<string, string>()
+
+  // Conjunto de IDs de pacientes que já receberam histórico nesta execução,
+  // garantindo blindagem contra inserção duplicada acidental.
+  const processedPatientIdsThisRun = new Set<string>()
 
   // Contador de ocorrências por baseKey para a execução atual
   // Ex: baseKey -> número de vezes que essa combinação já apareceu nesta execução (1, 2, 3...)
@@ -137,6 +148,7 @@ export async function processAccessImport(
           patientsCreated,
           clinicalEntriesCreated,
           vaccinesCreated,
+          appointmentsCreated,
           failed: errors.length,
           statusMessage: `Processando linha ${globalRowIdx + 1} de ${total}...`,
         })
@@ -288,35 +300,42 @@ export async function processAccessImport(
 
         // -------------------------------------------------------------
         // 3. HISTÓRICO CLÍNICO (TEXTO separado em entradas individuais)
+        // Cada entrada do TEXTO é vinculada EXCLUSIVAMENTE ao paciente
+        // desta linha (rowPatientId). Se o paciente já existia antes
+        // da execução atual, não duplicamos as fichas.
         // -------------------------------------------------------------
+        const rowPatientId = patientId
         const textoRaw = row.TEXTO || row.texto
-        if (textoRaw && patientId) {
-          const clinicalEntries = extractClinicalHistory(textoRaw)
-          for (const entry of clinicalEntries) {
-            try {
-              // PocketBase created date can be passed or we set description com a data
-              await pb.collection('clinical_records').create({
-                patient_id: patientId,
-                description: entry.text,
-                diagnosis: '',
-                treatment: '',
-              })
-              clinicalEntriesCreated++
-            } catch (recErr) {
-              console.warn('Erro ao criar registro clínico:', recErr)
+        const clinicalEntries = textoRaw ? extractClinicalHistory(textoRaw) : []
+
+        if (rowPatientId && !processedPatientIdsThisRun.has(rowPatientId)) {
+          processedPatientIdsThisRun.add(rowPatientId)
+
+          if (clinicalEntries.length > 0) {
+            for (const entry of clinicalEntries) {
+              try {
+                await pb.collection('clinical_records').create({
+                  patient_id: rowPatientId,
+                  description: entry.text,
+                  diagnosis: '',
+                  treatment: '',
+                })
+                clinicalEntriesCreated++
+              } catch (recErr) {
+                console.warn('Erro ao criar registro clínico:', recErr)
+              }
             }
           }
-        }
 
-        // -------------------------------------------------------------
-        // 4. HISTÓRICO DE VACINAÇÃO (VAC1-VAC5 + VTX1-VTX5)
-        // -------------------------------------------------------------
-        if (patientId) {
+          // -------------------------------------------------------------
+          // 4. HISTÓRICO DE VACINAÇÃO (VAC1-VAC5 + VTX1-VTX5)
+          // Vinculado estritamente a rowPatientId
+          // -------------------------------------------------------------
           const vaccines = extractVaccinesFromRow(row)
           for (const vac of vaccines) {
             try {
               await pb.collection('vaccines').create({
-                patient_id: patientId,
+                patient_id: rowPatientId,
                 name: vac.name,
                 date: vac.date || '',
                 notes: vac.notes || '',
@@ -324,6 +343,28 @@ export async function processAccessImport(
               vaccinesCreated++
             } catch (vacErr) {
               console.warn('Erro ao criar vacina:', vacErr)
+            }
+          }
+
+          // -------------------------------------------------------------
+          // 5. RETORNOS E AGENDAMENTOS HISTÓRICOS (appointments)
+          // Extraídos a partir das datas do TEXTO e ULTV da linha atual,
+          // vinculados estritamente ao paciente rowPatientId desta linha.
+          // -------------------------------------------------------------
+          const legacyAppointments = extractAppointmentsFromRow(row, clinicalEntries)
+          for (const appItem of legacyAppointments) {
+            try {
+              await pb.collection('appointments').create({
+                patient_id: rowPatientId,
+                date: appItem.date,
+                type: appItem.type,
+                status: appItem.status,
+                notes: appItem.notes,
+                source: appItem.source,
+              })
+              appointmentsCreated++
+            } catch (appErr) {
+              console.warn('Erro ao criar agendamento legado:', appErr)
             }
           }
         }
@@ -359,6 +400,7 @@ export async function processAccessImport(
     patientsSkipped,
     clinicalEntriesCreated,
     vaccinesCreated,
+    appointmentsCreated,
     failed: errors.length,
     errors,
     durationSeconds,

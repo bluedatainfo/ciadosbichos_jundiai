@@ -220,6 +220,8 @@ export interface ExtractedClinicalEntry {
  * O Access armazena histórico contínuo com marcações de datas como:
  * "06/04/02. Consulta..." ou "18/02/03: Retorno..." ou "25/08/1999 - Vacina..."
  * Retorna as entradas ordenadas em ordem CRONOLÓGICA.
+ *
+ * Cada chamada instancia regex novo localmente para total segurança contra estado compartilhado.
  */
 export function extractClinicalHistory(
   rawText: string | null | undefined,
@@ -228,7 +230,7 @@ export function extractClinicalHistory(
   if (!clean) return []
 
   // Regex para detectar início de entrada por data:
-  // "06/04/02.", "18/02/03:", "23/11/1989 -", "15.08.01:", "12/05/2004 "
+  // Exemplos: "06/04/02.", "18/02/03:", "23/11/1989 -", "15.08.01:", "12/05/2004 "
   const datePattern = /(?:^|\n|\r\n?|\s{2,})(\d{1,2}[./-](\d{1,2})[./-](\d{2,4}))(?:[.:\-\s]+)/g
 
   const entries: { startIndex: number; dateStr: string; matchEnd: number }[] = []
@@ -296,6 +298,103 @@ export function extractClinicalHistory(
   })
 
   return results
+}
+
+/**
+ * Representa um agendamento / retorno legado extraído da linha do Access
+ */
+export interface ExtractedLegacyAppointment {
+  date: string
+  type: 'return' | 'vaccine' | 'surgery' | 'consultation'
+  status: 'completed' | 'scheduled'
+  notes: string
+  source: 'internal'
+}
+
+/**
+ * Detecta o tipo de agendamento a partir do texto clínico
+ */
+function detectAppointmentType(text: string): 'return' | 'vaccine' | 'surgery' | 'consultation' {
+  const upper = text.toUpperCase()
+  if (upper.includes('CIRURG') || upper.includes('EUTAN') || upper.includes('CASTRA')) {
+    return 'surgery'
+  }
+  if (
+    upper.includes('RET') ||
+    upper.includes('RETORNO') ||
+    upper.includes('REVISAO') ||
+    upper.includes('REVISÃO')
+  ) {
+    return 'return'
+  }
+  if (
+    upper.includes('VACIN') ||
+    upper.includes('REVACIN') ||
+    upper.includes('TRIPLICE') ||
+    upper.includes('TRÍPLICE') ||
+    upper.includes('RAIVA')
+  ) {
+    return 'vaccine'
+  }
+  return 'consultation'
+}
+
+/**
+ * Extrai os agendamentos / retornos históricos vinculados à linha do paciente:
+ * 1. A partir das entradas datadas do TEXTO (consultas e retornos históricos ocorridos)
+ * 2. A partir da última visita (ULTV), caso não esteja já contemplada nas datas de histórico
+ */
+export function extractAppointmentsFromRow(
+  row: Record<string, string>,
+  clinicalEntries: ExtractedClinicalEntry[],
+): ExtractedLegacyAppointment[] {
+  const appointments: ExtractedLegacyAppointment[] = []
+  const recordedDates = new Set<string>()
+
+  // 1. Criar agendamento histórico para cada entrada clínica que possui data válida
+  for (const entry of clinicalEntries) {
+    if (!entry.date) continue
+
+    const dateKey = entry.date.slice(0, 10)
+    if (recordedDates.has(dateKey)) continue
+    recordedDates.add(dateKey)
+
+    const appType = detectAppointmentType(entry.text)
+    // Limitar notas a um resumo limpo (até 250 caracteres)
+    const cleanNotes = entry.text.slice(0, 250)
+
+    appointments.push({
+      date: entry.date,
+      type: appType,
+      status: 'completed',
+      notes: `[Migração Access] ${cleanNotes}`,
+      source: 'internal',
+    })
+  }
+
+  // 2. Se houver ULTV (última visita) e essa data não estiver registrada ainda, criar agendamento de retorno/visita
+  const ultvRaw = sanitizeText(row.ULTV || row.ultv)
+  if (ultvRaw) {
+    const ultvIso = normalizeDate(ultvRaw)
+    if (ultvIso) {
+      const ultvKey = ultvIso.slice(0, 10)
+      if (!recordedDates.has(ultvKey)) {
+        recordedDates.add(ultvKey)
+        appointments.push({
+          date: ultvIso,
+          type: 'return',
+          status: 'completed',
+          notes: `[Migração Access] Registro de última visita (ULTV: ${ultvRaw})`,
+          source: 'internal',
+        })
+      }
+    }
+  }
+
+  // Ordenar cronologicamente
+  appointments.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  return appointments
 }
 
 /**

@@ -474,7 +474,7 @@ export default function Import() {
             </div>
 
             {mode === 'access_legacy' && accessProgress && (
-              <div className="grid grid-cols-4 gap-2 w-full max-w-lg mt-4 text-center">
+              <div className="grid grid-cols-5 gap-2 w-full max-w-xl mt-4 text-center">
                 <div className="p-2 bg-slate-50 rounded border text-xs">
                   <p className="font-bold text-blue-700">{accessProgress.tutorsCreated}</p>
                   <p className="text-[10px] text-slate-500">Tutores</p>
@@ -492,6 +492,12 @@ export default function Import() {
                 <div className="p-2 bg-slate-50 rounded border text-xs">
                   <p className="font-bold text-purple-700">{accessProgress.vaccinesCreated}</p>
                   <p className="text-[10px] text-slate-500">Vacinas</p>
+                </div>
+                <div className="p-2 bg-slate-50 rounded border text-xs">
+                  <p className="font-bold text-teal-700">
+                    {accessProgress.appointmentsCreated || 0}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Retornos</p>
                 </div>
               </div>
             )}
