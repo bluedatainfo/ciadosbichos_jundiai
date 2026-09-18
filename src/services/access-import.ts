@@ -94,17 +94,15 @@ export async function processAccessImport(
     console.warn('Não foi possível pré-carregar tutores:', err)
   }
 
-  // Pré-popular cache com pacientes existentes com CTRL
+  // Pré-popular cache com pacientes existentes indexados por CTRL
   try {
     const existingPatients = await pb.collection('patients').getFullList({
       fields: 'id,ctrl,name,tutor_id',
     })
     for (const p of existingPatients) {
-      if (p.ctrl) {
-        patientIdCache.set(`ctrl:${p.ctrl.trim()}`, p.id)
-      }
-      if (p.name && p.tutor_id) {
-        patientIdCache.set(`tutor_animal:${p.tutor_id}:${sanitizeText(p.name).toLowerCase()}`, p.id)
+      const cleanCtrl = p.ctrl ? p.ctrl.trim() : ''
+      if (cleanCtrl) {
+        patientIdCache.set(`ctrl:${cleanCtrl}`, p.id)
       }
     }
   } catch (err) {
@@ -142,8 +140,15 @@ export async function processAccessImport(
       const nomeTutor = sanitizeText(row.NOME || row.nome)
       const animNome = sanitizeText(row.ANIM || row.anim)
 
-      // Se a linha não tem nem tutor nem animal, pular
-      if (!nomeTutor && !animNome) {
+      // Se a linha estiver completamente vazia (sem tutor, sem animal e sem CTRL), registrar no relatório de erros
+      if (!nomeTutor && !animNome && !ctrl) {
+        errors.push({
+          row: globalRowIdx + 1,
+          ctrl: undefined,
+          tutorName: undefined,
+          animalName: undefined,
+          error: 'Linha vazia ou sem identificadores (NOME, ANIM e CTRL ausentes).',
+        })
         continue
       }
 
@@ -207,14 +212,15 @@ export async function processAccessImport(
         // -------------------------------------------------------------
         // 2. PACIENTE (ANIMAL): Vinculado ao tutor
         // -------------------------------------------------------------
-        const animalName = animNome || 'Sem Nome'
+        // TODA linha com dados de animal gera um paciente, mesmo com campos faltando
+        // (nome do animal vira "Sem nome" se vazio, datas inválidas viram vazias, etc.).
+        // Apenas desduplica se houver CTRL idêntico já importado no banco ou nesta execução
+        // (evitando duplicar ao reimportar o mesmo arquivo). Animais do mesmo tutor com
+        // o mesmo nome NÃO são descartados, pois podem ser pacientes diferentes.
+        const animalName = animNome || 'Sem nome'
         const ctrlKey = ctrl ? `ctrl:${ctrl}` : null
-        const animalTutorKey = `tutor_animal:${tutorId}:${animalName.toLowerCase()}`
 
         let patientId = ctrlKey ? patientIdCache.get(ctrlKey) : null
-        if (!patientId) {
-          patientId = patientIdCache.get(animalTutorKey) || null
-        }
 
         if (!patientId) {
           const espeRaw = row.ESPE || row.espe
@@ -254,7 +260,6 @@ export async function processAccessImport(
 
           patientId = patientRecord.id
           if (ctrlKey) patientIdCache.set(ctrlKey, patientId)
-          patientIdCache.set(animalTutorKey, patientId)
           patientsCreated++
         } else {
           patientsSkipped++

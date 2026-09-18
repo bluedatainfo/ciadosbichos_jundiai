@@ -20,10 +20,15 @@ export function sanitizeText(val: string | null | undefined): string {
       result += val[i]
       continue
     }
-    // Filtrar caracteres de controle C0 (0-31), DEL (127), C1 (128-159) e caracteres unicode específicos como □ (\u25A1)
+    // Filtrar apenas caracteres de controle verdadeiros:
+    // C0 controls (0-8, 11-12, 14-31), DEL (127), e replacement char (0xfffd)
+    // ATENÇÃO: NÃO filtrar faixa 128-159 indiscriminadamente se já decodificado,
+    // mas sim apenas controles C1 puros e caracteres de caixa quebrados.
+    // Caracteres acentuados latinos (á, é, í, ó, ú, ç, ã, õ, Â, Ê, Î, Ô, Û, etc.)
+    // ficam em 160-255 ou acima e NUNCA devem ser descartados!
     if (
       code < 32 ||
-      (code >= 127 && code <= 159) ||
+      code === 127 ||
       code === 0xfffd ||
       code === 0x25a1 ||
       code === 0x25a0 ||
