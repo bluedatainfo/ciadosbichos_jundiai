@@ -8,6 +8,7 @@ import {
   AccessImportReport as AccessImportReportType,
 } from '@/services/access-import'
 import { runAccessDateParserTests } from '@/lib/__tests__/access-date-parser.test'
+import { runAccessRateLimitAsyncTests } from '@/lib/__tests__/access-rate-limit.test'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -83,7 +84,7 @@ export default function Import() {
         if (result.headers.length === 0) return
       }
 
-      // Validação rápida interna do parser de datas
+      // Validação rápida interna do parser de datas e rate limit
       try {
         const testCheck = runAccessDateParserTests()
         if (!testCheck.passed) {
@@ -92,6 +93,14 @@ export default function Import() {
             testCheck.results.filter((r) => !r.ok),
           )
         }
+        runAccessRateLimitAsyncTests().then((res) => {
+          if (!res.passed) {
+            console.warn(
+              'Alerta nos testes do rate limit/retry:',
+              res.results.filter((r) => !r.ok),
+            )
+          }
+        })
       } catch (tErr) {
         console.warn('Erro ao verificar suite de testes:', tErr)
       }

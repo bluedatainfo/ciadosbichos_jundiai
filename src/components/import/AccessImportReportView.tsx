@@ -23,10 +23,14 @@ interface AccessImportReportViewProps {
 }
 
 export function AccessImportReportView({ report, onRestart }: AccessImportReportViewProps) {
+  // A taxa de sucesso mede a porcentagem de registros válidos processados sem falha de gravação (0 a 100%)
+  const totalWithFailures = report.totalProcessed + report.failed
   const successRate =
-    report.totalProcessed > 0
-      ? Math.round(((report.totalProcessed - report.failed) / report.totalProcessed) * 100)
-      : 0
+    report.failed === 0
+      ? 100
+      : totalWithFailures > 0
+        ? Math.max(0, Math.round((report.totalProcessed / totalWithFailures) * 100))
+        : 0
 
   const handleDownloadErrors = () => {
     if (!report.errors || report.errors.length === 0) return

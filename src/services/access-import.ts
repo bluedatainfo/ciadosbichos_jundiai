@@ -56,7 +56,78 @@ export interface AccessImportReport {
 export interface AccessImportOptions {
   batchSize?: number
   limit?: number // Para testar com lote pequeno (~50 registros)
+  itemDelayMs?: number // Intervalo sequencial entre cada gravação no banco (padrão: 120ms)
+  maxRetries?: number // Número máximo de tentativas em caso de erro 429 Too Many Requests (padrão: 3)
+  retryBackoffMs?: number[] // Tempos de backoff para retries (padrão: [500, 1000, 2000])
   onProgress?: (progress: AccessImportProgress) => void
+}
+
+/**
+ * Constantes de ritmo e retry para blindagem contra Too Many Requests (PocketBase HTTP 429)
+ */
+export const DEFAULT_ITEM_DELAY_MS = 120
+export const DEFAULT_MAX_RETRIES = 3
+export const DEFAULT_RETRY_BACKOFF_MS = [500, 1000, 2000]
+
+/**
+ * Verifica se um erro retornado pelo PocketBase ou pela rede é indicativo de rate limit (429 Too Many Requests).
+ */
+export function isRateLimitError(err: any): boolean {
+  if (!err) return false
+  if (err.status === 429) return true
+  if (err.response?.status === 429) return true
+  if (err.statusCode === 429) return true
+  const msg = (err.message || '').toLowerCase()
+  return msg.includes('too many requests') || msg.includes('rate limit') || msg.includes('429')
+}
+
+/**
+ * Executa uma operação assíncrona com enfileiramento sequencial ritmado
+ * e retry com backoff exponencial específico para HTTP 429 (Too Many Requests).
+ *
+ * @param operation Função que executa a gravação
+ * @param options Configurações de delay, retries e backoff
+ */
+export async function executeWithRateLimitRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    itemDelayMs?: number
+    maxRetries?: number
+    retryBackoffMs?: number[]
+    onRetry?: (attempt: number, delayMs: number, error: any) => void
+  } = {},
+): Promise<T> {
+  const itemDelayMs = options.itemDelayMs ?? DEFAULT_ITEM_DELAY_MS
+  const maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES
+  const retryBackoffMs = options.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS
+
+  let attempt = 0
+
+  while (true) {
+    try {
+      const result = await operation()
+
+      // Ritmo sequencial: pequeno intervalo após cada gravação bem-sucedida para não saturar o servidor
+      if (itemDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, itemDelayMs))
+      }
+
+      return result
+    } catch (err: any) {
+      if (isRateLimitError(err) && attempt < maxRetries) {
+        const backoffDelay = retryBackoffMs[attempt] || 1000 * Math.pow(2, attempt)
+        attempt++
+        if (options.onRetry) {
+          options.onRetry(attempt, backoffDelay, err)
+        }
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay))
+        continue
+      }
+
+      // Se não for 429 ou esgotou as tentativas, propaga o erro
+      throw err
+    }
+  }
 }
 
 /**
@@ -68,7 +139,22 @@ export async function processAccessImport(
   options: AccessImportOptions = {},
 ): Promise<AccessImportReport> {
   const startTime = Date.now()
-  const { batchSize = 25, limit, onProgress } = options
+  const {
+    batchSize = 25,
+    limit,
+    itemDelayMs = DEFAULT_ITEM_DELAY_MS,
+    maxRetries = DEFAULT_MAX_RETRIES,
+    retryBackoffMs = DEFAULT_RETRY_BACKOFF_MS,
+    onProgress,
+  } = options
+
+  // Helper local para executar gravações com o ritmo e retry configurados
+  const safeDbWrite = <T>(op: () => Promise<T>) =>
+    executeWithRateLimitRetry(op, {
+      itemDelayMs,
+      maxRetries,
+      retryBackoffMs,
+    })
 
   // Se limit for especificado, cortar o conjunto para teste rápido (~50)
   const rowsToProcess = limit && limit > 0 ? rawRows.slice(0, limit) : rawRows
@@ -207,21 +293,23 @@ export async function processAccessImport(
           // Se email for inválido, não enviar para não quebrar validação de email do PB
           const validEmail = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : ''
 
-          const tutorRecord = await pb.collection('tutors').create({
-            name: nomeTutor || 'Tutor Não Informado',
-            phone: tel1 || tel2 || '',
-            phone_secondary: tel1 && tel2 ? tel2 : '',
-            email: validEmail,
-            cpf: cpfRaw,
-            rg,
-            address,
-            neighborhood: bair,
-            cep: cleanCep,
-            city: cida,
-            state: esta,
-            indication: inst,
-            additional_info: additionalInfo,
-          })
+          const tutorRecord = await safeDbWrite(() =>
+            pb.collection('tutors').create({
+              name: nomeTutor || 'Tutor Não Informado',
+              phone: tel1 || tel2 || '',
+              phone_secondary: tel1 && tel2 ? tel2 : '',
+              email: validEmail,
+              cpf: cpfRaw,
+              rg,
+              address,
+              neighborhood: bair,
+              cep: cleanCep,
+              city: cida,
+              state: esta,
+              indication: inst,
+              additional_info: additionalInfo,
+            }),
+          )
           tutorId = tutorRecord.id
           tutorIdCache.set(dedupeKey, tutorId)
           tutorsCreated++
@@ -275,23 +363,25 @@ export async function processAccessImport(
           const lastVisit = normalizeDate(ultvRaw)
           const registrationDate = normalizeDate(dtrgRaw)
 
-          const patientRecord = await pb.collection('patients').create({
-            name: animalName,
-            species,
-            breed: racaRaw || 'SRD',
-            gender,
-            birth_date: birthDate || '',
-            pelagem: pelaRaw,
-            tutor_id: tutorId,
-            weight: 0,
-            ctrl,
-            import_key: importKey,
-            microchip: chipRaw,
-            deceased,
-            status_notes: dbtxRaw ? sanitizeText(dbtxRaw) : '',
-            last_visit: lastVisit || '',
-            registration_date: registrationDate || '',
-          })
+          const patientRecord = await safeDbWrite(() =>
+            pb.collection('patients').create({
+              name: animalName,
+              species,
+              breed: racaRaw || 'SRD',
+              gender,
+              birth_date: birthDate || '',
+              pelagem: pelaRaw,
+              tutor_id: tutorId,
+              weight: 0,
+              ctrl,
+              import_key: importKey,
+              microchip: chipRaw,
+              deceased,
+              status_notes: dbtxRaw ? sanitizeText(dbtxRaw) : '',
+              last_visit: lastVisit || '',
+              registration_date: registrationDate || '',
+            }),
+          )
 
           patientId = patientRecord.id
           patientIdCache.set(importKey, patientId)
@@ -337,15 +427,17 @@ export async function processAccessImport(
           if (clinicalEntries.length > 0) {
             for (const entry of clinicalEntries) {
               try {
-                await pb.collection('clinical_records').create({
-                  patient_id: rowPatientId,
-                  description: entry.text,
-                  diagnosis: '',
-                  treatment: '',
-                })
+                await safeDbWrite(() =>
+                  pb.collection('clinical_records').create({
+                    patient_id: rowPatientId,
+                    description: entry.text,
+                    diagnosis: '',
+                    treatment: '',
+                  }),
+                )
                 clinicalEntriesCreated++
               } catch (recErr: any) {
-                console.warn('Erro ao criar registro clínico:', recErr)
+                console.warn('Erro ao criar registro clínico após retries:', recErr)
                 errors.push({
                   row: globalRowIdx + 1,
                   ctrl,
@@ -366,15 +458,26 @@ export async function processAccessImport(
           const vaccines = extractVaccinesFromRow(row)
           for (const vac of vaccines) {
             try {
-              await pb.collection('vaccines').create({
-                patient_id: rowPatientId,
-                name: vac.name,
-                date: vac.date || '',
-                notes: vac.notes || '',
-              })
+              await safeDbWrite(() =>
+                pb.collection('vaccines').create({
+                  patient_id: rowPatientId,
+                  name: vac.name,
+                  date: vac.date || '',
+                  notes: vac.notes || '',
+                }),
+              )
               vaccinesCreated++
-            } catch (vacErr) {
-              console.warn('Erro ao criar vacina:', vacErr)
+            } catch (vacErr: any) {
+              console.warn('Erro ao criar vacina após retries:', vacErr)
+              errors.push({
+                row: globalRowIdx + 1,
+                ctrl,
+                tutorName: nomeTutor,
+                animalName: animNome,
+                error: `Falha ao gravar vacina: ${vacErr?.message || 'Erro desconhecido'}`,
+                problematicSnippet: `${vac.name} ${vac.date || ''}`.trim(),
+                type: 'database_error',
+              })
             }
           }
 
@@ -386,17 +489,28 @@ export async function processAccessImport(
           const legacyAppointments = extractAppointmentsFromRow(row, clinicalEntries)
           for (const appItem of legacyAppointments) {
             try {
-              await pb.collection('appointments').create({
-                patient_id: rowPatientId,
-                date: appItem.date,
-                type: appItem.type,
-                status: appItem.status,
-                notes: appItem.notes,
-                source: appItem.source,
-              })
+              await safeDbWrite(() =>
+                pb.collection('appointments').create({
+                  patient_id: rowPatientId,
+                  date: appItem.date,
+                  type: appItem.type,
+                  status: appItem.status,
+                  notes: appItem.notes,
+                  source: appItem.source,
+                }),
+              )
               appointmentsCreated++
-            } catch (appErr) {
-              console.warn('Erro ao criar agendamento legado:', appErr)
+            } catch (appErr: any) {
+              console.warn('Erro ao criar agendamento legado após retries:', appErr)
+              errors.push({
+                row: globalRowIdx + 1,
+                ctrl,
+                tutorName: nomeTutor,
+                animalName: animNome,
+                error: `Falha ao gravar agendamento: ${appErr?.message || 'Erro desconhecido'}`,
+                problematicSnippet: `${appItem.date} ${appItem.notes}`.slice(0, 150),
+                type: 'database_error',
+              })
             }
           }
         }
