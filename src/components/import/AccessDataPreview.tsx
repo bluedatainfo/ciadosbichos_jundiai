@@ -14,7 +14,7 @@ import {
   normalizeSpecies,
   normalizeGender,
   normalizeDeceased,
-  extractClinicalHistory,
+  extractClinicalHistoryWithDiagnostics,
   extractVaccinesFromRow,
   getTutorDedupeKey,
   getPatientCompositeBaseKey,
@@ -45,7 +45,11 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
       selectedRow.VIVO || selectedRow.vivo,
       selectedRow.DBTX || selectedRow.dbtx,
     )
-    const clinical = extractClinicalHistory(selectedRow.TEXTO || selectedRow.texto)
+    const clinicalResult = extractClinicalHistoryWithDiagnostics(
+      selectedRow.TEXTO || selectedRow.texto,
+    )
+    const clinical = clinicalResult.entries
+    const clinicalWarnings = clinicalResult.warnings
     const vaccines = extractVaccinesFromRow(selectedRow)
 
     const tutorDedupeKey = getTutorDedupeKey(
@@ -69,6 +73,7 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
       sexo,
       deceased,
       clinical,
+      clinicalWarnings,
       vaccines,
     }
   }, [selectedRow])
@@ -241,23 +246,52 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
                       <span className="flex items-center gap-1.5">
                         <FileText className="w-3.5 h-3.5 text-amber-600" /> Histórico Clínico
                       </span>
-                      <Badge variant="secondary" className="text-[10px]">
-                        {parsedDetail.clinical.length} entrada(s)
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        {parsedDetail.clinicalWarnings.length > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] text-amber-700 border-amber-300 bg-amber-50"
+                          >
+                            {parsedDetail.clinicalWarnings.length} aviso(s)
+                          </Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px]">
+                          {parsedDetail.clinical.length} entrada(s)
+                        </Badge>
+                      </div>
                     </p>
                     {parsedDetail.clinical.length === 0 ? (
                       <p className="text-slate-400 text-[11px] italic">Sem anotações no TEXTO.</p>
                     ) : (
-                      <div className="max-h-32 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100">
+                      <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-slate-100">
                         {parsedDetail.clinical.map((entry, cIdx) => (
                           <div key={cIdx} className="pt-1 text-[11px] text-slate-700">
-                            {entry.rawDateStr && (
+                            {entry.isUndated ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1 py-0 mr-1 text-slate-500 bg-slate-50 border-slate-200"
+                              >
+                                Sem data
+                              </Badge>
+                            ) : entry.rawDateStr ? (
                               <span className="font-semibold text-primary mr-1">
                                 [{entry.rawDateStr}]
                               </span>
-                            )}
+                            ) : null}
                             <span>{entry.text}</span>
                           </div>
+                        ))}
+                      </div>
+                    )}
+                    {parsedDetail.clinicalWarnings.length > 0 && (
+                      <div className="mt-1 p-1 bg-amber-50 rounded border border-amber-200 text-[10px] text-amber-800 space-y-0.5">
+                        <p className="font-semibold flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-amber-600" /> Avisos no parsing:
+                        </p>
+                        {parsedDetail.clinicalWarnings.map((w, wIdx) => (
+                          <p key={wIdx} className="truncate">
+                            {w}
+                          </p>
                         ))}
                       </div>
                     )}

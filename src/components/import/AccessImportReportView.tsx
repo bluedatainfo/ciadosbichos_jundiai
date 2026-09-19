@@ -31,11 +31,11 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
   const handleDownloadErrors = () => {
     if (!report.errors || report.errors.length === 0) return
     const csvContent =
-      'Linha,CTRL,Tutor,Animal,Erro\n' +
+      'Linha,CTRL,Tutor,Animal,Tipo,Erro,Trecho Problemático\n' +
       report.errors
         .map(
           (e) =>
-            `"${e.row}","${e.ctrl || ''}","${(e.tutorName || '').replace(/"/g, '""')}","${(e.animalName || '').replace(/"/g, '""')}","${e.error.replace(/"/g, '""')}"`,
+            `"${e.row}","${e.ctrl || ''}","${(e.tutorName || '').replace(/"/g, '""')}","${(e.animalName || '').replace(/"/g, '""')}","${e.type || 'geral'}","${e.error.replace(/"/g, '""')}","${(e.problematicSnippet || '').replace(/"/g, '""')}"`,
         )
         .join('\n')
 
@@ -43,7 +43,7 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.setAttribute('download', `erros_importacao_access_${Date.now()}.csv`)
+    link.setAttribute('download', `pendencias_importacao_access_${Date.now()}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -186,13 +186,29 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
                 </Button>
               </div>
 
-              <div className="max-h-64 overflow-y-auto rounded-lg border divide-y bg-white">
+              <div className="max-h-72 overflow-y-auto rounded-lg border divide-y bg-white">
                 {report.errors.slice(0, 50).map((err, idx) => (
                   <div key={idx} className="p-3 text-xs flex items-start gap-3 hover:bg-slate-50">
-                    <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    {err.type === 'parser_warning' ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+                    )}
                     <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-slate-900">Linha {err.row}</span>
+                        {err.type === 'parser_warning' ? (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] bg-amber-100 text-amber-800"
+                          >
+                            Aviso no Texto
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-[10px]">
+                            Falha de Gravação
+                          </Badge>
+                        )}
                         {err.ctrl && (
                           <Badge variant="outline" className="text-[10px]">
                             CTRL: {err.ctrl}
@@ -205,13 +221,25 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
                           <span className="text-slate-600">| Animal: {err.animalName}</span>
                         )}
                       </div>
-                      <p className="text-red-700">{err.error}</p>
+                      <p
+                        className={
+                          err.type === 'parser_warning' ? 'text-amber-800' : 'text-red-700'
+                        }
+                      >
+                        {err.error}
+                      </p>
+                      {err.problematicSnippet && (
+                        <div className="mt-1 p-1.5 bg-slate-100 rounded text-[11px] font-mono text-slate-700 break-all border">
+                          <span className="font-semibold text-slate-900 mr-1">Trecho:</span>
+                          {err.problematicSnippet}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
                 {report.errors.length > 50 && (
                   <div className="p-2 text-xs text-center text-muted-foreground bg-slate-50">
-                    ... e mais {report.errors.length - 50} erros adicionais
+                    ... e mais {report.errors.length - 50} pendências adicionais
                   </div>
                 )}
               </div>

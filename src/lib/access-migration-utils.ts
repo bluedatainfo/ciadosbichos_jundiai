@@ -56,20 +56,23 @@ export function normalizeDate(val: string | null | undefined): string | null {
   if (!clean) return null
 
   // Rejeita padrões óbvios de CEP / telefone
-  if (/^\d{2}\.\d{3}-\d{3}$/.test(clean) || /^\d{5}-\d{3}$/.test(clean)) {
+  if (/^\d{2}\.\d{3}-\d{3}/.test(clean) || /^\d{5}-\d{3}/.test(clean)) {
     return null
   }
 
-  // 1. Formato DD/MM/YYYY ou DD/MM/YY (com barra ou traço)
-  const dmyMatch = clean.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/)
+  // 1. Formato DD/MM/YYYY ou DD/MM/YY (separadores: / . - ou espaço)
+  // Aceita formatos como: 06/04/02, 08/03/1999, 13/03/99, 25/05/17, 06.04.02, 06-04-02
+  const dmyMatch = clean.match(/^(\d{1,2})[./\-\s](\d{1,2})[./\-\s](\d{2,4})/)
   if (dmyMatch) {
     const day = parseInt(dmyMatch[1], 10)
     const month = parseInt(dmyMatch[2], 10)
     let year = parseInt(dmyMatch[3], 10)
 
     if (year < 100) {
-      // Regra de século: se YY > 50 -> 19YY, senão 20YY
-      year = year > 50 ? 1900 + year : 2000 + year
+      // Regra clássica de 2 dígitos:
+      // >= 30 -> 19xx (ex: 89 -> 1989, 99 -> 1999)
+      // < 30  -> 20xx (ex: 02 -> 2002, 17 -> 2017, 24 -> 2024)
+      year = year >= 30 ? 1900 + year : 2000 + year
     }
 
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
@@ -129,9 +132,9 @@ export function normalizeDate(val: string | null | undefined): string | null {
   const parsed = Date.parse(clean)
   if (!isNaN(parsed)) {
     const d = new Date(parsed)
-    // Garantir que é um ano razoável (1950 a 2100)
+    // Garantir que é um ano razoável (1930 a 2100)
     const year = d.getUTCFullYear()
-    if (year >= 1950 && year <= 2100) {
+    if (year >= 1930 && year <= 2100) {
       return d.toISOString()
     }
   }
@@ -213,91 +216,195 @@ export interface ExtractedClinicalEntry {
   rawDateStr: string
   text: string
   timestamp: number
+  /** Se o trecho não tinha data reconhecida mas foi preservado */
+  isUndated?: boolean
+  /** Trecho original se houve anomalia de parsing */
+  parseWarning?: string
+}
+
+export interface ClinicalHistoryExtractionResult {
+  entries: ExtractedClinicalEntry[]
+  /** Trechos problemáticos detectados durante a extração que requerem relatório */
+  warnings: string[]
 }
 
 /**
  * Separa o campo TEXTO corrido em entradas individuais por data.
- * O Access armazena histórico contínuo com marcações de datas como:
- * "06/04/02. Consulta..." ou "18/02/03: Retorno..." ou "25/08/1999 - Vacina..."
- * Retorna as entradas ordenadas em ordem CRONOLÓGICA.
+ * O Access armazena histórico contínuo com marcações de datas variadas no início ou após quebra/espaço:
+ * - "06/04/02."
+ * - "08/03/1999----"
+ * - "13/03/99 -----"
+ * - "25/05/17.P= 1,3 KG..." (ponto imediatamente colado a texto sem espaço)
+ * - "18/02/03:" ou "23/11/1989 - " ou "15.08.01:" ou "12/05/2004 "
  *
- * Cada chamada instancia regex novo localmente para total segurança contra estado compartilhado.
+ * Requisitos:
+ * 1. Tolerante a todas as variantes de pontuação, travessões e caracteres colados.
+ * 2. Entradas sem data reconhecível NUNCA devem ser descartadas: gravadas como histórico 'sem data'
+ *    com texto integral preservado.
+ * 3. Falhas ou trechos problemáticos são identificados e preservados.
+ * 4. Retorna as entradas ordenadas em ordem cronológica (entradas com data mais antiga primeiro,
+ *    entradas sem data agrupadas ao final de forma limpa).
  */
 export function extractClinicalHistory(
   rawText: string | null | undefined,
 ): ExtractedClinicalEntry[] {
+  const result = extractClinicalHistoryWithDiagnostics(rawText)
+  return result.entries
+}
+
+/**
+ * Versão diagnóstica de extractClinicalHistory que retorna tanto as entradas
+ * quanto a lista de trechos problemáticos (warnings) para inclusão no relatório.
+ */
+export function extractClinicalHistoryWithDiagnostics(
+  rawText: string | null | undefined,
+): ClinicalHistoryExtractionResult {
   const clean = sanitizeText(rawText)
-  if (!clean) return []
+  if (!clean) {
+    return { entries: [], warnings: [] }
+  }
 
-  // Regex para detectar início de entrada por data:
-  // Exemplos: "06/04/02.", "18/02/03:", "23/11/1989 -", "15.08.01:", "12/05/2004 "
-  const datePattern = /(?:^|\n|\r\n?|\s{2,})(\d{1,2}[./-](\d{1,2})[./-](\d{2,4}))(?:[.:\-\s]+)/g
+  // Regex tolerante para detectar datas no texto corrido do Access.
+  // Padrão de data:
+  // (\d{1,2}[./-]\d{1,2}[./-]\d{2,4})
+  // Seguido de delimitadores legados:
+  // - Pontos, dois pontos, barras, hífens/travessões múltiplos (ex: "----", " - ", ".")
+  // - Seguidos opcionalmente por espaços OU direto por letra/dígito (ex: "25/05/17.P= 1,3 KG")
+  // A data pode estar:
+  // - No início do texto (^)
+  // - Após quebra de linha (\n, \r)
+  // - Após 2 ou mais espaços (\s{2,})
+  // - Ou precedida por travessões / pontuação divisória / ponto final de sentença anterior
+  const datePattern =
+    /(?:^|\r?\n|\s{2,}|[-_.~;:*]{2,}\s*|[.!?]\s+)(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})(?:[.:\-\s_~*/=]*)/g
 
-  const entries: { startIndex: number; dateStr: string; matchEnd: number }[] = []
-  let match: RegExpExecArray | null
+  interface RawMatch {
+    dateStr: string
+    matchStart: number
+    contentStart: number
+  }
 
-  while ((match = datePattern.exec(clean)) !== null) {
-    entries.push({
-      startIndex: match.index,
-      dateStr: match[1],
-      matchEnd: match.index + match[0].length,
+  const rawMatches: RawMatch[] = []
+  let m: RegExpExecArray | null
+
+  while ((m = datePattern.exec(clean)) !== null) {
+    const fullMatch = m[0]
+    const dateStr = m[1]
+    const dateIndexInMatch = fullMatch.indexOf(dateStr)
+    const matchStart = m.index + (dateIndexInMatch >= 0 ? dateIndexInMatch : 0)
+    const contentStart = m.index + fullMatch.length
+
+    // Validar se dateStr possui formato dia/mês aceitável
+    const parts = dateStr.split(/[./-]/)
+    if (parts.length === 3) {
+      const d = parseInt(parts[0], 10)
+      const mo = parseInt(parts[1], 10)
+      // Se não for um dia/mês minimamente válido (1-31, 1-12), ignorar como falsa detecção
+      if (d < 1 || d > 31 || mo < 1 || mo > 12) {
+        continue
+      }
+    }
+
+    rawMatches.push({
+      dateStr,
+      matchStart,
+      contentStart,
     })
   }
 
-  // Se nenhuma data foi encontrada no texto, retorna o texto inteiro como entrada única
-  if (entries.length === 0) {
-    return [
-      {
-        date: null,
-        rawDateStr: '',
-        text: clean,
-        timestamp: 0,
-      },
-    ]
+  const entries: ExtractedClinicalEntry[] = []
+  const warnings: string[] = []
+
+  // Se nenhuma data válida foi identificada, todo o texto é gravado como "sem data"
+  if (rawMatches.length === 0) {
+    entries.push({
+      date: null,
+      rawDateStr: '',
+      text: clean,
+      timestamp: 0,
+      isUndated: true,
+    })
+    return { entries, warnings }
   }
 
-  const results: ExtractedClinicalEntry[] = []
-
-  // Se houver texto ANTES da primeira data identificada
-  if (entries[0].startIndex > 0) {
-    const preText = clean.substring(0, entries[0].startIndex).trim()
-    if (preText) {
-      results.push({
+  // 1. Verificar se há texto antes da primeira data detectada
+  if (rawMatches[0].matchStart > 0) {
+    const preText = clean.substring(0, rawMatches[0].matchStart).trim()
+    // Limpar delimitadores soltos que possam ter sobrado
+    const sanitizedPre = preText.replace(/^[-_.:;\s]+|[-_.:;\s]+$/g, '').trim()
+    if (sanitizedPre) {
+      // Trecho inicial sem data: gravar integralmente como "sem data"
+      entries.push({
         date: null,
         rawDateStr: '',
-        text: preText,
+        text: `[Sem data] ${sanitizedPre}`,
         timestamp: 0,
+        isUndated: true,
       })
     }
   }
 
-  for (let i = 0; i < entries.length; i++) {
-    const current = entries[i]
-    const nextStart = i + 1 < entries.length ? entries[i + 1].startIndex : clean.length
-    const content = clean.substring(current.matchEnd, nextStart).trim()
+  // 2. Extrair cada seção delimitada pelas datas
+  for (let i = 0; i < rawMatches.length; i++) {
+    const current = rawMatches[i]
+    const nextStart = i + 1 < rawMatches.length ? rawMatches[i + 1].matchStart : clean.length
+
+    let content = clean.substring(current.contentStart, nextStart).trim()
+    // Remover travessões ou pontuações de cauda que eram apenas divisórias
+    content = content
+      .replace(/^[-_.:;\s]+/, '')
+      .replace(/[-_.:;\s]+$/, '')
+      .trim()
+
     const isoDate = normalizeDate(current.dateStr)
     const timestamp = isoDate ? new Date(isoDate).getTime() : 0
 
-    // O texto completo inclui a data original como cabeçalho da anotação
+    if (!isoDate) {
+      // Se a data parecia uma data mas não pôde ser normalizada (ex: dia 31 num mês de 30 dias),
+      // não descartamos: geramos aviso no relatório e gravamos como sem data com o trecho preservado
+      const warningSnippet = clean.substring(
+        current.matchStart,
+        Math.min(nextStart, current.matchStart + 80),
+      )
+      warnings.push(
+        `Data inválida/incompatível: "${current.dateStr}" no trecho: "${warningSnippet}"`,
+      )
+
+      const fullText = content
+        ? `[Sem data - ref: ${current.dateStr}] ${content}`
+        : `[Sem data - ref: ${current.dateStr}]`
+
+      entries.push({
+        date: null,
+        rawDateStr: current.dateStr,
+        text: fullText,
+        timestamp: 0,
+        isUndated: true,
+        parseWarning: `Data '${current.dateStr}' inválida`,
+      })
+      continue
+    }
+
     const fullEntryText = content ? `[${current.dateStr}] ${content}` : `[${current.dateStr}]`
 
-    results.push({
+    entries.push({
       date: isoDate,
       rawDateStr: current.dateStr,
       text: fullEntryText,
       timestamp,
+      isUndated: false,
     })
   }
 
-  // Ordenar em ordem cronológica (datas mais antigas primeiro, sem data no final ou início)
-  results.sort((a, b) => {
+  // Ordenar em ordem cronológica (datas mais antigas primeiro, 'sem data' ao final)
+  entries.sort((a, b) => {
     if (a.timestamp === 0 && b.timestamp === 0) return 0
     if (a.timestamp === 0) return 1
     if (b.timestamp === 0) return -1
     return a.timestamp - b.timestamp
   })
 
-  return results
+  return { entries, warnings }
 }
 
 /**

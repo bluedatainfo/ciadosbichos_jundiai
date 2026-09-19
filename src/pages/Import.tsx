@@ -7,6 +7,7 @@ import {
   AccessImportProgress,
   AccessImportReport as AccessImportReportType,
 } from '@/services/access-import'
+import { runAccessDateParserTests } from '@/lib/__tests__/access-date-parser.test'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -80,6 +81,19 @@ export default function Import() {
       if (result.errors.length > 0) {
         toast({ title: 'Aviso', description: result.errors[0], variant: 'destructive' })
         if (result.headers.length === 0) return
+      }
+
+      // Validação rápida interna do parser de datas
+      try {
+        const testCheck = runAccessDateParserTests()
+        if (!testCheck.passed) {
+          console.warn(
+            'Alerta nos testes do parser de datas:',
+            testCheck.results.filter((r) => !r.ok),
+          )
+        }
+      } catch (tErr) {
+        console.warn('Erro ao verificar suite de testes:', tErr)
       }
 
       // Se estamos no modo Access legado OU se detectamos os cabeçalhos do Access

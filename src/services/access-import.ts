@@ -5,7 +5,7 @@ import {
   normalizeSpecies,
   normalizeGender,
   normalizeDeceased,
-  extractClinicalHistory,
+  extractClinicalHistoryWithDiagnostics,
   extractVaccinesFromRow,
   extractAppointmentsFromRow,
   getTutorDedupeKey,
@@ -34,6 +34,8 @@ export interface AccessBatchError {
   tutorName?: string
   animalName?: string
   error: string
+  problematicSnippet?: string
+  type?: 'database_error' | 'parser_warning' | 'validation_error'
 }
 
 export interface AccessImportReport {
@@ -303,10 +305,31 @@ export async function processAccessImport(
         // Cada entrada do TEXTO é vinculada EXCLUSIVAMENTE ao paciente
         // desta linha (rowPatientId). Se o paciente já existia antes
         // da execução atual, não duplicamos as fichas.
+        // Entradas sem data reconhecível são gravadas como 'sem data',
+        // nunca descartadas. Falhas e trechos problemáticos são
+        // registrados no relatório de erros com o trecho e a linha.
         // -------------------------------------------------------------
         const rowPatientId = patientId
         const textoRaw = row.TEXTO || row.texto
-        const clinicalEntries = textoRaw ? extractClinicalHistory(textoRaw) : []
+        const extraction = textoRaw
+          ? extractClinicalHistoryWithDiagnostics(textoRaw)
+          : { entries: [], warnings: [] }
+        const clinicalEntries = extraction.entries
+
+        // Registrar avisos de parsing no relatório para visibilidade do operador
+        if (extraction.warnings.length > 0) {
+          for (const warning of extraction.warnings) {
+            errors.push({
+              row: globalRowIdx + 1,
+              ctrl,
+              tutorName: nomeTutor,
+              animalName: animNome,
+              error: `Aviso no histórico clínico: ${warning}`,
+              problematicSnippet: warning,
+              type: 'parser_warning',
+            })
+          }
+        }
 
         if (rowPatientId && !processedPatientIdsThisRun.has(rowPatientId)) {
           processedPatientIdsThisRun.add(rowPatientId)
@@ -321,8 +344,17 @@ export async function processAccessImport(
                   treatment: '',
                 })
                 clinicalEntriesCreated++
-              } catch (recErr) {
+              } catch (recErr: any) {
                 console.warn('Erro ao criar registro clínico:', recErr)
+                errors.push({
+                  row: globalRowIdx + 1,
+                  ctrl,
+                  tutorName: nomeTutor,
+                  animalName: animNome,
+                  error: `Falha ao gravar entrada clínica: ${recErr?.message || 'Erro desconhecido'}`,
+                  problematicSnippet: entry.text.slice(0, 150),
+                  type: 'database_error',
+                })
               }
             }
           }
