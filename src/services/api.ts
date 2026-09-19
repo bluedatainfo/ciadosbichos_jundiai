@@ -103,7 +103,7 @@ export const api = {
     const filter = filterParts.join(' && ')
     return pb
       .collection('appointments')
-      .getFullList<Appointment>({ filter, sort: 'date', expand: 'patient_id.tutor_id' })
+      .getFullList<Appointment>({ filter, sort: '-date', expand: 'patient_id.tutor_id' })
   },
   updateAppointment: (id: string, data: any) => pb.collection('appointments').update(id, data),
   createAppointment: (data: any) => pb.collection('appointments').create(data),

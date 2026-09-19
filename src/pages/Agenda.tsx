@@ -221,17 +221,17 @@ export default function Agenda() {
             )}
           </div>
 
-          <div className="overflow-x-auto rounded-lg border print:border-none print:overflow-visible">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50 print:bg-transparent">
-                  <TableHead>Data</TableHead>
-                  <TableHead>Paciente</TableHead>
-                  <TableHead>Tutor (Contato)</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Notas</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right print:hidden">Ações</TableHead>
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[350px] rounded-lg border print:border-none print:overflow-visible print:max-h-none">
+            <Table className="min-w-[850px]">
+              <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm print:static">
+                <TableRow className="bg-slate-50/95 print:bg-transparent">
+                  <TableHead className="min-w-[170px]">Data</TableHead>
+                  <TableHead className="min-w-[140px]">Paciente</TableHead>
+                  <TableHead className="min-w-[180px]">Tutor (Contato)</TableHead>
+                  <TableHead className="min-w-[110px]">Tipo</TableHead>
+                  <TableHead className="min-w-[220px]">Notas</TableHead>
+                  <TableHead className="min-w-[120px]">Status</TableHead>
+                  <TableHead className="text-right min-w-[110px] print:hidden">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

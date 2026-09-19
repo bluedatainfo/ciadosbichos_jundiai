@@ -441,15 +441,15 @@ export default function Patients() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                      <TableHead>Paciente</TableHead>
-                      <TableHead>Espécie/Raça</TableHead>
-                      <TableHead>Tutor</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+              <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[350px]">
+                <Table className="min-w-[700px]">
+                  <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
+                    <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
+                      <TableHead className="min-w-[150px]">Paciente</TableHead>
+                      <TableHead className="min-w-[180px]">Espécie/Raça</TableHead>
+                      <TableHead className="min-w-[180px]">Tutor</TableHead>
+                      <TableHead className="min-w-[150px]">Telefone</TableHead>
+                      <TableHead className="text-right min-w-[80px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -557,16 +557,16 @@ export default function Patients() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CPF / RG</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Cidade / Estado</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+              <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[350px]">
+                <Table className="min-w-[800px]">
+                  <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
+                    <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
+                      <TableHead className="min-w-[180px]">Nome</TableHead>
+                      <TableHead className="min-w-[140px]">CPF / RG</TableHead>
+                      <TableHead className="min-w-[160px]">Telefone</TableHead>
+                      <TableHead className="min-w-[140px]">Cidade / Estado</TableHead>
+                      <TableHead className="min-w-[160px]">Email</TableHead>
+                      <TableHead className="text-right min-w-[100px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
