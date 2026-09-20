@@ -51,11 +51,15 @@ export interface AccessImportReport {
   failed: number
   errors: AccessBatchError[]
   durationSeconds: number
+  rangeStart?: number
+  rangeEnd?: number
 }
 
 export interface AccessImportOptions {
   batchSize?: number
   limit?: number // Para testar com lote pequeno (~50 registros)
+  startIndex?: number // 1-based start line (ex: 1, 1001)
+  endIndex?: number // 1-based end line (ex: 1000, 2000)
   itemDelayMs?: number // Intervalo sequencial entre cada gravação no banco (padrão: 120ms)
   maxRetries?: number // Número máximo de tentativas em caso de erro 429 Too Many Requests (padrão: 3)
   retryBackoffMs?: number[] // Tempos de backoff para retries (padrão: [500, 1000, 2000])
@@ -142,6 +146,8 @@ export async function processAccessImport(
   const {
     batchSize = 25,
     limit,
+    startIndex,
+    endIndex,
     itemDelayMs = DEFAULT_ITEM_DELAY_MS,
     maxRetries = DEFAULT_MAX_RETRIES,
     retryBackoffMs = DEFAULT_RETRY_BACKOFF_MS,
@@ -156,8 +162,27 @@ export async function processAccessImport(
       retryBackoffMs,
     })
 
-  // Se limit for especificado, cortar o conjunto para teste rápido (~50)
-  const rowsToProcess = limit && limit > 0 ? rawRows.slice(0, limit) : rawRows
+  // Calcular faixa de linhas a processar:
+  // Se startIndex e endIndex forem fornecidos (1-based), recortar fatias do arquivo real
+  let sliceStart = 0
+  let sliceEnd = rawRows.length
+
+  if (startIndex !== undefined && startIndex > 0) {
+    sliceStart = Math.max(0, startIndex - 1)
+  }
+  if (endIndex !== undefined && endIndex >= (startIndex || 1)) {
+    sliceEnd = Math.min(rawRows.length, endIndex)
+  }
+
+  let rowsToProcess = rawRows.slice(sliceStart, sliceEnd)
+
+  // Se limit for especificado (modo teste 50 ou 200 registros sem faixa explícita)
+  if (limit && limit > 0 && startIndex === undefined) {
+    rowsToProcess = rowsToProcess.slice(0, limit)
+    sliceEnd = Math.min(sliceStart + limit, rawRows.length)
+  }
+
+  const fileOffset = sliceStart // 0-based offset no arquivo original
   const total = rowsToProcess.length
 
   let tutorsCreated = 0
@@ -221,15 +246,17 @@ export async function processAccessImport(
     const currentBatch = rowsToProcess.slice(startRowIdx, startRowIdx + batchSize)
 
     for (let i = 0; i < currentBatch.length; i++) {
-      const globalRowIdx = startRowIdx + i
+      const batchItemIdx = startRowIdx + i
+      // fileLineNumber é o número REAL da linha no arquivo delimitado (1-based)
+      const fileLineNumber = fileOffset + batchItemIdx + 1
       const row = currentBatch[i]
 
       // Notificar progresso
       if (onProgress) {
         onProgress({
-          current: globalRowIdx + 1,
+          current: batchItemIdx + 1,
           total,
-          percent: Math.round(((globalRowIdx + 1) / total) * 100),
+          percent: Math.round(((batchItemIdx + 1) / total) * 100),
           currentBatch: batchIdx + 1,
           totalBatches,
           tutorsCreated,
@@ -238,7 +265,7 @@ export async function processAccessImport(
           vaccinesCreated,
           appointmentsCreated,
           failed: errors.length,
-          statusMessage: `Processando linha ${globalRowIdx + 1} de ${total}...`,
+          statusMessage: `Processando linha ${fileLineNumber} (registro ${batchItemIdx + 1} de ${total} na faixa)...`,
         })
       }
 
@@ -249,7 +276,7 @@ export async function processAccessImport(
       // Se a linha estiver completamente vazia (sem tutor, sem animal e sem CTRL), registrar no relatório de erros
       if (!nomeTutor && !animNome && !ctrl) {
         errors.push({
-          row: globalRowIdx + 1,
+          row: fileLineNumber,
           ctrl: undefined,
           tutorName: undefined,
           animalName: undefined,
@@ -410,7 +437,7 @@ export async function processAccessImport(
         if (extraction.warnings.length > 0) {
           for (const warning of extraction.warnings) {
             errors.push({
-              row: globalRowIdx + 1,
+              row: fileLineNumber,
               ctrl,
               tutorName: nomeTutor,
               animalName: animNome,
@@ -439,7 +466,7 @@ export async function processAccessImport(
               } catch (recErr: any) {
                 console.warn('Erro ao criar registro clínico após retries:', recErr)
                 errors.push({
-                  row: globalRowIdx + 1,
+                  row: fileLineNumber,
                   ctrl,
                   tutorName: nomeTutor,
                   animalName: animNome,
@@ -470,7 +497,7 @@ export async function processAccessImport(
             } catch (vacErr: any) {
               console.warn('Erro ao criar vacina após retries:', vacErr)
               errors.push({
-                row: globalRowIdx + 1,
+                row: fileLineNumber,
                 ctrl,
                 tutorName: nomeTutor,
                 animalName: animNome,
@@ -503,7 +530,7 @@ export async function processAccessImport(
             } catch (appErr: any) {
               console.warn('Erro ao criar agendamento legado após retries:', appErr)
               errors.push({
-                row: globalRowIdx + 1,
+                row: fileLineNumber,
                 ctrl,
                 tutorName: nomeTutor,
                 animalName: animNome,
@@ -522,7 +549,7 @@ export async function processAccessImport(
           : err?.message || 'Erro desconhecido'
 
         errors.push({
-          row: globalRowIdx + 1,
+          row: fileLineNumber,
           ctrl,
           tutorName: nomeTutor,
           animalName: animNome,
@@ -550,5 +577,7 @@ export async function processAccessImport(
     failed: errors.length,
     errors,
     durationSeconds,
+    rangeStart: sliceStart + 1,
+    rangeEnd: sliceEnd,
   }
 }

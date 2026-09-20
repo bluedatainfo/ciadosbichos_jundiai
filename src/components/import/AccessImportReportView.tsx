@@ -20,9 +20,16 @@ import { AccessImportReport } from '@/services/access-import'
 interface AccessImportReportViewProps {
   report: AccessImportReport
   onRestart: () => void
+  onContinueNextRange?: () => void
+  nextRangeSuggested?: { start: number; end: number } | null
 }
 
-export function AccessImportReportView({ report, onRestart }: AccessImportReportViewProps) {
+export function AccessImportReportView({
+  report,
+  onRestart,
+  onContinueNextRange,
+  nextRangeSuggested,
+}: AccessImportReportViewProps) {
   // A taxa de sucesso mede a porcentagem de registros válidos processados sem falha de gravação (0 a 100%)
   const totalWithFailures = report.totalProcessed + report.failed
   const successRate =
@@ -57,10 +64,18 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
     <div className="space-y-6 animate-in fade-in duration-500">
       <Card className="border-none shadow-sm">
         <CardHeader className="pb-3 border-b bg-slate-50/50">
-          <CardTitle className="text-xl flex items-center gap-2 text-slate-800">
-            <FileSpreadsheet className="w-6 h-6 text-primary" />
-            Relatório de Migração — Legado Access 2.0
-          </CardTitle>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-xl flex items-center gap-2 text-slate-800">
+              <FileSpreadsheet className="w-6 h-6 text-primary" />
+              Relatório de Migração — Legado Access 2.0
+            </CardTitle>
+            {report.rangeStart !== undefined && report.rangeEnd !== undefined && (
+              <Badge className="bg-primary/20 text-primary border-primary/30 text-xs font-semibold px-2.5 py-1">
+                Intervalo Processado: Linhas {report.rangeStart.toLocaleString('pt-BR')} a{' '}
+                {report.rangeEnd.toLocaleString('pt-BR')} ({report.totalProcessed} linhas)
+              </Badge>
+            )}
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-6 pt-6">
@@ -71,10 +86,13 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
                   <CheckCircle2 className="w-7 h-7" />
                   <div>
                     <h3 className="font-bold text-lg text-green-800">
-                      Lote importado com sucesso!
+                      {report.rangeStart !== undefined
+                        ? `Faixa ${report.rangeStart}–${report.rangeEnd} importada com sucesso!`
+                        : 'Lote importado com sucesso!'}
                     </h3>
                     <p className="text-xs text-green-600">
-                      Todos os registros válidos foram processados.
+                      Todos os registros válidos do intervalo foram processados e o ponto de
+                      retomada foi salvo.
                     </p>
                   </div>
                 </div>
@@ -83,10 +101,13 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
                   <AlertTriangle className="w-7 h-7 text-amber-500" />
                   <div>
                     <h3 className="font-bold text-lg text-amber-800">
-                      Importação concluída com pendências
+                      {report.rangeStart !== undefined
+                        ? `Faixa ${report.rangeStart}–${report.rangeEnd} concluída com pendências`
+                        : 'Importação concluída com pendências'}
                     </h3>
                     <p className="text-xs text-amber-700">
-                      Alguns registros tiveram erros específicos.
+                      Alguns registros da faixa tiveram erros específicos. O progresso foi
+                      registrado.
                     </p>
                   </div>
                 </div>
@@ -95,7 +116,7 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
 
             <div className="flex items-center gap-3">
               <Badge variant="outline" className="text-xs text-slate-600 bg-white">
-                <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" /> Tempo total:{' '}
+                <Clock className="w-3.5 h-3.5 mr-1 text-slate-400" /> Tempo da faixa:{' '}
                 {report.durationSeconds}s
               </Badge>
               <Badge variant={successRate === 100 ? 'default' : 'secondary'} className="text-xs">
@@ -103,6 +124,33 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
               </Badge>
             </div>
           </div>
+
+          {/* Banner de Próxima Faixa Sugerida */}
+          {nextRangeSuggested && onContinueNextRange && (
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="font-semibold text-sm text-emerald-900 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Ponto de Retomada Gravado
+                  com Sucesso
+                </p>
+                <p className="text-xs text-emerald-800">
+                  Última linha processada: <strong>#{report.rangeEnd}</strong>. Próxima faixa
+                  sugerida:{' '}
+                  <strong>
+                    {nextRangeSuggested.start.toLocaleString('pt-BR')} a{' '}
+                    {nextRangeSuggested.end.toLocaleString('pt-BR')}
+                  </strong>
+                  .
+                </p>
+              </div>
+              <Button
+                onClick={onContinueNextRange}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shrink-0 gap-2"
+              >
+                Continuar na Próxima Faixa ({nextRangeSuggested.start}–{nextRangeSuggested.end})
+              </Button>
+            </div>
+          )}
 
           {/* Cards de Métricas */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -254,11 +302,16 @@ export function AccessImportReportView({ report, onRestart }: AccessImportReport
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-4 border-t">
+          <div className="flex items-center justify-between pt-4 border-t flex-wrap gap-3">
             <Button onClick={onRestart} variant="outline" className="gap-2">
               <RotateCcw className="w-4 h-4" />
-              Fazer Outra Importação
+              Configurar Nova Faixa / Voltar
             </Button>
+            {nextRangeSuggested && onContinueNextRange && (
+              <Button onClick={onContinueNextRange} className="bg-primary gap-2">
+                Continuar de Onde Parou ({nextRangeSuggested.start}–{nextRangeSuggested.end})
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T19:35:58.667Z",
+  "generatedAt": "2026-09-20T23:14:30.602Z",
   "collections": [
     {
       "name": "users",
@@ -598,6 +598,76 @@
         "CREATE INDEX idx_vaccines_patient_id ON vaccines (patient_id)",
         "CREATE INDEX idx_vaccines_date ON vaccines (date)"
       ]
+    },
+    {
+      "name": "import_progress",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "file_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "total_file_rows",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "last_processed_line",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "last_range_start",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "last_range_end",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "completed_at",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "summary",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_import_progress_file ON import_progress (file_name)"]
     }
   ]
 }

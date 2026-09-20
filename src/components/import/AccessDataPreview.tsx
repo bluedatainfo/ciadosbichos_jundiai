@@ -23,15 +23,39 @@ import { Users, PawPrint, FileText, Syringe, AlertCircle, CheckCircle2, Key } fr
 
 interface AccessDataPreviewProps {
   rows: Record<string, string>[]
-  limit: number
+  limit?: number
+  rangeStart?: number
+  rangeEnd?: number
+  isRangeMode?: boolean
 }
 
-export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
+export function AccessDataPreview({
+  rows,
+  limit = 50,
+  rangeStart,
+  rangeEnd,
+  isRangeMode = false,
+}: AccessDataPreviewProps) {
   const [selectedRowIdx, setSelectedRowIdx] = useState<number>(0)
 
-  const previewRows = useMemo(() => {
-    return rows.slice(0, Math.min(limit, 50))
-  }, [rows, limit])
+  // Calcular fatia da prévia
+  const { previewRows, offsetIndex, totalSliceCount } = useMemo(() => {
+    if (isRangeMode && rangeStart !== undefined && rangeEnd !== undefined) {
+      const start0 = Math.max(0, rangeStart - 1)
+      const end0 = Math.min(rows.length, rangeEnd)
+      const sliced = rows.slice(start0, end0)
+      return {
+        previewRows: sliced.slice(0, 50),
+        offsetIndex: start0,
+        totalSliceCount: sliced.length,
+      }
+    }
+    return {
+      previewRows: rows.slice(0, Math.min(limit, 50)),
+      offsetIndex: 0,
+      totalSliceCount: Math.min(limit, rows.length),
+    }
+  }, [rows, limit, rangeStart, rangeEnd, isRangeMode])
 
   const selectedRow = previewRows[selectedRowIdx] || previewRows[0]
 
@@ -92,25 +116,43 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
         <div className="flex items-center gap-3">
           <CheckCircle2 className="w-5 h-5 text-blue-600 shrink-0" />
           <div className="text-sm">
-            <p className="font-semibold text-blue-900">Formato Access 2.0 Detectado com Sucesso</p>
+            <p className="font-semibold text-blue-900">
+              {isRangeMode
+                ? `Prévia da Faixa: Linhas ${rangeStart?.toLocaleString('pt-BR')} a ${rangeEnd?.toLocaleString('pt-BR')}`
+                : 'Formato Access 2.0 Detectado com Sucesso'}
+            </p>
             <p className="text-blue-700 text-xs">
-              Mapeamento automático pronto (CTRL, NOME, ANIM, ESPE, TEXTO, VAC1-5...). Mostrando os
-              primeiros {previewRows.length} registros para inspeção.
+              {isRangeMode
+                ? `Mostrando os primeiros ${previewRows.length} registros da faixa selecionada (${totalSliceCount.toLocaleString('pt-BR')} linhas na faixa).`
+                : `Mapeamento automático pronto (CTRL, NOME, ANIM, ESPE, TEXTO, VAC1-5...). Mostrando os primeiros ${previewRows.length} registros para inspeção.`}
             </p>
           </div>
         </div>
-        <Badge variant="outline" className="bg-white text-blue-700 border-blue-300 font-medium">
-          Total no arquivo: {rows.length.toLocaleString('pt-BR')} linhas
-        </Badge>
+        <div className="flex items-center gap-2">
+          {isRangeMode && (
+            <Badge
+              variant="secondary"
+              className="bg-amber-100 text-amber-800 border-amber-300 font-medium"
+            >
+              Faixa: {rangeStart}–{rangeEnd} ({totalSliceCount} linhas)
+            </Badge>
+          )}
+          <Badge variant="outline" className="bg-white text-blue-700 border-blue-300 font-medium">
+            Total no arquivo: {rows.length.toLocaleString('pt-BR')} linhas
+          </Badge>
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Tabela de Amostra */}
         <div className="lg:col-span-2 space-y-2">
           <h4 className="text-sm font-semibold text-slate-800 flex items-center justify-between">
-            <span>Amostra de Registros (clique em uma linha para ver detalhes)</span>
+            <span>
+              Amostra de Registros {isRangeMode ? '(Linhas Reais do Arquivo)' : ''} (clique em uma
+              linha para ver detalhes)
+            </span>
             <span className="text-xs text-muted-foreground font-normal">
-              Linha selecionada: #{selectedRowIdx + 1}
+              Linha real selecionada: #{offsetIndex + selectedRowIdx + 1}
             </span>
           </h4>
 
@@ -118,7 +160,7 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="w-[50px]">#</TableHead>
+                  <TableHead className="w-[70px]">Linha</TableHead>
                   <TableHead className="w-[80px]">CTRL</TableHead>
                   <TableHead>Tutor (NOME)</TableHead>
                   <TableHead>Animal (ANIM)</TableHead>
@@ -128,6 +170,7 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
               </TableHeader>
               <TableBody>
                 {previewRows.map((row, idx) => {
+                  const actualLineNumber = offsetIndex + idx + 1
                   const ctrl = sanitizeText(row.CTRL || row.ctrl) || '-'
                   const tutor = sanitizeText(row.NOME || row.nome) || '-'
                   const anim = sanitizeText(row.ANIM || row.anim) || '-'
@@ -143,8 +186,8 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
                         isSelected ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-slate-50'
                       }`}
                     >
-                      <TableCell className="text-xs font-mono text-muted-foreground">
-                        {idx + 1}
+                      <TableCell className="text-xs font-mono font-bold text-slate-700">
+                        {actualLineNumber}
                       </TableCell>
                       <TableCell className="text-xs font-mono font-medium">{ctrl}</TableCell>
                       <TableCell className="text-xs font-medium text-slate-800 max-w-[140px] truncate">
@@ -182,8 +225,8 @@ export function AccessDataPreview({ rows, limit }: AccessDataPreviewProps) {
           <Card className="border shadow-none bg-slate-50/50">
             <CardContent className="p-4 space-y-4">
               <h4 className="text-sm font-bold text-slate-900 border-b pb-2 flex items-center gap-2">
-                <FileText className="w-4 h-4 text-primary" /> Como será importado (#
-                {selectedRowIdx + 1})
+                <FileText className="w-4 h-4 text-primary" /> Como será importado (Linha #
+                {offsetIndex + selectedRowIdx + 1})
               </h4>
 
               {parsedDetail && (
