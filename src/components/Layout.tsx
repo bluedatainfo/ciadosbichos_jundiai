@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import { useClinicSettings } from '@/hooks/use-clinic-settings'
 import {
   SidebarProvider,
   Sidebar,
@@ -76,17 +77,35 @@ export default function Layout() {
   const location = useLocation()
   const { signOut, user } = useAuth()
   const { openManual, currentModule } = useManual()
+  const { clinicName, clinicLogoUrl } = useClinicSettings()
 
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-slate-50">
         <Sidebar>
           <SidebarHeader className="p-4 border-b">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-white font-bold text-xl">V</span>
-              </div>
-              <h2 className="text-xl font-bold text-primary tracking-tight">VetSaaS</h2>
+            <div className="flex items-center gap-2 min-w-0">
+              {clinicLogoUrl ? (
+                <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                  <img
+                    src={clinicLogoUrl}
+                    alt={clinicName}
+                    className="w-full h-full object-contain p-0.5"
+                  />
+                </div>
+              ) : (
+                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
+                  <span className="text-white font-bold text-xl">
+                    {clinicName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <h2
+                className="text-lg font-bold text-primary tracking-tight truncate"
+                title={clinicName}
+              >
+                {clinicName}
+              </h2>
             </div>
           </SidebarHeader>
           <SidebarContent>

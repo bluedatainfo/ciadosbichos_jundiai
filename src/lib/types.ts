@@ -146,3 +146,14 @@ export type PublicBookingResult = {
   notes?: string
   error?: string
 }
+
+export type ClinicSettings = {
+  id: string
+  name: string
+  logo?: string
+  phone?: string
+  email?: string
+  address?: string
+  created?: string
+  updated?: string
+}

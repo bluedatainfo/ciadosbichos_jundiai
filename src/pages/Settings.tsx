@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { useAuth } from '@/hooks/use-auth'
+import { useClinicSettings } from '@/hooks/use-clinic-settings'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -30,17 +31,34 @@ import {
   Check,
   Building,
   User,
+  Upload,
+  Image as ImageIcon,
+  Loader2,
+  Phone,
+  Mail,
+  MapPin,
 } from 'lucide-react'
 
 export default function Settings() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { clinicSettings, reloadSettings } = useClinicSettings()
 
   const [businessHours, setBusinessHours] = useState<BusinessHours[]>([])
   const [loadingHours, setLoadingHours] = useState(true)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [savingAll, setSavingAll] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+
+  // Formulário do Cadastro da Clínica
+  const [clinicName, setClinicName] = useState('')
+  const [clinicPhone, setClinicPhone] = useState('')
+  const [clinicEmail, setClinicEmail] = useState('')
+  const [clinicAddress, setClinicAddress] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+  const [removeExistingLogo, setRemoveExistingLogo] = useState(false)
+  const [savingClinic, setSavingClinic] = useState(false)
 
   const publicBookingUrl = `${window.location.origin}/agendamento`
 
@@ -63,6 +81,107 @@ export default function Settings() {
   useEffect(() => {
     loadBusinessHours()
   }, [])
+
+  useEffect(() => {
+    if (clinicSettings) {
+      setClinicName(clinicSettings.name || '')
+      setClinicPhone(clinicSettings.phone || '')
+      setClinicEmail(clinicSettings.email || '')
+      setClinicAddress(clinicSettings.address || '')
+      if (clinicSettings.logo) {
+        setLogoPreview(api.getClinicLogoUrl(clinicSettings))
+      } else {
+        setLogoPreview(null)
+      }
+      setRemoveExistingLogo(false)
+      setLogoFile(null)
+    }
+  }, [clinicSettings])
+
+  const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Por favor, selecione uma imagem válida (PNG, JPG, SVG, WebP).',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'O logotipo deve ter no máximo 5MB.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setLogoFile(file)
+    setRemoveExistingLogo(false)
+    const reader = new FileReader()
+    reader.onload = () => {
+      setLogoPreview(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null)
+    setLogoPreview(null)
+    setRemoveExistingLogo(true)
+  }
+
+  const handleSaveClinic = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clinicName.trim()) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'Por favor, informe o nome da clínica veterinária.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSavingClinic(true)
+    try {
+      const formData = new FormData()
+      formData.append('name', clinicName.trim())
+      formData.append('phone', clinicPhone.trim())
+      formData.append('email', clinicEmail.trim())
+      formData.append('address', clinicAddress.trim())
+
+      if (logoFile) {
+        formData.append('logo', logoFile)
+      } else if (removeExistingLogo) {
+        formData.append('logo', '')
+      }
+
+      if (clinicSettings?.id) {
+        await api.updateClinicSettings(clinicSettings.id, formData)
+      } else {
+        await api.createClinicSettings(formData)
+      }
+
+      await reloadSettings()
+      toast({
+        title: 'Cadastro salvo!',
+        description:
+          'As informações e a identidade visual da clínica foram atualizadas em todo o sistema.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Erro ao salvar clínica',
+        description: getErrorMessage(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingClinic(false)
+    }
+  }
 
   const handleToggleOpen = (id: string, isOpen: boolean) => {
     setBusinessHours((prev) =>
@@ -475,66 +594,197 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Seção 3: Perfil e Dados Gerais da Clínica */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              <CardTitle className="text-lg">Perfil de Usuário</CardTitle>
+      {/* Seção 3: Cadastro da Clínica Veterinária (Identidade Visual e Dados) */}
+      <Card className="border-none shadow-sm overflow-hidden" id="cadastro-clinica">
+        <CardHeader className="bg-white border-b pb-4">
+          <div className="flex items-center gap-2">
+            <Building className="w-5 h-5 text-primary" />
+            <div>
+              <CardTitle className="text-xl text-slate-900">
+                Cadastro da Clínica Veterinária
+              </CardTitle>
+              <CardDescription>
+                Base de apresentação do nome e logotipo em todo o sistema (sidebar, cabeçalho,
+                agendamento online, login e comprovantes).
+              </CardDescription>
             </div>
-            <CardDescription>Informações da sua conta de acesso.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome Completo</Label>
-              <Input
-                defaultValue={user?.name || 'Administrador'}
-                readOnly
-                className="bg-slate-50"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input defaultValue={user?.email} readOnly className="bg-slate-50" />
-            </div>
-            <Button variant="outline" disabled className="mt-2">
-              Alterar Senha
-            </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveClinic} className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Coluna 1: Logotipo */}
+              <div className="space-y-3 bg-slate-50/60 p-4 rounded-xl border border-slate-200">
+                <Label className="text-sm font-semibold text-slate-900 block">
+                  Logotipo da Clínica
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Envie a logo em formato PNG, JPG ou SVG (máx. 5MB). Ela substituirá a marca fixa
+                  na barra lateral, cabeçalho e página pública.
+                </p>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Building className="w-5 h-5 text-primary" />
-              <CardTitle className="text-lg">Dados da Clínica</CardTitle>
+                <div className="flex items-center gap-4 pt-2">
+                  <div className="w-24 h-24 rounded-xl border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0 shadow-2xs relative group">
+                    {logoPreview ? (
+                      <img
+                        src={logoPreview}
+                        alt="Preview da Logo"
+                        className="w-full h-full object-contain p-1"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-slate-400 gap-1">
+                        <ImageIcon className="w-8 h-8 stroke-[1.5]" />
+                        <span className="text-[10px]">Sem logo</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <label className="cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        className="hidden"
+                        onChange={handleLogoChange}
+                      />
+                      <span className="inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs transition-colors">
+                        <Upload className="w-3.5 h-3.5" />
+                        {logoPreview ? 'Trocar Logotipo' : 'Enviar Logotipo'}
+                      </span>
+                    </label>
+
+                    {logoPreview && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoveLogo}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 justify-start h-8 px-2"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                        Remover Logotipo
+                      </Button>
+                    )}
+                    <span className="text-[11px] text-muted-foreground">
+                      Recomendado: imagem quadrada ou horizontal com fundo transparente.
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Coluna 2: Informações Institucionais */}
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="clinicName" className="text-slate-800 font-semibold">
+                    Nome da Clínica Veterinária <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="clinicName"
+                    required
+                    placeholder="Ex: Clínica Veterinária São Francisco"
+                    value={clinicName}
+                    onChange={(e) => setClinicName(e.target.value)}
+                    className="bg-white"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Este nome será exibido no topo da barra de navegação, tela de login, título do
+                    navegador e agendamento.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="clinicPhone"
+                      className="text-slate-700 flex items-center gap-1.5 text-xs"
+                    >
+                      <Phone className="w-3.5 h-3.5 text-primary" /> Telefone / WhatsApp
+                    </Label>
+                    <Input
+                      id="clinicPhone"
+                      placeholder="(11) 3333-4444"
+                      value={clinicPhone}
+                      onChange={(e) => setClinicPhone(e.target.value)}
+                      className="bg-white text-xs sm:text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="clinicEmail"
+                      className="text-slate-700 flex items-center gap-1.5 text-xs"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-primary" /> E-mail de Contato
+                    </Label>
+                    <Input
+                      id="clinicEmail"
+                      type="email"
+                      placeholder="contato@clinica.com.br"
+                      value={clinicEmail}
+                      onChange={(e) => setClinicEmail(e.target.value)}
+                      className="bg-white text-xs sm:text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="clinicAddress"
+                    className="text-slate-700 flex items-center gap-1.5 text-xs"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-primary" /> Endereço Completo
+                  </Label>
+                  <Input
+                    id="clinicAddress"
+                    placeholder="Rua, número, bairro, cidade - UF"
+                    value={clinicAddress}
+                    onChange={(e) => setClinicAddress(e.target.value)}
+                    className="bg-white text-xs sm:text-sm"
+                  />
+                </div>
+              </div>
             </div>
-            <CardDescription>Configurações gerais do sistema.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome da Clínica</Label>
-              <Input defaultValue="Clínica Veterinária Central" />
+
+            <div className="flex items-center justify-end gap-3 pt-4 border-t">
+              <Button
+                type="submit"
+                disabled={savingClinic}
+                className="gap-2 bg-primary hover:bg-primary/90 text-white min-w-[170px]"
+              >
+                {savingClinic ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Gravando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" /> Salvar Cadastro da Clínica
+                  </>
+                )}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Telefone de Contato</Label>
-              <Input defaultValue="(11) 3333-4444" />
-            </div>
-            <Button
-              className="mt-2"
-              onClick={() => {
-                toast({
-                  title: 'Preferências salvas',
-                  description: 'Dados da clínica atualizados com sucesso.',
-                })
-              }}
-            >
-              Salvar Preferências
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Seção 4: Perfil de Usuário Logado */}
+      <Card className="border-none shadow-sm max-w-xl">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <User className="w-5 h-5 text-primary" />
+            <CardTitle className="text-lg">Perfil de Usuário</CardTitle>
+          </div>
+          <CardDescription>Informações da sua conta de acesso.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Nome Completo</Label>
+            <Input defaultValue={user?.name || 'Administrador'} readOnly className="bg-slate-50" />
+          </div>
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input defaultValue={user?.email} readOnly className="bg-slate-50" />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

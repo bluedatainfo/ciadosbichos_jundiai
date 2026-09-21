@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from '@/components/Layout'
 import { ManualProvider } from '@/hooks/use-manual'
 import { ManualSheet } from '@/components/ManualSheet'
+import { ClinicSettingsProvider } from '@/hooks/use-clinic-settings'
 import Index from '@/pages/Index'
 import Patients from '@/pages/Patients'
 import PatientProfile from '@/pages/PatientProfile'
@@ -54,16 +55,18 @@ const AppRoutes = () => {
 
 const App = () => (
   <AuthProvider>
-    <BrowserRouter>
-      <ManualProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <AppRoutes />
-          <ManualSheet />
-        </TooltipProvider>
-      </ManualProvider>
-    </BrowserRouter>
+    <ClinicSettingsProvider>
+      <BrowserRouter>
+        <ManualProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <AppRoutes />
+            <ManualSheet />
+          </TooltipProvider>
+        </ManualProvider>
+      </BrowserRouter>
+    </ClinicSettingsProvider>
   </AuthProvider>
 )
 

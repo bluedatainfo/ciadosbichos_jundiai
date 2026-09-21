@@ -43,7 +43,7 @@ export const MANUAL_MODULES: ManualModule[] = [
     iconName: 'LayoutDashboard',
     overview: {
       purpose:
-        'O VetSaaS é uma plataforma integrada de gestão para clínicas e consultórios veterinários. Ela centraliza cadastros de tutores e animais, prontuário clínico eletrônico com fotos e exames, agenda de consultas e retornos, agendamento online para clientes, controle de estoque de insumos e migração completa de bases legadas do Microsoft Access 2.0.',
+        'Esta é a plataforma integrada de gestão para a clínica veterinária. Centraliza cadastros de tutores e animais, prontuário clínico eletrônico com fotos e exames, agenda de consultas e retornos, agendamento online para clientes, controle de estoque de insumos e identidade personalizada da clínica.',
       targetUsers: 'Médicos Veterinários, Recepcionistas, Atendentes e Administradores da clínica.',
       keyFeatures: [
         'Painel com indicadores em tempo real: total de pacientes, tutores, atendimentos do dia e alertas de estoque baixo.',
@@ -545,18 +545,48 @@ export const MANUAL_MODULES: ManualModule[] = [
     iconName: 'Settings',
     overview: {
       purpose:
-        'Painel administrativo para definição dos horários de funcionamento da clínica para cada dia da semana, configuração dos turnos (manhã e tarde), duração padrão dos slots de consulta e gerenciamento do link público de agendamento online para os clientes.',
+        'Painel administrativo para cadastro e identidade visual da clínica veterinária (nome, logotipo, telefone, e-mail e endereço), definição dos horários de funcionamento para cada dia da semana, turnos e link de agendamento online.',
       targetUsers: 'Administradores e Gerentes da Clínica.',
       keyFeatures: [
+        'Cadastro completo da clínica: nome oficial, upload de logotipo com preview/remoção, telefone/WhatsApp, e-mail e endereço.',
+        'Propagação automática do nome e logotipo por todo o sistema: barra lateral, cabeçalho, agendamento online, login e comprovantes.',
         'Chave liga/desliga para cada dia da semana (Segunda a Domingo).',
         'Definição da duração da consulta por dia (15, 20, 30, 45, 60, 90 ou 120 minutos).',
         'Criação de múltiplos turnos por dia (ex: 08:00 às 12:00 e 14:00 às 18:00) com botão de adicionar/remover intervalo.',
-        'Botão "Salvar Todos os Dias" para gravação em massa das configurações.',
+        'Botão "Salvar Todos os Dias" para gravação em massa dos horários.',
         'Link público de agendamento pronto para envio aos clientes com botão de cópia rápida e atalho de visualização.',
-        'Atualização do perfil pessoal e alteração de senha de acesso.',
       ],
     },
     fields: [
+      {
+        name: 'Nome da Clínica Veterinária',
+        description:
+          'Nome oficial da clínica. Substitui a marca fixa em todo o sistema, títulos de página e tela de login.',
+        required: true,
+        example: 'Clínica Veterinária Central',
+      },
+      {
+        name: 'Logotipo da Clínica',
+        description:
+          'Imagem nos formatos PNG, JPG, WebP ou SVG (até 5MB). Substitui o ícone fixo na barra lateral, login e agendamento.',
+      },
+      {
+        name: 'Telefone / WhatsApp da Clínica',
+        description:
+          'Número de contato institucional exibido aos tutores e no rodapé do agendamento.',
+        example: '(11) 3333-4444',
+      },
+      {
+        name: 'E-mail da Clínica',
+        description: 'Endereço eletrônico para recebimento de comunicações.',
+        example: 'contato@suaclinica.com.br',
+      },
+      {
+        name: 'Endereço Completo',
+        description:
+          'Endereço físico exibido no cabeçalho e rodapé da página pública de agendamento.',
+        example: 'Rua das Flores, 123 - Centro',
+      },
       {
         name: 'Chave Aberto/Fechado (Dia da Semana)',
         description:
@@ -584,6 +614,11 @@ export const MANUAL_MODULES: ManualModule[] = [
     ],
     workflows: [
       {
+        title: 'Como personalizar o nome e o logotipo da sua clínica',
+        description:
+          '1. Acesse o menu Configurações na barra lateral.\n2. Role até a seção "Cadastro da Clínica Veterinária".\n3. Digite o nome da sua clínica no campo "Nome da Clínica Veterinária".\n4. Clique em "Enviar Logotipo" e selecione uma imagem do seu computador (PNG, JPG ou SVG de até 5MB).\n5. Preencha os campos opcionais de telefone, e-mail e endereço.\n6. Clique em "Salvar Cadastro da Clínica".\n7. Instantaneamente o logotipo e o nome atualizado serão exibidos na barra lateral, tela de login, comprovante e agendamento online.',
+      },
+      {
         title: 'Como configurar os horários da semana com pausa para almoço',
         description:
           '1. Acesse o menu Configurações.\n2. No dia desejado (ex: Segunda-feira), ative a chave para "Aberto".\n3. Defina a duração de cada consulta (ex: 30 min).\n4. No primeiro intervalo, ajuste o horário de início (08:00) e fim da manhã (12:00).\n5. Clique em "+ Adicionar Intervalo".\n6. No segundo intervalo, ajuste para o turno da tarde (13:30 às 18:00).\n7. Clique em "Salvar Dia" ou utilize "Salvar Todos os Dias" no topo.',
@@ -600,6 +635,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       },
     ],
     tips: [
+      'Envie preferencialmente imagens com fundo transparente (PNG/SVG) para um visual perfeito na barra lateral e cabeçalho.',
       'Qualquer alteração nos horários tem efeito imediato na página pública de agendamento online.',
       'Horários já reservados por outros clientes deixam de aparecer automaticamente para evitar marcações duplicadas.',
     ],

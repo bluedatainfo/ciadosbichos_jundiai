@@ -8,9 +8,38 @@ import type {
   AvailableSlotsResponse,
   PublicBookingPayload,
   PublicBookingResult,
+  ClinicSettings,
 } from '@/lib/types'
 
 export const api = {
+  // Configurações da Clínica
+  getClinicSettings: async (): Promise<ClinicSettings | null> => {
+    try {
+      const records = await pb.collection('clinic_settings').getList<ClinicSettings>(1, 1, {
+        sort: 'created',
+      })
+      return records.items[0] || null
+    } catch (e) {
+      console.warn('Erro ao buscar configurações da clínica:', e)
+      return null
+    }
+  },
+  updateClinicSettings: async (
+    id: string,
+    data: FormData | Partial<ClinicSettings>,
+  ): Promise<ClinicSettings> => {
+    return pb.collection('clinic_settings').update<ClinicSettings>(id, data)
+  },
+  createClinicSettings: async (
+    data: FormData | Partial<ClinicSettings>,
+  ): Promise<ClinicSettings> => {
+    return pb.collection('clinic_settings').create<ClinicSettings>(data)
+  },
+  getClinicLogoUrl: (record: ClinicSettings | null | undefined): string | null => {
+    if (!record || !record.logo) return null
+    return pb.files.getURL(record as any, record.logo)
+  },
+
   // Configurações de Horários de Atendimento
   getBusinessHours: () =>
     pb.collection('business_hours').getFullList<BusinessHours>({

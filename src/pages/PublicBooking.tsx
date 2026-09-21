@@ -45,9 +45,11 @@ import {
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useManual } from '@/hooks/use-manual'
+import { useClinicSettings } from '@/hooks/use-clinic-settings'
 
 export default function PublicBooking() {
   const { openManual } = useManual()
+  const { clinicName, clinicLogoUrl, clinicSettings } = useClinicSettings()
   const [step, setStep] = useState<'datetime' | 'form' | 'success'>('datetime')
 
   // Estado da configuração de horários e datas disponíveis
@@ -331,17 +333,27 @@ export default function PublicBooking() {
       {/* Header Público da Clínica */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-xs">
-              <span className="text-white font-extrabold text-xl">V</span>
-            </div>
-            <div>
-              <h1 className="font-bold text-slate-900 leading-tight">
-                Clínica Veterinária Central
-              </h1>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <MapPin className="w-3 h-3 text-primary" /> Atendimento Presencial & Agendamento
-                Online
+          <div className="flex items-center gap-3 min-w-0">
+            {clinicLogoUrl ? (
+              <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs p-0.5">
+                <img
+                  src={clinicLogoUrl}
+                  alt={clinicName}
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-xs shrink-0">
+                <span className="text-white font-extrabold text-xl">
+                  {clinicName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="font-bold text-slate-900 leading-tight truncate">{clinicName}</h1>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                <MapPin className="w-3 h-3 text-primary shrink-0" />
+                {clinicSettings?.address || 'Atendimento Presencial & Agendamento Online'}
               </p>
             </div>
           </div>
@@ -917,9 +929,9 @@ export default function PublicBooking() {
       <footer className="bg-white border-t border-slate-200 mt-12 py-6 text-center text-xs text-muted-foreground">
         <div className="max-w-4xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>
-            © {new Date().getFullYear()} Clínica Veterinária Central. Todos os direitos reservados.
+            © {new Date().getFullYear()} {clinicName}. Todos os direitos reservados.
           </span>
-          <span className="text-slate-400">Sistema VetSaaS • Atendimento Online</span>
+          <span className="text-slate-400">Sistema {clinicName} • Atendimento Online</span>
         </div>
       </footer>
     </div>
