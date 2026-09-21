@@ -40,10 +40,14 @@ import {
   Sparkles,
   MapPin,
   ShieldCheck,
+  HelpCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useManual } from '@/hooks/use-manual'
 
 export default function PublicBooking() {
+  const { openManual } = useManual()
   const [step, setStep] = useState<'datetime' | 'form' | 'success'>('datetime')
 
   // Estado da configuração de horários e datas disponíveis
@@ -341,13 +345,34 @@ export default function PublicBooking() {
               </p>
             </div>
           </div>
-          <Badge
-            variant="outline"
-            className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 text-xs py-1"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            Agenda Aberta
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex bg-emerald-50 text-emerald-700 border-emerald-200 gap-1 text-xs py-1"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Agenda Aberta
+            </Badge>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => openManual('agendamento-online')}
+                  className="text-slate-600 hover:text-primary hover:bg-primary/10 transition-colors"
+                  aria-label="Ajuda do sistema (F1)"
+                >
+                  <HelpCircle className="w-5 h-5 text-primary" />
+                  <span className="sr-only">Ajuda (F1)</span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="end" className="flex items-center gap-1.5">
+                <span className="font-medium">Ajuda (F1)</span>
+                <span className="text-[10px] text-muted-foreground">- Agendamento Online</span>
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </header>
 

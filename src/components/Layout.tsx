@@ -34,9 +34,13 @@ import {
   Package,
   UserCog,
   Upload,
+  HelpCircle,
+  BookOpen,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useManual } from '@/hooks/use-manual'
 
 const menuItems = [
   {
@@ -71,6 +75,7 @@ const menuItems = [
 export default function Layout() {
   const location = useLocation()
   const { signOut, user } = useAuth()
+  const { openManual, currentModule } = useManual()
 
   return (
     <SidebarProvider>
@@ -157,6 +162,9 @@ export default function Layout() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => openManual()} className="cursor-pointer">
+                    <BookOpen className="mr-2 h-4 w-4 text-primary" /> Manual do Sistema (F1)
+                  </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link to="/configuracoes">Configurações</Link>
                   </DropdownMenuItem>
@@ -169,6 +177,26 @@ export default function Layout() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/* Botão de Ajuda (?) no Cabeçalho com Tooltip "Ajuda (F1)" */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => openManual()}
+                    className="text-slate-600 hover:text-primary hover:bg-primary/10 transition-colors relative"
+                    aria-label="Ajuda do sistema (F1)"
+                  >
+                    <HelpCircle className="w-5 h-5 text-primary" />
+                    <span className="sr-only">Ajuda (F1)</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" align="end" className="flex items-center gap-1.5">
+                  <span className="font-medium">Ajuda (F1)</span>
+                  <span className="text-[10px] text-muted-foreground">- {currentModule.title}</span>
+                </TooltipContent>
+              </Tooltip>
             </div>
           </header>
           <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">

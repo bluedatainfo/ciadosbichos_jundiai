@@ -3,6 +3,8 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from '@/components/Layout'
+import { ManualProvider } from '@/hooks/use-manual'
+import { ManualSheet } from '@/components/ManualSheet'
 import Index from '@/pages/Index'
 import Patients from '@/pages/Patients'
 import PatientProfile from '@/pages/PatientProfile'
@@ -53,11 +55,14 @@ const AppRoutes = () => {
 const App = () => (
   <AuthProvider>
     <BrowserRouter>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <AppRoutes />
-      </TooltipProvider>
+      <ManualProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <AppRoutes />
+          <ManualSheet />
+        </TooltipProvider>
+      </ManualProvider>
     </BrowserRouter>
   </AuthProvider>
 )
