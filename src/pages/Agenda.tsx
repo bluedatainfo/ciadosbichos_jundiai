@@ -14,6 +14,14 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -34,6 +42,13 @@ import {
   FileText,
   Globe,
   ExternalLink,
+  Eye,
+  User,
+  PawPrint,
+  Phone,
+  Tag,
+  Database,
+  FileSpreadsheet,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -50,6 +65,13 @@ export default function Agenda() {
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [startDate, setStartDate] = useState<Date | undefined>()
   const [endDate, setEndDate] = useState<Date | undefined>()
+  const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+
+  const openDetails = (app: Appointment) => {
+    setSelectedAppointment(app)
+    setIsDetailsOpen(true)
+  }
 
   const loadData = async () => {
     const data = await api.getAppointments({ status: statusFilter, startDate, endDate })
@@ -80,6 +102,49 @@ export default function Agenda() {
     if (app.type !== 'return' || app.status !== 'scheduled') return false
     const diff = new Date(app.date).getTime() - new Date().getTime()
     return diff > 0 && diff <= 48 * 60 * 60 * 1000
+  }
+
+  const getSourceInfo = (app: Appointment) => {
+    const isLegacy = app.notes?.includes('[Migração Access]')
+    if (isLegacy) {
+      return {
+        label: 'Migração Access',
+        badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+        icon: Database,
+      }
+    }
+    if (app.source === 'public') {
+      return {
+        label: 'Online (Tutor)',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+        icon: Globe,
+      }
+    }
+    return {
+      label: 'Manual (Interno)',
+      badgeClass: 'bg-slate-50 text-slate-700 border-slate-200',
+      icon: FileSpreadsheet,
+    }
+  }
+
+  const getStatusBadge = (status: Appointment['status']) => {
+    const isScheduled = status === 'scheduled'
+    const isCompleted = status === 'completed'
+    return (
+      <Badge
+        variant={isScheduled ? 'default' : isCompleted ? 'secondary' : 'destructive'}
+        className={cn(
+          isScheduled
+            ? 'bg-amber-100 text-amber-800'
+            : isCompleted
+              ? 'bg-green-100 text-green-800'
+              : '',
+          'print:bg-transparent print:border print:border-slate-300 print:text-black',
+        )}
+      >
+        {isScheduled ? 'Agendado' : isCompleted ? 'Concluído' : 'Cancelado'}
+      </Badge>
+    )
   }
 
   const handlePrint = () => {
@@ -245,8 +310,9 @@ export default function Agenda() {
                   appointments.map((app) => (
                     <TableRow
                       key={app.id}
+                      onClick={() => openDetails(app)}
                       className={cn(
-                        'transition-colors',
+                        'cursor-pointer transition-colors hover:bg-slate-50/80',
                         isAlert(app) ? 'bg-red-50/40 hover:bg-red-50 print:bg-transparent' : '',
                       )}
                     >
@@ -256,15 +322,26 @@ export default function Agenda() {
                           <span>
                             {app.date ? format(new Date(app.date), 'dd/MM/yyyy HH:mm') : '-'}
                           </span>
-                          {app.source === 'public' && (
+                          {app.notes?.includes('[Migração Access]') ? (
                             <Badge
                               variant="outline"
-                              className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 print:hidden gap-1 font-medium"
-                              title="Agendado online pelo tutor"
+                              className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] px-1.5 py-0 print:hidden gap-1 font-medium"
+                              title="Importado do legado Access"
                             >
-                              <Globe className="w-2.5 h-2.5 text-blue-600" />
-                              Online
+                              <Database className="w-2.5 h-2.5 text-amber-600" />
+                              Legado
                             </Badge>
+                          ) : (
+                            app.source === 'public' && (
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 print:hidden gap-1 font-medium"
+                                title="Agendado online pelo tutor"
+                              >
+                                <Globe className="w-2.5 h-2.5 text-blue-600" />
+                                Online
+                              </Badge>
+                            )
                           )}
                           {isAlert(app) && (
                             <span title="Retorno em menos de 48h!">
@@ -279,16 +356,20 @@ export default function Agenda() {
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="print:text-black">
-                            {app.expand?.patient_id?.expand?.tutor_id?.name}
-                            <span className="text-muted-foreground ml-1 text-xs print:text-black">
-                              ({app.expand?.patient_id?.expand?.tutor_id?.phone})
-                            </span>
+                            {app.expand?.patient_id?.expand?.tutor_id?.name || 'Não informado'}
+                            {app.expand?.patient_id?.expand?.tutor_id?.phone && (
+                              <span className="text-muted-foreground ml-1 text-xs print:text-black">
+                                ({app.expand?.patient_id?.expand?.tutor_id?.phone})
+                              </span>
+                            )}
                           </div>
                           {app.expand?.patient_id?.expand?.tutor_id?.phone && (
                             <button
-                              onClick={() =>
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
                                 openWhatsApp(app.expand?.patient_id?.expand?.tutor_id?.phone!)
-                              }
+                              }}
                               className="text-green-600 hover:text-green-700 p-1 print:hidden"
                               title="Contatar via WhatsApp"
                             >
@@ -315,43 +396,33 @@ export default function Agenda() {
                       >
                         {app.notes || '-'}
                       </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            app.status === 'scheduled'
-                              ? 'default'
-                              : app.status === 'completed'
-                                ? 'secondary'
-                                : 'destructive'
-                          }
-                          className={cn(
-                            app.status === 'scheduled'
-                              ? 'bg-amber-100 text-amber-800'
-                              : app.status === 'completed'
-                                ? 'bg-green-100 text-green-800'
-                                : '',
-                            'print:bg-transparent print:border print:border-slate-300 print:text-black',
-                          )}
+                      <TableCell>{getStatusBadge(app.status)}</TableCell>
+                      <TableCell className="text-right print:hidden whitespace-nowrap">
+                        <div
+                          className="flex items-center justify-end gap-1.5"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {app.status === 'scheduled'
-                            ? 'Agendado'
-                            : app.status === 'completed'
-                              ? 'Concluído'
-                              : 'Cancelado'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right print:hidden">
-                        {app.status === 'scheduled' && (
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-green-600 border-green-200 hover:bg-green-50"
-                            onClick={() => handleComplete(app.id)}
+                            className="text-slate-700 hover:text-slate-900"
+                            onClick={() => openDetails(app)}
                           >
-                            <CheckCircle className="w-4 h-4 mr-2" />
-                            Concluir
+                            <Eye className="w-4 h-4 mr-1.5" />
+                            Ver detalhes
                           </Button>
-                        )}
+                          {app.status === 'scheduled' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600 border-green-200 hover:bg-green-50"
+                              onClick={() => handleComplete(app.id)}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1.5" />
+                              Concluir
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -361,6 +432,194 @@ export default function Agenda() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Diálogo de detalhes completos do agendamento */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-primary" />
+              Detalhes do Agendamento
+            </DialogTitle>
+            <DialogDescription>
+              Informações completas do agendamento e dados vinculados.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedAppointment && (
+            <div className="space-y-4 py-2">
+              {/* Informações Principais */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="p-3 rounded-lg border bg-slate-50/60 space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-primary" />
+                    Data e Hora
+                  </span>
+                  <p className="font-medium text-slate-900">
+                    {selectedAppointment.date
+                      ? format(new Date(selectedAppointment.date), "dd/MM/yyyy 'às' HH:mm", {
+                          locale: ptBR,
+                        })
+                      : 'Não informada'}
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-lg border bg-slate-50/60 space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-primary" />
+                    Tipo de Atendimento
+                  </span>
+                  <div>
+                    <Badge variant="outline" className="bg-white">
+                      {getTypeLabel(selectedAppointment.type)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg border bg-slate-50/60 space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Status
+                  </span>
+                  <div>{getStatusBadge(selectedAppointment.status)}</div>
+                </div>
+
+                <div className="p-3 rounded-lg border bg-slate-50/60 space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    Origem
+                  </span>
+                  <div>
+                    {(() => {
+                      const sourceInfo = getSourceInfo(selectedAppointment)
+                      const Icon = sourceInfo.icon
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={cn('gap-1 font-medium', sourceInfo.badgeClass)}
+                        >
+                          <Icon className="w-3 h-3" />
+                          {sourceInfo.label}
+                        </Badge>
+                      )
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* Paciente e Tutor */}
+              <div className="p-4 rounded-lg border bg-slate-50/60 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                      <PawPrint className="w-3.5 h-3.5 text-primary" />
+                      Paciente
+                    </span>
+                    <p className="font-semibold text-base text-slate-900">
+                      {selectedAppointment.expand?.patient_id?.name || 'Desconhecido'}
+                    </p>
+                    {(selectedAppointment.expand?.patient_id?.species ||
+                      selectedAppointment.expand?.patient_id?.breed) && (
+                      <p className="text-xs text-muted-foreground">
+                        {[
+                          selectedAppointment.expand?.patient_id?.species,
+                          selectedAppointment.expand?.patient_id?.breed,
+                        ]
+                          .filter(Boolean)
+                          .join(' • ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t pt-2.5 space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-primary" />
+                    Tutor e Contato
+                  </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-slate-900 text-sm">
+                        {selectedAppointment.expand?.patient_id?.expand?.tutor_id?.name ||
+                          'Tutor não informado'}
+                      </p>
+                      {selectedAppointment.expand?.patient_id?.expand?.tutor_id?.phone ? (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                          <Phone className="w-3 h-3" />
+                          {selectedAppointment.expand?.patient_id?.expand?.tutor_id?.phone}
+                        </p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-0.5">Sem telefone</p>
+                      )}
+                    </div>
+                    {selectedAppointment.expand?.patient_id?.expand?.tutor_id?.phone && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-green-600 border-green-200 hover:bg-green-50 gap-1.5"
+                        onClick={() =>
+                          openWhatsApp(
+                            selectedAppointment.expand?.patient_id?.expand?.tutor_id?.phone!,
+                          )
+                        }
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        Conversar no WhatsApp
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notas Completas (sem truncar) */}
+              <div className="p-4 rounded-lg border bg-white space-y-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  Notas e Observações Completas
+                </span>
+                <div className="p-3 bg-slate-50 rounded-md border text-sm text-slate-800 whitespace-pre-wrap break-words leading-relaxed max-h-60 overflow-y-auto">
+                  {selectedAppointment.notes?.trim() ? (
+                    selectedAppointment.notes
+                  ) : (
+                    <span className="text-muted-foreground italic">
+                      Nenhuma observação cadastrada para este agendamento.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between items-stretch sm:items-center">
+            {selectedAppointment?.status === 'scheduled' ? (
+              <Button
+                variant="outline"
+                className="text-green-600 border-green-200 hover:bg-green-50 gap-1.5 w-full sm:w-auto"
+                onClick={async () => {
+                  if (selectedAppointment) {
+                    await handleComplete(selectedAppointment.id)
+                    setSelectedAppointment({
+                      ...selectedAppointment,
+                      status: 'completed',
+                    })
+                  }
+                }}
+              >
+                <CheckCircle className="w-4 h-4" />
+                Concluir Agendamento
+              </Button>
+            ) : (
+              <div />
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setIsDetailsOpen(false)}
+              className="w-full sm:w-auto"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
