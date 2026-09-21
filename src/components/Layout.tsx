@@ -84,9 +84,9 @@ export default function Layout() {
       <div className="flex min-h-screen w-full bg-slate-50">
         <Sidebar>
           <SidebarHeader className="p-4 border-b">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               {clinicLogoUrl ? (
-                <div className="w-8 h-8 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
                   <img
                     src={clinicLogoUrl}
                     alt={clinicName}
@@ -94,14 +94,14 @@ export default function Layout() {
                   />
                 </div>
               ) : (
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                  <span className="text-white font-bold text-xl">
+                <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-2xs">
+                  <span className="text-white font-bold text-lg">
                     {clinicName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
               <h2
-                className="text-lg font-bold text-primary tracking-tight truncate"
+                className="text-base font-bold text-primary tracking-tight leading-snug break-words whitespace-normal"
                 title={clinicName}
               >
                 {clinicName}
@@ -138,19 +138,47 @@ export default function Layout() {
         </Sidebar>
 
         <SidebarInset className="flex-1 flex flex-col min-w-0 bg-transparent">
-          <header className="h-16 border-b bg-white flex items-center justify-between px-4 sticky top-0 z-10">
-            <div className="flex items-center gap-4 flex-1">
-              <SidebarTrigger className="-ml-2" />
-              <div className="relative w-full max-w-md hidden sm:block">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <header className="min-h-16 py-2 border-b bg-white flex items-center justify-between px-3 sm:px-4 md:px-6 sticky top-0 z-10 gap-2 sm:gap-4">
+            {/* Lado Esquerdo: Trigger + Nome da Clínica completo + Campo de Busca redimensionado */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+              <SidebarTrigger className="-ml-1 shrink-0 text-slate-600 hover:text-slate-900" />
+
+              {/* Nome da Clínica visível no cabeçalho superior (sem corte, quebra elegante se necessário) */}
+              <div className="flex items-center gap-2 min-w-0 py-0.5 shrink-0 max-w-[220px] sm:max-w-[320px] md:max-w-[380px] lg:max-w-md xl:max-w-lg">
+                {clinicLogoUrl ? (
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                    <img
+                      src={clinicLogoUrl}
+                      alt={clinicName}
+                      className="w-full h-full object-contain p-0.5"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md bg-primary flex items-center justify-center shrink-0 shadow-2xs">
+                    <span className="text-white font-bold text-xs sm:text-sm">
+                      {clinicName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                )}
+                <span
+                  className="text-xs sm:text-sm md:text-base font-bold text-slate-900 leading-snug break-words whitespace-normal"
+                  title={clinicName}
+                >
+                  {clinicName}
+                </span>
+              </div>
+
+              {/* Campo de Busca Global: redimensionado e adaptativo, abrindo espaço para o nome da clínica */}
+              <div className="relative hidden sm:block w-36 md:w-44 lg:w-56 shrink min-w-[130px] transition-all">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                   type="search"
                   placeholder="Buscar animal ou ID..."
-                  className="w-full bg-slate-50 pl-9 border-none focus-visible:ring-1"
+                  className="w-full h-9 bg-slate-50 pl-9 pr-2.5 text-xs sm:text-sm border-slate-200 focus-visible:ring-1 focus-visible:bg-white"
                 />
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               <Button
                 size="sm"
                 className="hidden md:flex gap-2 bg-primary hover:bg-primary/90 text-white"
