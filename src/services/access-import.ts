@@ -481,18 +481,33 @@ export async function processAccessImport(
           // -------------------------------------------------------------
           // 4. HISTÓRICO DE VACINAÇÃO (VAC1-VAC5 + VTX1-VTX5)
           // Vinculado estritamente a rowPatientId
+          // Retornos nascem como realizados (completed = true) SOMENTE se a data já passou.
+          // Datas futuras (hoje ou adiante) nascem pendentes (completed = false)
+          // para entrarem normalmente nos alertas do sistema.
+          // Registros sem data reconhecível nascem como realizados (completed = true).
           // -------------------------------------------------------------
           const vaccines = extractVaccinesFromRow(row)
+          const todayStart = new Date()
+          todayStart.setHours(0, 0, 0, 0)
+
           for (const vac of vaccines) {
             try {
-              // Retornos e vacinas históricos importados do legado nascem como realizados (completed = true)
+              let isCompleted = true
+              if (vac.date) {
+                const vacTime = new Date(vac.date).getTime()
+                if (!isNaN(vacTime)) {
+                  // Se a data é hoje ou futura, nasce pendente (completed = false)
+                  isCompleted = vacTime < todayStart.getTime()
+                }
+              }
+
               await safeDbWrite(() =>
                 pb.collection('vaccines').create({
                   patient_id: rowPatientId,
                   name: vac.name,
                   date: vac.date || '',
                   notes: vac.notes || '',
-                  completed: true,
+                  completed: isCompleted,
                 }),
               )
               vaccinesCreated++
