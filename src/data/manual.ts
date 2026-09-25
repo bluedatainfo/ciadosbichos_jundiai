@@ -742,6 +742,101 @@ export const MANUAL_MODULES: ManualModule[] = [
     ],
   },
   {
+    id: 'relatorios-retornos',
+    title: 'Relatórios → Retornos',
+    shortDescription:
+      'Painel de filtros no modelo clássico TechnoVet com busca avançada de retornos, WhatsApp direto e impressão/PDF.',
+    routePatterns: ['/relatorios', '/relatorios/retornos'],
+    iconName: 'FileBarChart',
+    overview: {
+      purpose:
+        'Módulo especializado para emissão e busca analítica de retornos previstos da clínica veterinária, reproduzindo com fidelidade a tela clássica de filtros do sistema TechnoVet. Permite que veterinários e recepcionistas localizem rapidamente animais com retornos pendentes em um determinado intervalo e acionem os tutores por WhatsApp ou gerem listas impressas.',
+      targetUsers: 'Médicos Veterinários, Recepcionistas e Administradores da clínica.',
+      keyFeatures: [
+        'Painel lateral completo de filtros reproduzindo a interface do TechnoVet: Animal (busca por nome), Espécie (dropdown), Raça (dropdown com busca), Sexo, Última visita (intervalo de – a), Nascimento (intervalo de – a), Aniversário (seletor de dia e mês) e Retornos (intervalo de – a).',
+        'Contador de registros em destaque estilo visor digital clássico (ex: "161 reg.") atualizado dinamicamente.',
+        'Regra de negócio inteligente: lista estritamente retornos NÃO realizados (completed = false/null) para que a equipe entre em contato com os tutores.',
+        'Exclusão automática de animais marcados com óbito (deceased = true).',
+        'Relação de resultados no formato Código | Tutor | Animal | Retorno | Telefone.',
+        'Link direto para conversa no WhatsApp (wa.me) ao lado de cada número de telefone com mensagem pré-formatada informando o retorno do animal.',
+        'Otimização de desempenho para bases grandes com paginação e rolagem suave.',
+        'Botões Imprimir e Gerar PDF com cabeçalho oficial da clínica, período filtrado e data de emissão.',
+      ],
+    },
+    fields: [
+      {
+        name: 'Animal (Busca)',
+        description: 'Filtra pacientes pelo nome ou parte dele (busca textual por aproximação).',
+        example: 'Kiara',
+      },
+      {
+        name: 'Espécie',
+        description:
+          'Lista suspensa contendo as espécies cadastradas no sistema (Canino, Felino, etc.).',
+      },
+      {
+        name: 'Raça',
+        description: 'Lista suspensa com campo de busca interna de raças cadastradas na base.',
+        example: 'Poodle, Boxer, SRD',
+      },
+      {
+        name: 'Sexo',
+        description: 'Filtro por sexo do animal (Macho ou Fêmea).',
+      },
+      {
+        name: 'Última Visita (Intervalo de – a)',
+        description: 'Filtra os pacientes pela data da última consulta ou procedimento registrado.',
+      },
+      {
+        name: 'Nascimento (Intervalo de – a)',
+        description: 'Filtra os pacientes que nasceram dentro de uma faixa específica de datas.',
+      },
+      {
+        name: 'Aniversário (Dia / Mês)',
+        description:
+          'Seletor de dia e mês para encontrar animais que fazem aniversário na data, independente do ano de nascimento. Ideal para ações de relacionamento e mensagens de felicitação.',
+        example: '14 / Janeiro',
+      },
+      {
+        name: 'Retornos (Intervalo de – a)',
+        description:
+          'O filtro central do relatório. Localiza retornos previstos para uma faixa de datas (ex: 01/07/2026 a 31/07/2026) que ainda não foram marcados como realizados.',
+      },
+      {
+        name: 'Contador de Registros ("X reg.")',
+        description:
+          'Exibe em destaque o número total de retornos encontrados para os filtros aplicados.',
+      },
+    ],
+    workflows: [
+      {
+        title: 'Como gerar a relação de retornos do mês',
+        description:
+          '1. No menu lateral esquerdo, clique em "Relatórios" e selecione "Retornos".\n2. No painel de filtros à esquerda, localize o campo "Retornos (Previsão)".\n3. Preencha a data inicial no primeiro campo e a data final no segundo campo (ex: 01/07/2026 a 31/07/2026).\n4. Clique no botão "Filtrar".\n5. O contador em destaque informará o número de registros (ex: 161 reg.) e a tabela à direita listará os animais com Código, Tutor, Animal e Contato.',
+      },
+      {
+        title: 'Como acionar o tutor pelo WhatsApp diretamente da listagem',
+        description:
+          '1. Na tabela de resultados, localize o animal que deseja contatar.\n2. Na coluna "Telefone / WhatsApp", clique no botão verde "WhatsApp".\n3. O sistema abrirá uma janela no WhatsApp Web ou no aplicativo de celular com o número preenchido e mensagem sugerindo o retorno do animal.',
+      },
+      {
+        title: 'Como imprimir ou gerar PDF do relatório de retornos',
+        description:
+          '1. Aplique os filtros desejados para obter a listagem necessária.\n2. No topo direito da tela, clique no botão "Imprimir" ou "Gerar PDF".\n3. A janela de impressão do navegador abrirá uma folha formatada limpa contendo o nome da clínica no cabeçalho, os filtros de período aplicados, a data de emissão e a tabela completa com Código, Tutor, Animal e Telefone.',
+      },
+      {
+        title: 'Como filtrar aniversariantes do mês para campanhas',
+        description:
+          '1. No painel de filtros, localize o seletor "Aniversário (Dia / Mês)".\n2. Deixe o dia como "Qualquer dia" e selecione o mês desejado (ex: 05 - Maio).\n3. Clique em "Filtrar".\n4. O sistema listará todos os pacientes que fazem aniversário naquele mês para envio de lembretes ou promoções.',
+      },
+    ],
+    tips: [
+      'O relatório considera somente retornos com status pendente (não realizados). Quando o atendimento é concluído na ficha do paciente ou no Dashboard, ele sai automaticamente da lista.',
+      'Você pode combinar múltiplos filtros simultaneamente, por exemplo: Espécie "Canino" + Retornos no período.',
+      'Clique no ícone de atalho no final de qualquer linha da tabela para abrir o prontuário completo do paciente.',
+    ],
+  },
+  {
     id: 'usuarios',
     title: 'Equipe & Usuários',
     shortDescription:

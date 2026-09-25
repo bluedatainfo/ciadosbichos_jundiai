@@ -10,10 +10,14 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   SidebarHeader,
   SidebarInset,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,7 +33,6 @@ import {
   Settings,
   Search,
   Plus,
-  Bell,
   UserCircle,
   LogOut,
   Package,
@@ -37,6 +40,8 @@ import {
   Upload,
   HelpCircle,
   BookOpen,
+  FileBarChart,
+  ChevronDown,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -55,6 +60,19 @@ const menuItems = [
     path: '/pacientes',
     icon: Users,
     roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  {
+    title: 'Relatórios',
+    path: '/relatorios',
+    icon: FileBarChart,
+    roles: ['admin', 'veterinarian', 'attendant'],
+    subItems: [
+      {
+        title: 'Retornos',
+        path: '/relatorios/retornos',
+        roles: ['admin', 'veterinarian', 'attendant'],
+      },
+    ],
   },
   {
     title: 'Agenda de Retornos',
@@ -114,23 +132,75 @@ export default function Layout() {
                 <SidebarMenu>
                   {menuItems
                     .filter((item) => item.roles.includes(user?.role || 'attendant'))
-                    .map((item) => (
-                      <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={
-                            location.pathname === item.path ||
-                            (item.path !== '/' && location.pathname.startsWith(item.path))
-                          }
-                          tooltip={item.title}
-                        >
-                          <Link to={item.path} className="flex items-center gap-3">
-                            <item.icon className="w-5 h-5" />
-                            <span className="font-medium">{item.title}</span>
-                          </Link>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))}
+                    .map((item) => {
+                      if (item.subItems && item.subItems.length > 0) {
+                        const isSubActive = item.subItems.some(
+                          (sub) =>
+                            location.pathname === sub.path ||
+                            location.pathname.startsWith(sub.path + '/'),
+                        )
+                        return (
+                          <Collapsible
+                            key={item.title}
+                            asChild
+                            defaultOpen={isSubActive || location.pathname.startsWith('/relatorios')}
+                            className="group/collapsible"
+                          >
+                            <SidebarMenuItem>
+                              <CollapsibleTrigger asChild>
+                                <SidebarMenuButton
+                                  tooltip={item.title}
+                                  isActive={isSubActive}
+                                  className="w-full justify-between"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <item.icon className="w-5 h-5" />
+                                    <span className="font-medium">{item.title}</span>
+                                  </div>
+                                  <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 text-muted-foreground" />
+                                </SidebarMenuButton>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <SidebarMenuSub>
+                                  {item.subItems
+                                    .filter((sub) => sub.roles.includes(user?.role || 'attendant'))
+                                    .map((sub) => (
+                                      <SidebarMenuSubItem key={sub.title}>
+                                        <SidebarMenuSubButton
+                                          asChild
+                                          isActive={location.pathname === sub.path}
+                                        >
+                                          <Link to={sub.path}>
+                                            <span>{sub.title}</span>
+                                          </Link>
+                                        </SidebarMenuSubButton>
+                                      </SidebarMenuSubItem>
+                                    ))}
+                                </SidebarMenuSub>
+                              </CollapsibleContent>
+                            </SidebarMenuItem>
+                          </Collapsible>
+                        )
+                      }
+
+                      return (
+                        <SidebarMenuItem key={item.title}>
+                          <SidebarMenuButton
+                            asChild
+                            isActive={
+                              location.pathname === item.path ||
+                              (item.path !== '/' && location.pathname.startsWith(item.path))
+                            }
+                            tooltip={item.title}
+                          >
+                            <Link to={item.path} className="flex items-center gap-3">
+                              <item.icon className="w-5 h-5" />
+                              <span className="font-medium">{item.title}</span>
+                            </Link>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      )
+                    })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
