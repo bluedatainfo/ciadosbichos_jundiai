@@ -65,17 +65,21 @@ export async function getDistinctSpeciesAndBreeds(): Promise<DistinctFilterOptio
     const breedsSet = new Set<string>()
 
     for (const r of records) {
-      if (r.species && r.species.trim()) {
+      if (r.species && typeof r.species === 'string' && r.species.trim()) {
         speciesSet.add(r.species.trim())
       }
-      if (r.breed && r.breed.trim()) {
+      if (r.breed && typeof r.breed === 'string' && r.breed.trim()) {
         breedsSet.add(r.breed.trim())
       }
     }
 
     return {
-      species: Array.from(speciesSet).sort((a, b) => a.localeCompare(b, 'pt-BR')),
-      breeds: Array.from(breedsSet).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      species: Array.from(speciesSet)
+        .filter((s) => Boolean(s && s.trim()))
+        .sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      breeds: Array.from(breedsSet)
+        .filter((b) => Boolean(b && b.trim()))
+        .sort((a, b) => a.localeCompare(b, 'pt-BR')),
     }
   } catch (err) {
     console.error('Erro ao carregar espécies e raças distintas:', err)

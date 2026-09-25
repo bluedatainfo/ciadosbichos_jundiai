@@ -66,8 +66,8 @@ export default function ReturnReportPage() {
   const [lastVisitTo, setLastVisitTo] = useState('')
   const [birthDateFrom, setBirthDateFrom] = useState('')
   const [birthDateTo, setBirthDateTo] = useState('')
-  const [birthdayDay, setBirthdayDay] = useState('')
-  const [birthdayMonth, setBirthdayMonth] = useState('')
+  const [birthdayDay, setBirthdayDay] = useState('all')
+  const [birthdayMonth, setBirthdayMonth] = useState('all')
   const [returnDateFrom, setReturnDateFrom] = useState('')
   const [returnDateTo, setReturnDateTo] = useState('')
 
@@ -77,18 +77,21 @@ export default function ReturnReportPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [hasAppliedFilter, setHasAppliedFilter] = useState(false)
 
-  // Filtro de raças filtradas pela busca
+  // Filtro de raças filtradas pela busca (garantindo ausência de strings vazias)
   const filteredBreeds = useMemo(() => {
-    if (!breedSearchQuery.trim()) return breedList
-    return breedList.filter((b) => b.toLowerCase().includes(breedSearchQuery.toLowerCase()))
+    const validBreeds = breedList.filter((b) => typeof b === 'string' && b.trim().length > 0)
+    if (!breedSearchQuery.trim()) return validBreeds
+    return validBreeds.filter((b) => b.toLowerCase().includes(breedSearchQuery.toLowerCase()))
   }, [breedList, breedSearchQuery])
 
-  // Carrega opções de espécie e raça na montagem
+  // Carrega opções de espécie e raça na montagem (filtrando strings vazias ou nulas)
   useEffect(() => {
     async function loadOptions() {
       const data = await getDistinctSpeciesAndBreeds()
-      setSpeciesList(data.species)
-      setBreedList(data.breeds)
+      setSpeciesList(
+        (data.species || []).filter((s) => typeof s === 'string' && s.trim().length > 0),
+      )
+      setBreedList((data.breeds || []).filter((b) => typeof b === 'string' && b.trim().length > 0))
     }
     loadOptions()
   }, [])
@@ -99,8 +102,11 @@ export default function ReturnReportPage() {
     setHasAppliedFilter(true)
     setCurrentPage(1)
 
+    const isDayValid = birthdayDay && birthdayDay !== 'all'
+    const isMonthValid = birthdayMonth && birthdayMonth !== 'all'
+
     const birthdayCombined =
-      birthdayDay && birthdayMonth
+      isDayValid && isMonthValid
         ? `${birthdayDay.padStart(2, '0')}/${birthdayMonth.padStart(2, '0')}`
         : undefined
 
@@ -144,8 +150,8 @@ export default function ReturnReportPage() {
     setLastVisitTo('')
     setBirthDateFrom('')
     setBirthDateTo('')
-    setBirthdayDay('')
-    setBirthdayMonth('')
+    setBirthdayDay('all')
+    setBirthdayMonth('all')
     setReturnDateFrom('')
     setReturnDateTo('')
     setBreedSearchQuery('')
@@ -313,11 +319,13 @@ export default function ReturnReportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as Espécies</SelectItem>
-                  {speciesList.map((sp) => (
-                    <SelectItem key={sp} value={sp}>
-                      {sp}
-                    </SelectItem>
-                  ))}
+                  {speciesList
+                    .filter((sp) => typeof sp === 'string' && sp.trim().length > 0)
+                    .map((sp) => (
+                      <SelectItem key={sp} value={sp}>
+                        {sp}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -340,11 +348,13 @@ export default function ReturnReportPage() {
                     />
                   </div>
                   <SelectItem value="all">Todas as Raças</SelectItem>
-                  {filteredBreeds.map((br) => (
-                    <SelectItem key={br} value={br}>
-                      {br}
-                    </SelectItem>
-                  ))}
+                  {filteredBreeds
+                    .filter((br) => typeof br === 'string' && br.trim().length > 0)
+                    .map((br) => (
+                      <SelectItem key={br} value={br}>
+                        {br}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             </div>
@@ -417,7 +427,7 @@ export default function ReturnReportPage() {
                     <SelectValue placeholder="Dia" />
                   </SelectTrigger>
                   <SelectContent className="max-h-48">
-                    <SelectItem value="">Qualquer dia</SelectItem>
+                    <SelectItem value="all">Qualquer dia</SelectItem>
                     {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
                       <SelectItem key={d} value={String(d)}>
                         {String(d).padStart(2, '0')}
@@ -431,7 +441,7 @@ export default function ReturnReportPage() {
                     <SelectValue placeholder="Mês" />
                   </SelectTrigger>
                   <SelectContent className="max-h-48">
-                    <SelectItem value="">Qualquer mês</SelectItem>
+                    <SelectItem value="all">Qualquer mês</SelectItem>
                     <SelectItem value="1">01 - Janeiro</SelectItem>
                     <SelectItem value="2">02 - Fevereiro</SelectItem>
                     <SelectItem value="3">03 - Março</SelectItem>
