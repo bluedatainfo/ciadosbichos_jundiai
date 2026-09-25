@@ -25,6 +25,7 @@ export interface GetReturnAlertsOptions {
   limit?: number
   startDate?: Date | string
   endDate?: Date | string
+  patientIds?: string[]
 }
 
 /**
@@ -55,6 +56,12 @@ export async function getReturnAlerts(options?: GetReturnAlertsOptions): Promise
   // Carrega vacinas/retornos NÃO REALIZADOS (completed != true) com data cadastrada e expande o paciente e seu tutor
   // Na collection vaccines: patient_id é relation com patients
   // Apenas retornos NÃO concluídos devem gerar alertas
+  let baseFilter = `date != '' && (completed = false || completed = null)`
+  if (options?.patientIds && options.patientIds.length > 0) {
+    const idFilters = options.patientIds.map((id) => `patient_id = "${id}"`).join(' || ')
+    baseFilter = `(${baseFilter}) && (${idFilters})`
+  }
+
   const vaccineRecords = await pb.collection('vaccines').getFullList<
     Vaccine & {
       expand?: {
@@ -66,7 +73,7 @@ export async function getReturnAlerts(options?: GetReturnAlertsOptions): Promise
       }
     }
   >({
-    filter: `date != '' && (completed = false || completed = null)`,
+    filter: baseFilter,
     sort: 'date',
     expand: 'patient_id.tutor_id',
   })

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/services/api'
 import { Patient, Tutor } from '@/lib/types'
@@ -37,12 +37,16 @@ import {
   Search,
   Plus,
   ChevronRight,
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   MessageCircle,
   Edit2,
   Loader2,
   Save,
   AlertTriangle,
   Clock,
+  Filter,
 } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
@@ -56,15 +60,28 @@ const openWhatsApp = (phone: string) => {
   }
 }
 
+const PAGE_SIZE = 50
+
 export default function Patients() {
+  const [activeTab, setActiveTab] = useState<'patients' | 'tutors'>('patients')
+
   const [patientSearch, setPatientSearch] = useState('')
   const [debouncedPatientSearch, setDebouncedPatientSearch] = useState('')
+  const [patientSpeciesFilter, setPatientSpeciesFilter] = useState('all')
+  const [patientPage, setPatientPage] = useState(1)
+  const [totalPatients, setTotalPatients] = useState(0)
+  const [patientsLoading, setPatientsLoading] = useState(false)
+
   const [tutorSearch, setTutorSearch] = useState('')
   const [debouncedTutorSearch, setDebouncedTutorSearch] = useState('')
+  const [tutorPage, setTutorPage] = useState(1)
+  const [totalTutors, setTotalTutors] = useState(0)
+  const [tutorsLoading, setTutorsLoading] = useState(false)
 
   const [patients, setPatients] = useState<Patient[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
-  const [allTutors, setAllTutors] = useState<Tutor[]>([])
+  const [selectableTutors, setSelectableTutors] = useState<Tutor[]>([])
+  const [selectableTutorSearch, setSelectableTutorSearch] = useState('')
   const [patientAlertsMap, setPatientAlertsMap] = useState<Record<string, ReturnAlert>>({})
 
   const [isSheetOpen, setIsSheetOpen] = useState(false)
@@ -109,51 +126,114 @@ export default function Patients() {
   const [tutorCepLoading, setTutorCepLoading] = useState(false)
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedPatientSearch(patientSearch), 500)
+    const t = setTimeout(() => {
+      setDebouncedPatientSearch(patientSearch)
+      setPatientPage(1)
+    }, 400)
     return () => clearTimeout(t)
   }, [patientSearch])
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedTutorSearch(tutorSearch), 500)
+    const t = setTimeout(() => {
+      setDebouncedTutorSearch(tutorSearch)
+      setTutorPage(1)
+    }, 400)
     return () => clearTimeout(t)
   }, [tutorSearch])
 
-  const loadPatients = async () => setPatients(await api.getPatients(debouncedPatientSearch))
-  const loadTutors = async () => setTutors(await api.getTutors(debouncedTutorSearch))
-  const loadAllTutors = async () => setAllTutors(await api.getTutors())
-
-  const loadAlerts = async () => {
+  const loadPatients = async () => {
+    setPatientsLoading(true)
     try {
-      const res = await getReturnAlerts({ daysAhead: 30 })
-      const map: Record<string, ReturnAlert> = {}
-      for (const a of res.alerts) {
-        map[a.patientId] = a
+      const res = await api.getPatientsPaged({
+        page: patientPage,
+        perPage: PAGE_SIZE,
+        search: debouncedPatientSearch,
+        species: patientSpeciesFilter,
+      })
+      setPatients(res.items)
+      setTotalPatients(res.totalItems)
+
+      // Carrega alertas apenas para os pacientes visíveis na página atual
+      if (res.items.length > 0) {
+        const pIds = res.items.map((p) => p.id)
+        getReturnAlerts({ daysAhead: 30, patientIds: pIds })
+          .then((alertsRes) => {
+            const map: Record<string, ReturnAlert> = {}
+            for (const a of alertsRes.alerts) {
+              map[a.patientId] = a
+            }
+            setPatientAlertsMap((prev) => ({ ...prev, ...map }))
+          })
+          .catch(() => {})
       }
-      setPatientAlertsMap(map)
-    } catch {
-      // Ignora erro de alertas
+    } catch (err) {
+      console.error('Erro ao buscar pacientes:', err)
+    } finally {
+      setPatientsLoading(false)
+    }
+  }
+
+  const loadTutors = async () => {
+    setTutorsLoading(true)
+    try {
+      const res = await api.getTutorsPaged({
+        page: tutorPage,
+        perPage: PAGE_SIZE,
+        search: debouncedTutorSearch,
+      })
+      setTutors(res.items)
+      setTotalTutors(res.totalItems)
+    } catch (err) {
+      console.error('Erro ao buscar tutores:', err)
+    } finally {
+      setTutorsLoading(false)
+    }
+  }
+
+  const loadSelectableTutors = async (search?: string) => {
+    try {
+      const res = await api.searchTutorsForSelect(search)
+      setSelectableTutors(res.items)
+    } catch (err) {
+      console.error('Erro ao carregar tutores para seleção:', err)
     }
   }
 
   useEffect(() => {
     loadPatients()
-  }, [debouncedPatientSearch])
+  }, [patientPage, debouncedPatientSearch, patientSpeciesFilter])
+
   useEffect(() => {
     loadTutors()
-  }, [debouncedTutorSearch])
+  }, [tutorPage, debouncedTutorSearch])
+
   useEffect(() => {
-    loadAllTutors()
-    loadAlerts()
-  }, [])
+    if (isSheetOpen) {
+      loadSelectableTutors(selectableTutorSearch)
+    }
+  }, [isSheetOpen, selectableTutorSearch])
 
   useRealtime('patients', () => {
     loadPatients()
-    loadAlerts()
   })
-  useRealtime('vaccines', () => loadAlerts())
+  useRealtime('vaccines', () => {
+    if (patients.length > 0) {
+      getReturnAlerts({ daysAhead: 30, patientIds: patients.map((p) => p.id) })
+        .then((alertsRes) => {
+          const map: Record<string, ReturnAlert> = {}
+          for (const a of alertsRes.alerts) {
+            map[a.patientId] = a
+          }
+          setPatientAlertsMap((prev) => ({ ...prev, ...map }))
+        })
+        .catch(() => {})
+    }
+  })
   useRealtime('tutors', () => {
     loadTutors()
-    loadAllTutors()
+    if (isSheetOpen) {
+      loadSelectableTutors()
+    }
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -285,7 +365,9 @@ export default function Patients() {
       toast({ title: 'Sucesso', description: 'Dados do tutor atualizados com sucesso.' })
       setIsEditTutorOpen(false)
       await loadTutors()
-      await loadAllTutors()
+      if (isSheetOpen) {
+        await loadSelectableTutors()
+      }
       await loadPatients()
     } catch (err: any) {
       if (err.message) setTutorEditErrors({ form: err.message })
@@ -352,13 +434,16 @@ export default function Patients() {
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {allTutors.map((t) => (
+                      {selectableTutors.map((t) => (
                         <SelectItem key={t.id} value={t.id}>
-                          {t.name} ({t.phone})
+                          {t.name} ({t.phone || 'Sem tel.'})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Exibindo tutores recentes. Se não encontrar, cadastre como Novo Tutor.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-4 border p-4 rounded-md bg-slate-50">
@@ -452,22 +537,73 @@ export default function Patients() {
 
       <Tabs defaultValue="patients" className="w-full">
         <TabsList className="mb-4 bg-slate-100">
-          <TabsTrigger value="patients">Lista de Pacientes</TabsTrigger>
-          <TabsTrigger value="tutors">Lista de Tutores</TabsTrigger>
+          <TabsTrigger value="patients">
+            Lista de Pacientes
+            {totalPatients > 0 && (
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+                {totalPatients.toLocaleString('pt-BR')}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="tutors">
+            Lista de Tutores
+            {totalTutors > 0 && (
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+                {totalTutors.toLocaleString('pt-BR')}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="patients" className="mt-0">
           <Card className="border-none shadow-sm">
             <CardContent className="p-0">
-              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center bg-white rounded-t-lg">
-                <div className="relative w-full max-w-md">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar paciente por nome, raça ou espécie..."
-                    value={patientSearch}
-                    onChange={(e) => setPatientSearch(e.target.value)}
-                    className="pl-9 bg-slate-50 border-slate-200 w-full"
-                  />
+              <div className="p-4 border-b flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white rounded-t-lg">
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center flex-1">
+                  <div className="relative w-full max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar por paciente, espécie, raça ou tutor..."
+                      value={patientSearch}
+                      onChange={(e) => setPatientSearch(e.target.value)}
+                      className="pl-9 bg-slate-50 border-slate-200 w-full"
+                    />
+                  </div>
+
+                  <div className="w-full sm:w-44">
+                    <Select
+                      value={patientSpeciesFilter}
+                      onValueChange={(val) => {
+                        setPatientSpeciesFilter(val)
+                        setPatientPage(1)
+                      }}
+                    >
+                      <SelectTrigger className="bg-slate-50 border-slate-200">
+                        <SelectValue placeholder="Espécie" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas as espécies</SelectItem>
+                        <SelectItem value="Canino">Canino</SelectItem>
+                        <SelectItem value="Felino">Felino</SelectItem>
+                        <SelectItem value="Cão">Cão</SelectItem>
+                        <SelectItem value="Gato">Gato</SelectItem>
+                        <SelectItem value="Ave">Ave</SelectItem>
+                        <SelectItem value="Silvestre">Silvestre</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="text-xs text-muted-foreground flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                  {patientsLoading ? (
+                    <span className="flex items-center gap-1.5 text-primary">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
+                    </span>
+                  ) : (
+                    <span>
+                      Total: <strong>{totalPatients.toLocaleString('pt-BR')}</strong> pacientes
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -483,7 +619,14 @@ export default function Patients() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {patients.length === 0 ? (
+                    {patientsLoading && patients.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
+                          Carregando pacientes...
+                        </TableCell>
+                      </TableRow>
+                    ) : patients.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                           Nenhum paciente encontrado.
@@ -592,6 +735,67 @@ export default function Patients() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Barra de Paginação Servidor - Pacientes */}
+              {totalPatients > 0 && (
+                <div className="p-3 border-t bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <div>
+                    Página <strong>{patientPage}</strong> de{' '}
+                    <strong>{Math.max(1, Math.ceil(totalPatients / PAGE_SIZE))}</strong> (
+                    {(patientPage - 1) * PAGE_SIZE + 1} a{' '}
+                    {Math.min(patientPage * PAGE_SIZE, totalPatients)} de{' '}
+                    {totalPatients.toLocaleString('pt-BR')} registros)
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPatientPage(1)}
+                      disabled={patientPage <= 1 || patientsLoading}
+                      className="h-8 px-2"
+                      title="Primeira página"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPatientPage((p) => Math.max(1, p - 1))}
+                      disabled={patientPage <= 1 || patientsLoading}
+                      className="h-8 px-3 gap-1"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setPatientPage((p) =>
+                          p < Math.ceil(totalPatients / PAGE_SIZE) ? p + 1 : p,
+                        )
+                      }
+                      disabled={
+                        patientPage >= Math.ceil(totalPatients / PAGE_SIZE) || patientsLoading
+                      }
+                      className="h-8 px-3 gap-1"
+                    >
+                      Próxima <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPatientPage(Math.ceil(totalPatients / PAGE_SIZE))}
+                      disabled={
+                        patientPage >= Math.ceil(totalPatients / PAGE_SIZE) || patientsLoading
+                      }
+                      className="h-8 px-2"
+                      title="Última página"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -599,15 +803,27 @@ export default function Patients() {
         <TabsContent value="tutors" className="mt-0">
           <Card className="border-none shadow-sm">
             <CardContent className="p-0">
-              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center bg-white rounded-t-lg">
+              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center justify-between bg-white rounded-t-lg">
                 <div className="relative w-full max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar tutor por nome ou CPF..."
+                    placeholder="Buscar tutor por nome, CPF ou telefone..."
                     value={tutorSearch}
                     onChange={(e) => setTutorSearch(e.target.value)}
                     className="pl-9 bg-slate-50 border-slate-200 w-full"
                   />
+                </div>
+
+                <div className="text-xs text-muted-foreground flex items-center gap-3 shrink-0">
+                  {tutorsLoading ? (
+                    <span className="flex items-center gap-1.5 text-primary">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando...
+                    </span>
+                  ) : (
+                    <span>
+                      Total: <strong>{totalTutors.toLocaleString('pt-BR')}</strong> tutores
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -624,7 +840,14 @@ export default function Patients() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tutors.length === 0 ? (
+                    {tutorsLoading && tutors.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
+                          Carregando tutores...
+                        </TableCell>
+                      </TableRow>
+                    ) : tutors.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           Nenhum tutor encontrado.
@@ -707,6 +930,61 @@ export default function Patients() {
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Barra de Paginação Servidor - Tutores */}
+              {totalTutors > 0 && (
+                <div className="p-3 border-t bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+                  <div>
+                    Página <strong>{tutorPage}</strong> de{' '}
+                    <strong>{Math.max(1, Math.ceil(totalTutors / PAGE_SIZE))}</strong> (
+                    {(tutorPage - 1) * PAGE_SIZE + 1} a{' '}
+                    {Math.min(tutorPage * PAGE_SIZE, totalTutors)} de{' '}
+                    {totalTutors.toLocaleString('pt-BR')} registros)
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTutorPage(1)}
+                      disabled={tutorPage <= 1 || tutorsLoading}
+                      className="h-8 px-2"
+                      title="Primeira página"
+                    >
+                      <ChevronsLeft className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTutorPage((p) => Math.max(1, p - 1))}
+                      disabled={tutorPage <= 1 || tutorsLoading}
+                      className="h-8 px-3 gap-1"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setTutorPage((p) => (p < Math.ceil(totalTutors / PAGE_SIZE) ? p + 1 : p))
+                      }
+                      disabled={tutorPage >= Math.ceil(totalTutors / PAGE_SIZE) || tutorsLoading}
+                      className="h-8 px-3 gap-1"
+                    >
+                      Próxima <ChevronRight className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTutorPage(Math.ceil(totalTutors / PAGE_SIZE))}
+                      disabled={tutorPage >= Math.ceil(totalTutors / PAGE_SIZE) || tutorsLoading}
+                      className="h-8 px-2"
+                      title="Última página"
+                    >
+                      <ChevronsRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

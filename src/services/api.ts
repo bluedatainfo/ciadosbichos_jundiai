@@ -63,14 +63,65 @@ export const api = {
   },
   getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
   getPatients: (search?: string) => {
-    const filter = search
-      ? `name ~ "${search}" || breed ~ "${search}" || species ~ "${search}"`
+    const clean = search?.trim().replace(/"/g, '\\"') || ''
+    const filter = clean
+      ? `name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}"`
       : ''
     return pb.collection('patients').getFullList<Patient>({
       filter,
       expand: 'tutor_id',
       sort: '-created',
     })
+  },
+  getPatientsPaged: async (options?: {
+    page?: number
+    perPage?: number
+    search?: string
+    species?: string
+    sort?: string
+  }) => {
+    const page = options?.page || 1
+    const perPage = options?.perPage || 50
+    const filterParts: string[] = []
+
+    if (options?.search?.trim()) {
+      const clean = options.search.trim().replace(/"/g, '\\"')
+      filterParts.push(
+        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}")`,
+      )
+    }
+
+    if (options?.species?.trim() && options.species !== 'all') {
+      const cleanSpecies = options.species.trim().replace(/"/g, '\\"')
+      filterParts.push(`species = "${cleanSpecies}"`)
+    }
+
+    const filter = filterParts.join(' && ')
+    const sort = options?.sort || '-created'
+
+    return pb.collection('patients').getList<Patient>(page, perPage, {
+      filter,
+      expand: 'tutor_id',
+      sort,
+    })
+  },
+  getPatientsCount: async (search?: string, species?: string) => {
+    const filterParts: string[] = []
+    if (search?.trim()) {
+      const clean = search.trim().replace(/"/g, '\\"')
+      filterParts.push(
+        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}")`,
+      )
+    }
+    if (species?.trim() && species !== 'all') {
+      const cleanSpecies = species.trim().replace(/"/g, '\\"')
+      filterParts.push(`species = "${cleanSpecies}"`)
+    }
+    const res = await pb.collection('patients').getList(1, 1, {
+      filter: filterParts.join(' && '),
+      fields: 'id',
+    })
+    return res.totalItems
   },
   updatePatient: (id: string, data: any) => {
     const formData = new FormData()
@@ -85,10 +136,53 @@ export const api = {
   deletePatient: (id: string) => pb.collection('patients').delete(id),
 
   getTutors: (search?: string) => {
-    const filter = search ? `name ~ "${search}" || cpf ~ "${search}"` : ''
+    const clean = search?.trim().replace(/"/g, '\\"') || ''
+    const filter = clean ? `name ~ "${clean}" || cpf ~ "${clean}" || phone ~ "${clean}"` : ''
     return pb.collection('tutors').getFullList<Tutor>({
       filter,
       sort: '-created',
+    })
+  },
+  getTutorsPaged: async (options?: {
+    page?: number
+    perPage?: number
+    search?: string
+    sort?: string
+  }) => {
+    const page = options?.page || 1
+    const perPage = options?.perPage || 50
+    let filter = ''
+
+    if (options?.search?.trim()) {
+      const clean = options.search.trim().replace(/"/g, '\\"')
+      filter = `name ~ "${clean}" || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
+    }
+
+    const sort = options?.sort || '-created'
+
+    return pb.collection('tutors').getList<Tutor>(page, perPage, {
+      filter,
+      sort,
+    })
+  },
+  getTutorsCount: async (search?: string) => {
+    let filter = ''
+    if (search?.trim()) {
+      const clean = search.trim().replace(/"/g, '\\"')
+      filter = `name ~ "${clean}" || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
+    }
+    const res = await pb.collection('tutors').getList(1, 1, {
+      filter,
+      fields: 'id',
+    })
+    return res.totalItems
+  },
+  searchTutorsForSelect: (search?: string) => {
+    const clean = search?.trim().replace(/"/g, '\\"') || ''
+    const filter = clean ? `name ~ "${clean}" || phone ~ "${clean}"` : ''
+    return pb.collection('tutors').getList<Tutor>(1, 50, {
+      filter,
+      sort: 'name',
     })
   },
   updateTutor: (id: string, data: any) => pb.collection('tutors').update(id, data),

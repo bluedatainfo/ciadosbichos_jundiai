@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T02:22:11.950Z",
+  "generatedAt": "2026-09-25T02:43:13.384Z",
   "collections": [
     {
       "name": "users",
@@ -157,7 +157,8 @@
       ],
       "indexes": [
         "CREATE INDEX `idx_tutors_name` ON `tutors` (name)",
-        "CREATE INDEX `idx_tutors_cpf` ON `tutors` (cpf)"
+        "CREATE INDEX `idx_tutors_cpf` ON `tutors` (cpf)",
+        "CREATE INDEX `idx_tutors_phone` ON `tutors` (phone)"
       ]
     },
     {
@@ -289,7 +290,8 @@
         "CREATE INDEX `idx_patients_name` ON `patients` (name)",
         "CREATE INDEX `idx_patients_breed` ON `patients` (breed)",
         "CREATE INDEX `idx_patients_ctrl` ON `patients` (ctrl)",
-        "CREATE INDEX `idx_patients_import_key` ON `patients` (import_key)"
+        "CREATE INDEX `idx_patients_import_key` ON `patients` (import_key)",
+        "CREATE INDEX `idx_patients_species` ON `patients` (species)"
       ]
     },
     {

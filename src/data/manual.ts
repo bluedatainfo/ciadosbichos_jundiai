@@ -141,11 +141,14 @@ export const MANUAL_MODULES: ManualModule[] = [
     iconName: 'Users',
     overview: {
       purpose:
-        'Módulo central para cadastramento e manutenção dos registros de animais atendidos e seus respectivos tutores. Oferece visualização em duas abas dedicadas (Lista de Pacientes e Lista de Tutores), busca em tempo real com debounce e atalho de conversa via WhatsApp com um clique.',
+        'Módulo central para cadastramento e manutenção dos registros de animais atendidos e seus respectivos tutores. Oferece visualização em duas abas dedicadas (Lista de Pacientes e Lista de Tutores), com paginação otimizada no servidor (50 registros por página), contadores diretos de totais, busca no servidor e atalho de conversa via WhatsApp com um clique.',
       targetUsers: 'Atendentes, Recepcionistas e Médicos Veterinários.',
       keyFeatures: [
         'Abas separadas para visão por Paciente e visão por Tutor.',
-        'Busca instantânea por nome do paciente, raça, espécie ou nome e CPF do tutor.',
+        'Paginação de alta performance no servidor (50 registros por página) preparada para bases com mais de 21.000 cadastros.',
+        'Busca e filtros direto no banco de dados por nome do paciente, raça, espécie e tutor com índices dedicados.',
+        'Contadores rápidos com totalização direta do banco de dados no cabeçalho das abas e no rodapé das tabelas.',
+        'Badges de alerta para retornos vencidos ou próximos (destaque amarelo) atualizados em tempo real.',
         'Abertura de conversa direta no WhatsApp através do ícone verde ao lado do telefone.',
         'Cadastro unificado em gaveta lateral (Sheet): cadastre tutor e animal em uma única operação ou vincule a um tutor já existente.',
         'Edição completa de dados cadastrais do tutor com preenchimento automático de endereço por CEP (ViaCEP).',
