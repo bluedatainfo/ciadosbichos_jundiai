@@ -47,7 +47,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       targetUsers: 'Médicos Veterinários, Recepcionistas, Atendentes e Administradores da clínica.',
       keyFeatures: [
         'Painel com indicadores em tempo real: total de pacientes, tutores, atendimentos do dia, alertas de retorno e estoque baixo.',
-        'Seção exclusiva de "Alertas de Retorno dos Pacientes" com abas para filtrar Todos, Vencidos e Próximos (30 dias) considerando estritamente retornos NÃO realizados.',
+        'Seção exclusiva de "Alertas de Retorno dos Pacientes" com filtros rápidos (Todos, Vencidos, Próximos 30 dias) e filtro personalizado por intervalo de datas (Data Inicial e Data Final), considerando estritamente retornos NÃO realizados.',
         'Destaque visual em amarelo estilo "marca-texto" nos alertas vencidos e próximos com botões para Editar data/histórico e "Marcar como realizado" diretamente pelo painel.',
         'Botão para contato rápido via WhatsApp diretamente nos alertas de retorno do tutor.',
         'Acesso rápido com botão "+ Novo Paciente" no cabeçalho ou nas Ações Rápidas.',
@@ -82,7 +82,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         name: 'Tabela de Alertas de Retorno',
         description:
-          'Listagem destacada em amarelo dos animais com retorno pendente não realizado, data prevista, situação (Vencido ou Retorno Próximo), motivo, contato do tutor, botão Editar e botão "Marcar como realizado".',
+          'Listagem destacada em amarelo dos animais com retorno pendente não realizado, data prevista, situação (Vencido ou Retorno Próximo), motivo, contato do tutor, botão Editar e botão "Marcar como realizado". Inclui filtros rápidos (Todos, Vencidos, Próximos 30d) e filtro de período com datas inicial e final customizáveis.',
       },
       {
         name: 'Tabela Atendimentos Recentes',
@@ -129,6 +129,7 @@ export const MANUAL_MODULES: ManualModule[] = [
     tips: [
       'Pressione F1 a qualquer momento para abrir o manual explicativo da tela em que você estiver.',
       'A tecla ESC ou o botão "Fechar" no canto superior fecha o painel de ajuda imediatamente.',
+      'No painel de Alertas de Retorno, utilize o botão "Período" para definir datas inicial e final específicas para planejamento cirúrgico ou campanhas de reforço vacinal.',
     ],
   },
   {

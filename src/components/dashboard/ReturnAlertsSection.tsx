@@ -21,17 +21,22 @@ import {
   CalendarCheck,
   Edit2,
   CheckCircle2,
+  Calendar as CalendarIcon,
+  X,
+  Filter,
 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { format, parseISO } from 'date-fns'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { format, parseISO, startOfDay } from 'date-fns'
 import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
 import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { cn } from '@/lib/utils'
 
 const openWhatsApp = (phone: string, patientName: string) => {
   const cleanPhone = phone?.replace(/\D/g, '') || ''
@@ -48,7 +53,12 @@ export function ReturnAlertsSection() {
   const [alerts, setAlerts] = useState<ReturnAlert[]>([])
   const [stats, setStats] = useState({ overdueCount: 0, dueSoonCount: 0 })
   const [loading, setLoading] = useState(true)
-  const [filterMode, setFilterMode] = useState<'all' | 'overdue' | 'due_soon'>('all')
+  const [filterMode, setFilterMode] = useState<'all' | 'overdue' | 'due_soon' | 'period'>('all')
+
+  // Filtro por período de datas
+  const [startDate, setStartDate] = useState<Date | undefined>()
+  const [endDate, setEndDate] = useState<Date | undefined>()
+  const [isDatePopoverOpen, setIsDatePopoverOpen] = useState(false)
 
   // Estado para Edição do Retorno a partir do Dashboard
   const [editingAlert, setEditingAlert] = useState<ReturnAlert | null>(null)
@@ -63,12 +73,27 @@ export function ReturnAlertsSection() {
 
   const loadAlerts = async () => {
     try {
-      const data = await getReturnAlerts({ daysAhead: 30 })
-      setAlerts(data.alerts)
-      setStats({
-        overdueCount: data.overdueCount,
-        dueSoonCount: data.dueSoonCount,
-      })
+      const isPeriod = filterMode === 'period' && (Boolean(startDate) || Boolean(endDate))
+
+      if (isPeriod) {
+        // Busca os alertas no intervalo informado e também atualiza as estatísticas globais em paralelo
+        const [periodData, defaultData] = await Promise.all([
+          getReturnAlerts({ startDate, endDate }),
+          getReturnAlerts({ daysAhead: 30 }),
+        ])
+        setAlerts(periodData.alerts)
+        setStats({
+          overdueCount: defaultData.overdueCount,
+          dueSoonCount: defaultData.dueSoonCount,
+        })
+      } else {
+        const data = await getReturnAlerts({ daysAhead: 30 })
+        setAlerts(data.alerts)
+        setStats({
+          overdueCount: data.overdueCount,
+          dueSoonCount: data.dueSoonCount,
+        })
+      }
     } catch (err) {
       console.error('Erro ao carregar alertas de retorno:', err)
     } finally {
@@ -78,7 +103,7 @@ export function ReturnAlertsSection() {
 
   useEffect(() => {
     loadAlerts()
-  }, [])
+  }, [filterMode, startDate, endDate])
 
   useRealtime('vaccines', () => loadAlerts())
   useRealtime('patients', () => loadAlerts())
@@ -86,6 +111,17 @@ export function ReturnAlertsSection() {
   const filteredAlerts = alerts.filter((a) => {
     if (filterMode === 'overdue') return a.status === 'overdue'
     if (filterMode === 'due_soon') return a.status === 'due_soon'
+    if (filterMode === 'period') {
+      if (!startDate && !endDate) return true
+      try {
+        const itemDate = startOfDay(parseISO(a.returnDate))
+        if (startDate && itemDate < startOfDay(startDate)) return false
+        if (endDate && itemDate > startOfDay(endDate)) return false
+        return true
+      } catch {
+        return false
+      }
+    }
     return true
   })
 
@@ -149,22 +185,24 @@ export function ReturnAlertsSection() {
     }
   }
 
-  const handleMarkCompleted = async (alert: ReturnAlert) => {
+  const handleToggleCompleted = async (alert: ReturnAlert, markAs: boolean) => {
     if (!alert.vaccineId) return
     setMarkingAlertId(alert.id)
     try {
-      await api.updateVaccine(alert.vaccineId, { completed: true })
+      await api.updateVaccine(alert.vaccineId, { completed: markAs })
       if (justSavedAlertId === alert.id) {
         setJustSavedAlertId(null)
       }
       toast({
-        title: 'Retorno Concluído',
-        description: `O retorno do paciente ${alert.patientName} foi marcado como realizado e removido dos alertas.`,
+        title: markAs ? 'Retorno Concluído' : 'Retorno Reaberto',
+        description: markAs
+          ? `O retorno do paciente ${alert.patientName} foi marcado como realizado e removido dos alertas.`
+          : `O retorno do paciente ${alert.patientName} foi reaberto como pendente.`,
       })
       await loadAlerts()
     } catch (err) {
       toast({
-        title: 'Erro ao marcar como realizado',
+        title: 'Erro ao alterar status',
         description: getErrorMessage(err),
         variant: 'destructive',
       })
@@ -191,10 +229,12 @@ export function ReturnAlertsSection() {
           <Button
             size="sm"
             variant={filterMode === 'all' ? 'default' : 'outline'}
-            onClick={() => setFilterMode('all')}
+            onClick={() => {
+              setFilterMode('all')
+            }}
             className="h-8 text-xs gap-1.5"
           >
-            Todos ({alerts.length})
+            Todos ({stats.overdueCount + stats.dueSoonCount})
           </Button>
           <Button
             size="sm"
@@ -220,6 +260,146 @@ export function ReturnAlertsSection() {
             <Clock className="w-3.5 h-3.5" />
             Próximos 30d ({stats.dueSoonCount})
           </Button>
+
+          {/* Filtro por Intervalo de Datas */}
+          <Popover open={isDatePopoverOpen} onOpenChange={setIsDatePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant={filterMode === 'period' ? 'default' : 'outline'}
+                className={cn(
+                  'h-8 text-xs gap-1.5',
+                  filterMode === 'period'
+                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs'
+                    : 'text-indigo-700 border-indigo-200 hover:bg-indigo-50',
+                )}
+                onClick={() => setFilterMode('period')}
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+                {filterMode === 'period' && (startDate || endDate) ? (
+                  <span>
+                    Período: {startDate ? format(startDate, 'dd/MM/yy') : '...'} até{' '}
+                    {endDate ? format(endDate, 'dd/MM/yy') : '...'} ({filteredAlerts.length})
+                  </span>
+                ) : (
+                  <span>Período {filterMode === 'period' ? `(${filteredAlerts.length})` : ''}</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-4 space-y-3 bg-white" align="end">
+              <div className="flex items-center justify-between pb-1 border-b">
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-slate-800">
+                  <Filter className="w-3.5 h-3.5 text-indigo-600" />
+                  Filtrar por Intervalo de Datas
+                </div>
+                {(startDate || endDate) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setStartDate(undefined)
+                      setEndDate(undefined)
+                    }}
+                    className="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-slate-900"
+                  >
+                    Limpar
+                  </Button>
+                )}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Exibe todos os retornos não realizados previstos dentro do período selecionado.
+              </p>
+
+              <div className="space-y-2">
+                <div>
+                  <Label htmlFor="filter-start-date" className="text-xs font-medium text-slate-700">
+                    Data Inicial
+                  </Label>
+                  <Input
+                    id="filter-start-date"
+                    type="date"
+                    value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      setFilterMode('period')
+                      if (!e.target.value) {
+                        setStartDate(undefined)
+                      } else {
+                        const parsed = parseISO(e.target.value)
+                        setStartDate(parsed)
+                      }
+                    }}
+                    className="h-8 text-xs mt-1"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="filter-end-date" className="text-xs font-medium text-slate-700">
+                    Data Final
+                  </Label>
+                  <Input
+                    id="filter-end-date"
+                    type="date"
+                    value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
+                    onChange={(e) => {
+                      setFilterMode('period')
+                      if (!e.target.value) {
+                        setEndDate(undefined)
+                      } else {
+                        const parsed = parseISO(e.target.value)
+                        setEndDate(parsed)
+                      }
+                    }}
+                    className="h-8 text-xs mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs flex-1"
+                  onClick={() => {
+                    setStartDate(undefined)
+                    setEndDate(undefined)
+                    setFilterMode('all')
+                    setIsDatePopoverOpen(false)
+                  }}
+                >
+                  Voltar para Todos
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs flex-1 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  onClick={() => {
+                    setFilterMode('period')
+                    setIsDatePopoverOpen(false)
+                  }}
+                >
+                  Aplicar Período
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Botão para limpar período se ativo */}
+          {filterMode === 'period' && (startDate || endDate) && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setStartDate(undefined)
+                setEndDate(undefined)
+                setFilterMode('all')
+              }}
+              title="Limpar filtro de período"
+              className="h-8 text-xs gap-1 text-slate-500 hover:text-slate-800 px-2"
+            >
+              <X className="w-3.5 h-3.5" />
+              Limpar Período
+            </Button>
+          )}
+
           <Button
             size="sm"
             variant="ghost"
@@ -260,7 +440,11 @@ export function ReturnAlertsSection() {
                           ? 'Nenhum paciente com retorno vencido no momento.'
                           : filterMode === 'due_soon'
                             ? 'Nenhum retorno previsto para os próximos 30 dias.'
-                            : 'Nenhum alerta de retorno pendente.'}
+                            : filterMode === 'period'
+                              ? startDate || endDate
+                                ? 'Nenhum retorno pendente encontrado para o período selecionado.'
+                                : 'Escolha uma data inicial e final para filtrar os retornos.'
+                              : 'Nenhum alerta de retorno pendente.'}
                       </p>
                     </div>
                   </TableCell>
@@ -365,7 +549,7 @@ export function ReturnAlertsSection() {
                             <Button
                               size="sm"
                               disabled={isProcessing}
-                              onClick={() => handleMarkCompleted(alert)}
+                              onClick={() => handleToggleCompleted(alert, true)}
                               className={`h-8 gap-1 text-xs font-semibold text-white shadow-xs transition-all ${
                                 wasJustSaved
                                   ? 'bg-green-600 hover:bg-green-700 ring-2 ring-green-400 ring-offset-1 animate-pulse'

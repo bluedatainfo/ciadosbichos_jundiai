@@ -20,6 +20,13 @@ export interface ReturnAlert {
   daysDifference: number // < 0 vencido, >= 0 próximo
 }
 
+export interface GetReturnAlertsOptions {
+  daysAhead?: number
+  limit?: number
+  startDate?: Date | string
+  endDate?: Date | string
+}
+
 /**
  * Busca e calcula todos os alertas de retorno com base nos registros da collection `vaccines`
  * e/ou `last_visit` de pacientes.
@@ -27,14 +34,23 @@ export interface ReturnAlert {
  * Categoriza em:
  *  - 'overdue' (vencido: retorno com data < hoje)
  *  - 'due_soon' (próximo: retorno entre hoje e os próximos N dias, padrão 30 dias)
+ * Se startDate / endDate forem fornecidos, filtra os retornos pendentes cuja data esteja dentro do intervalo.
  */
-export async function getReturnAlerts(options?: { daysAhead?: number; limit?: number }): Promise<{
+export async function getReturnAlerts(options?: GetReturnAlertsOptions): Promise<{
   alerts: ReturnAlert[]
   overdueCount: number
   dueSoonCount: number
 }> {
   const daysAhead = options?.daysAhead ?? 30
   const today = startOfDay(new Date())
+  const filterStartDate = options?.startDate
+    ? startOfDay(
+        typeof options.startDate === 'string' ? parseISO(options.startDate) : options.startDate,
+      )
+    : undefined
+  const filterEndDate = options?.endDate
+    ? startOfDay(typeof options.endDate === 'string' ? parseISO(options.endDate) : options.endDate)
+    : undefined
 
   // Carrega vacinas/retornos NÃO REALIZADOS (completed != true) com data cadastrada e expande o paciente e seu tutor
   // Na collection vaccines: patient_id é relation com patients
@@ -85,27 +101,28 @@ export async function getReturnAlerts(options?: { daysAhead?: number; limit?: nu
     }
   }
 
-  // Para cada paciente, determina a situação de retorno:
-  // Se houver algum retorno futuro (>= hoje) dentro de daysAhead: status = 'due_soon'
-  // Se só houver retornos passados (< hoje): o mais recente deles é avaliado como 'overdue'
+  // Para cada paciente, determina os alertas de retorno pendentes:
+  // Se houver filtro de período (filterStartDate ou filterEndDate):
+  //   Inclui todos os retornos não realizados daquele paciente que estiverem no intervalo informado
+  // Se não houver filtro de período:
+  //   Mantém o agrupamento padrão (retorno futuro mais próximo dentro de daysAhead ou retorno passado mais recente)
+  const isPeriodFilterActive = Boolean(filterStartDate || filterEndDate)
+
   patientReturnsMap.forEach((returns, patientId) => {
-    // Ordena do mais recente ao mais antigo
-    returns.sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime())
+    if (isPeriodFilterActive) {
+      for (const item of returns) {
+        const itemDate = startOfDay(item.parsedDate)
+        if (filterStartDate && itemDate < filterStartDate) continue
+        if (filterEndDate && itemDate > filterEndDate) continue
 
-    // Procura o próximo retorno futuro mais próximo de hoje
-    const futureReturns = returns.filter((r) => r.parsedDate >= today)
-    // Se tem retornos futuros, o retorno pendente é o menor deles (o mais próximo a vencer)
-    if (futureReturns.length > 0) {
-      futureReturns.sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime())
-      const nextReturn = futureReturns[0]
-      const diff = differenceInCalendarDays(nextReturn.parsedDate, today)
-
-      if (diff <= daysAhead) {
-        const p = nextReturn.record.expand?.patient_id!
+        const diff = differenceInCalendarDays(item.parsedDate, today)
+        const isOverdue = diff < 0
+        const p = item.record.expand?.patient_id!
         const tutor = p.expand?.tutor_id
+
         alerts.push({
-          id: `${patientId}-${nextReturn.record.id}`,
-          vaccineId: nextReturn.record.id,
+          id: `${patientId}-${item.record.id}`,
+          vaccineId: item.record.id,
           patientId: p.id,
           patientName: p.name,
           patientSpecies: p.species,
@@ -113,34 +130,66 @@ export async function getReturnAlerts(options?: { daysAhead?: number; limit?: nu
           deceased: p.deceased,
           tutorName: tutor?.name,
           tutorPhone: tutor?.phone,
-          returnDate: nextReturn.record.date!,
-          description: nextReturn.record.name || nextReturn.record.notes || 'Retorno',
-          status: 'due_soon',
+          returnDate: item.record.date!,
+          description: item.record.name || item.record.notes || 'Retorno',
+          status: isOverdue ? 'overdue' : 'due_soon',
           daysDifference: diff,
         })
       }
     } else {
-      // Todos os retornos deste paciente estão no passado -> pega o mais recente como vencido
-      const lastReturn = returns[0]
-      const diff = differenceInCalendarDays(lastReturn.parsedDate, today) // negativo
-      const p = lastReturn.record.expand?.patient_id!
-      const tutor = p.expand?.tutor_id
+      // Ordena do mais recente ao mais antigo
+      returns.sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime())
 
-      alerts.push({
-        id: `${patientId}-${lastReturn.record.id}`,
-        vaccineId: lastReturn.record.id,
-        patientId: p.id,
-        patientName: p.name,
-        patientSpecies: p.species,
-        patientBreed: p.breed,
-        deceased: p.deceased,
-        tutorName: tutor?.name,
-        tutorPhone: tutor?.phone,
-        returnDate: lastReturn.record.date!,
-        description: lastReturn.record.name || lastReturn.record.notes || 'Retorno',
-        status: 'overdue',
-        daysDifference: diff,
-      })
+      // Procura o próximo retorno futuro mais próximo de hoje
+      const futureReturns = returns.filter((r) => r.parsedDate >= today)
+      // Se tem retornos futuros, o retorno pendente é o menor deles (o mais próximo a vencer)
+      if (futureReturns.length > 0) {
+        futureReturns.sort((a, b) => a.parsedDate.getTime() - b.parsedDate.getTime())
+        const nextReturn = futureReturns[0]
+        const diff = differenceInCalendarDays(nextReturn.parsedDate, today)
+
+        if (diff <= daysAhead) {
+          const p = nextReturn.record.expand?.patient_id!
+          const tutor = p.expand?.tutor_id
+          alerts.push({
+            id: `${patientId}-${nextReturn.record.id}`,
+            vaccineId: nextReturn.record.id,
+            patientId: p.id,
+            patientName: p.name,
+            patientSpecies: p.species,
+            patientBreed: p.breed,
+            deceased: p.deceased,
+            tutorName: tutor?.name,
+            tutorPhone: tutor?.phone,
+            returnDate: nextReturn.record.date!,
+            description: nextReturn.record.name || nextReturn.record.notes || 'Retorno',
+            status: 'due_soon',
+            daysDifference: diff,
+          })
+        }
+      } else {
+        // Todos os retornos deste paciente estão no passado -> pega o mais recente como vencido
+        const lastReturn = returns[0]
+        const diff = differenceInCalendarDays(lastReturn.parsedDate, today) // negativo
+        const p = lastReturn.record.expand?.patient_id!
+        const tutor = p.expand?.tutor_id
+
+        alerts.push({
+          id: `${patientId}-${lastReturn.record.id}`,
+          vaccineId: lastReturn.record.id,
+          patientId: p.id,
+          patientName: p.name,
+          patientSpecies: p.species,
+          patientBreed: p.breed,
+          deceased: p.deceased,
+          tutorName: tutor?.name,
+          tutorPhone: tutor?.phone,
+          returnDate: lastReturn.record.date!,
+          description: lastReturn.record.name || lastReturn.record.notes || 'Retorno',
+          status: 'overdue',
+          daysDifference: diff,
+        })
+      }
     }
   })
 
