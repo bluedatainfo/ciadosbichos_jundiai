@@ -64,6 +64,7 @@ export type Vaccine = {
   name: string
   date?: string
   notes?: string
+  completed?: boolean
   created: string
   updated: string
 }

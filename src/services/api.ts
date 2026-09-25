@@ -156,6 +156,9 @@ export const api = {
       sort: '-date',
     }),
   createVaccine: (data: any) => pb.collection('vaccines').create(data),
+  updateVaccine: (id: string, data: Partial<import('@/lib/types').Vaccine>) =>
+    pb.collection('vaccines').update<import('@/lib/types').Vaccine>(id, data),
+  deleteVaccine: (id: string) => pb.collection('vaccines').delete(id),
 
   getDashboardStats: async () => {
     const now = new Date()

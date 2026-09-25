@@ -47,7 +47,8 @@ export const MANUAL_MODULES: ManualModule[] = [
       targetUsers: 'Médicos Veterinários, Recepcionistas, Atendentes e Administradores da clínica.',
       keyFeatures: [
         'Painel com indicadores em tempo real: total de pacientes, tutores, atendimentos do dia, alertas de retorno e estoque baixo.',
-        'Seção exclusiva de "Alertas de Retorno dos Pacientes" com abas para filtrar Todos, Vencidos e Próximos (30 dias).',
+        'Seção exclusiva de "Alertas de Retorno dos Pacientes" com abas para filtrar Todos, Vencidos e Próximos (30 dias) considerando estritamente retornos NÃO realizados.',
+        'Destaque visual em amarelo estilo "marca-texto" nos alertas vencidos e próximos com botões para Editar data/histórico e "Marcar como realizado" diretamente pelo painel.',
         'Botão para contato rápido via WhatsApp diretamente nos alertas de retorno do tutor.',
         'Acesso rápido com botão "+ Novo Paciente" no cabeçalho ou nas Ações Rápidas.',
         'Atualização instantânea em tela (tempo real) de novos pacientes, retornos, alterações de agenda e estoque.',
@@ -81,7 +82,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         name: 'Tabela de Alertas de Retorno',
         description:
-          'Listagem dos animais com retorno pendente, data prevista, situação (Vencido ou Próximo), motivo, contato do tutor e botão para abrir prontuário.',
+          'Listagem destacada em amarelo dos animais com retorno pendente não realizado, data prevista, situação (Vencido ou Retorno Próximo), motivo, contato do tutor, botão Editar e botão "Marcar como realizado".',
       },
       {
         name: 'Tabela Atendimentos Recentes',
@@ -249,17 +250,20 @@ export const MANUAL_MODULES: ManualModule[] = [
     iconName: 'FileText',
     overview: {
       purpose:
-        'Ambiente do prontuário eletrônico completo do paciente. Centraliza as dimensões essenciais do cuidado veterinário: Dados Gerais (anamnese, pelagem, castração, microchip, foto), Ficha Clínica (histórico cronológico de queixas, diagnósticos e tratamentos com anexos de exames) e Retornos (histórico completo de retornos importados da base legado e novos retornos lançados).',
+        'Ambiente do prontuário eletrônico completo do paciente. Centraliza as dimensões essenciais do cuidado veterinário: Dados Gerais (anamnese, pelagem, castração, microchip, foto), Ficha Clínica (histórico cronológico de queixas, diagnósticos e tratamentos com anexos de exames) e Retornos (ciclo de vida completo com controle de realização, edição e alertas inteligentes).',
       targetUsers: 'Médicos Veterinários e Cirurgiões.',
       keyFeatures: [
         'Registro de evoluções clínicas com sintomas, diagnósticos e tratamento prescrito.',
         'Edição completa de qualquer evolução clínica (botão "Editar" no card), permitindo retificar data, hora, sintomas, diagnóstico e tratamento.',
         'Upload de anexos médicos (laudos em PDF, radiografias, fotos de lesões, exames laboratoriais).',
-        'Aba de Retornos com listagem cronológica (Data + Histórico/Descrição) unificando dados importados do legado (VAC1-5 / VTX1-5) e novos lançamentos.',
+        'Aba de Retornos com ciclo de vida completo: status de realizado/concluído, eliminando retornos eternamente vencidos.',
+        'Destaque visual em amarelo estilo "marca-texto" para retornos não realizados com situação Vencido ou Retorno Próximo (30 dias).',
+        'Botão "Editar" nos registros de retorno destacados para o veterinário ajustar data e histórico/descrição a qualquer momento.',
+        'Botão "Marcar como realizado" exibido após salvar ou nos registros pendentes, que marca o retorno como concluído e o remove imediatamente dos alertas de vencimento.',
         'Botão "Incluir retorno" para lançamento rápido de novos retornos diretamente na ficha do paciente.',
         'Exportação e impressão rápida do Prontuário Médico Veterinário via botão "Exportar Prontuário".',
         'Marcação de óbito com data e motivo, protegendo o histórico do animal.',
-        'Sinalização de alerta de retorno (badge Vencido ou Próximo) no cabeçalho da ficha do animal.',
+        'Sinalização de alerta de retorno inteligente no cabeçalho da ficha do animal apenas para retornos pendentes.',
       ],
     },
     fields: [
@@ -310,9 +314,9 @@ export const MANUAL_MODULES: ManualModule[] = [
           '1. No card da evolução desejada, localize a seção "Anexos".\n2. Clique no botão "Adicionar".\n3. Selecione um ou mais arquivos (PDF, JPG, PNG).\n4. Os anexos ficam disponíveis para download e consulta por qualquer membro autorizado.',
       },
       {
-        title: 'Como lançar e consultar retornos do paciente',
+        title: 'Ciclo completo de retornos: lançamento, edição e conclusão',
         description:
-          '1. Dentro da ficha do paciente, selecione a aba "Retornos".\n2. Consulte a lista de retornos cronológicos (Data e Histórico/Descrição), incluindo os importados do sistema legado (VAC1-5 / VTX1-5).\n3. Para registrar um novo retorno, clique no botão "Incluir retorno".\n4. Informe a data e a descrição/histórico do retorno e clique em "Salvar Retorno". O registro aparece imediatamente na lista.',
+          '1. Dentro da ficha do paciente, selecione a aba "Retornos".\n2. Consulte a lista de retornos cronológicos (Data, Situação/Status, Histórico e Ações).\n3. Retornos importados da base legado iniciam automaticamente como Realizados, preservando o histórico sem poluir os alertas.\n4. Retornos com data vencida ou previstos para os próximos 30 dias que ainda não foram realizados ganham destaque visual em amarelo estilo "marca-texto".\n5. Clique no botão "Editar" para ajustar a data prevista e o histórico/descrição do atendimento.\n6. Após salvar as alterações (ou diretamente na linha), clique no botão verde "Marcar como realizado".\n7. Ao ser marcado como realizado, o status muda para "Realizado", o destaque amarelo é removido e o paciente deixa de constar na lista de alertas de retornos vencidos do Dashboard.',
       },
       {
         title: 'Como exportar ou imprimir o prontuário para o tutor',

@@ -485,12 +485,14 @@ export async function processAccessImport(
           const vaccines = extractVaccinesFromRow(row)
           for (const vac of vaccines) {
             try {
+              // Retornos e vacinas históricos importados do legado nascem como realizados (completed = true)
               await safeDbWrite(() =>
                 pb.collection('vaccines').create({
                   patient_id: rowPatientId,
                   name: vac.name,
                   date: vac.date || '',
                   notes: vac.notes || '',
+                  completed: true,
                 }),
               )
               vaccinesCreated++

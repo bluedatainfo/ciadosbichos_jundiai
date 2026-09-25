@@ -36,8 +36,9 @@ export async function getReturnAlerts(options?: { daysAhead?: number; limit?: nu
   const daysAhead = options?.daysAhead ?? 30
   const today = startOfDay(new Date())
 
-  // Carrega vacinas/retornos com data cadastrada e expande o paciente e seu tutor
+  // Carrega vacinas/retornos NÃO REALIZADOS (completed != true) com data cadastrada e expande o paciente e seu tutor
   // Na collection vaccines: patient_id é relation com patients
+  // Apenas retornos NÃO concluídos devem gerar alertas
   const vaccineRecords = await pb.collection('vaccines').getFullList<
     Vaccine & {
       expand?: {
@@ -49,7 +50,7 @@ export async function getReturnAlerts(options?: { daysAhead?: number; limit?: nu
       }
     }
   >({
-    filter: `date != ''`,
+    filter: `date != '' && (completed = false || completed = null)`,
     sort: 'date',
     expand: 'patient_id.tutor_id',
   })

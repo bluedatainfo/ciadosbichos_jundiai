@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T01:08:06.951Z",
+  "generatedAt": "2026-09-25T01:34:50.229Z",
   "collections": [
     {
       "name": "users",
@@ -592,11 +592,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "completed",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_vaccines_patient_id ON vaccines (patient_id)",
-        "CREATE INDEX idx_vaccines_date ON vaccines (date)"
+        "CREATE INDEX idx_vaccines_date ON vaccines (date)",
+        "CREATE INDEX `idx_vaccines_completed` ON `vaccines` (completed)"
       ]
     },
     {
