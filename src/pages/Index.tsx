@@ -9,13 +9,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Users, UserSquare, Calendar, AlertCircle, PlusCircle, FileText } from 'lucide-react'
+import {
+  Users,
+  UserSquare,
+  Calendar,
+  AlertCircle,
+  PlusCircle,
+  FileText,
+  BellRing,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/services/api'
 import { Appointment } from '@/lib/types'
 import { useRealtime } from '@/hooks/use-realtime'
 import { format } from 'date-fns'
+import { ReturnAlertsSection } from '@/components/dashboard/ReturnAlertsSection'
+import { getReturnAlerts } from '@/services/return-alerts'
 
 export default function Index() {
   const [stats, setStats] = useState({
@@ -23,13 +33,21 @@ export default function Index() {
     totalTutors: 0,
     appointmentsToday: 0,
     lowStockCount: 0,
+    returnAlertsCount: 0,
   })
   const [recent, setRecent] = useState<Appointment[]>([])
 
   const loadData = async () => {
     try {
-      const [s, r] = await Promise.all([api.getDashboardStats(), api.getRecentAppointments()])
-      setStats(s)
+      const [s, r, alertsData] = await Promise.all([
+        api.getDashboardStats(),
+        api.getRecentAppointments(),
+        getReturnAlerts().catch(() => ({ alerts: [], overdueCount: 0, dueSoonCount: 0 })),
+      ])
+      setStats({
+        ...s,
+        returnAlertsCount: alertsData.alerts.length,
+      })
       setRecent(r)
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -42,6 +60,7 @@ export default function Index() {
   useRealtime('patients', () => loadData())
   useRealtime('tutors', () => loadData())
   useRealtime('appointments', () => loadData())
+  useRealtime('vaccines', () => loadData())
 
   const getTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
@@ -60,7 +79,7 @@ export default function Index() {
         <p className="text-muted-foreground mt-1">Visão geral da operação da clínica.</p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -100,15 +119,30 @@ export default function Index() {
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Itens em Falta
+              Alertas de Retorno
             </CardTitle>
-            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <BellRing className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{stats.lowStockCount}</div>
+            <div className="text-3xl font-bold text-amber-600">{stats.returnAlertsCount}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm bg-white">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Itens em Falta
+            </CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-600">{stats.lowStockCount}</div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Painel Visível de Alertas de Retorno */}
+      <ReturnAlertsSection />
 
       <div className="grid gap-6 md:grid-cols-7">
         <Card className="md:col-span-5 border-none shadow-sm">

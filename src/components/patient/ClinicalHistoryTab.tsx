@@ -4,7 +4,7 @@ import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Activity, Paperclip, Trash2, UploadCloud } from 'lucide-react'
+import { Plus, Activity, Paperclip, Trash2, UploadCloud, Edit2, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import pb from '@/lib/pocketbase/client'
 import {
@@ -29,6 +29,17 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   const [formData, setFormData] = useState({ description: '', diagnosis: '', treatment: '' })
   const [files, setFiles] = useState<File[]>([])
 
+  // Estado de Edição de Registro
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<ClinicalRecord | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    date: '',
+    description: '',
+    diagnosis: '',
+    treatment: '',
+  })
+  const [editLoading, setEditLoading] = useState(false)
+
   const loadRecords = async () => {
     setRecords(await api.getClinicalRecords(patient.id))
   }
@@ -46,8 +57,80 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
       setIsDialogOpen(false)
       setFormData({ description: '', diagnosis: '', treatment: '' })
       setFiles([])
+      toast({
+        title: 'Registro clínico salvo',
+        description: 'A nova evolução foi registrada com sucesso.',
+      })
+      await loadRecords()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao salvar registro',
+        description: err.message || 'Falha ao registrar evolução clínica.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleOpenEdit = (record: ClinicalRecord) => {
+    setEditingRecord(record)
+    // Converte a data salva no record para o formato datetime-local ou date (YYYY-MM-DDTHH:mm)
+    let formattedDate = ''
+    try {
+      const d = new Date(record.created)
+      if (!isNaN(d.getTime())) {
+        const pad = (n: number) => n.toString().padStart(2, '0')
+        const yyyy = d.getFullYear()
+        const mm = pad(d.getMonth() + 1)
+        const dd = pad(d.getDate())
+        const hh = pad(d.getHours())
+        const min = pad(d.getMinutes())
+        formattedDate = `${yyyy}-${mm}-${dd}T${hh}:${min}`
+      }
+    } catch {
+      formattedDate = ''
+    }
+
+    setEditFormData({
+      date: formattedDate,
+      description: record.description || '',
+      diagnosis: record.diagnosis || '',
+      treatment: record.treatment || '',
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdateRecord = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingRecord) return
+    setEditLoading(true)
+    try {
+      const payload: Record<string, any> = {
+        description: editFormData.description,
+        diagnosis: editFormData.diagnosis,
+        treatment: editFormData.treatment,
+      }
+      if (editFormData.date) {
+        payload.created = new Date(editFormData.date).toISOString()
+      }
+
+      await api.updateClinicalRecord(editingRecord.id, payload)
+      setIsEditDialogOpen(false)
+      setEditingRecord(null)
+      toast({
+        title: 'Evolução clínica atualizada',
+        description: 'O registro foi editado com sucesso na mesma fonte de dados.',
+      })
+      await loadRecords()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atualizar registro',
+        description: err.message || 'Falha ao gravar alterações do registro clínico.',
+        variant: 'destructive',
+      })
+    } finally {
+      setEditLoading(false)
     }
   }
 
@@ -147,9 +230,26 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
           records.map((record) => (
             <Card key={record.id} className="border-none shadow-sm overflow-hidden">
               <div className="bg-primary/5 px-6 py-3 border-b flex items-center justify-between">
-                <div className="font-semibold text-primary">
-                  {new Date(record.created).toLocaleDateString('pt-BR')}
+                <div className="font-semibold text-primary flex items-center gap-2">
+                  <span>{new Date(record.created).toLocaleDateString('pt-BR')}</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    às{' '}
+                    {new Date(record.created).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
                 </div>
+                {!isAttendant && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleOpenEdit(record)}
+                    className="h-8 gap-1.5 text-xs border-primary/20 hover:bg-primary hover:text-white transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" /> Editar
+                  </Button>
+                )}
               </div>
               <CardContent className="p-6 grid gap-6 md:grid-cols-3">
                 <div className="space-y-2">
@@ -228,6 +328,81 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
           ))
         )}
       </div>
+
+      {/* Dialog de Edição de Registro Clínico */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit2 className="w-5 h-5 text-primary" /> Editar Registro Clínico
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleUpdateRecord} className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-record-date">Data e Hora do Atendimento</Label>
+              <Input
+                id="edit-record-date"
+                type="datetime-local"
+                value={editFormData.date}
+                onChange={(e) => setEditFormData({ ...editFormData, date: e.target.value })}
+                required
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Permite corrigir a data e horário original do atendimento clínico.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-record-description">Queixa / Evolução / Sintomas *</Label>
+              <Textarea
+                id="edit-record-description"
+                required
+                rows={5}
+                placeholder="Descreva as anotações clínicas, sintomas observados e histórico..."
+                value={editFormData.description}
+                onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                className="min-h-[120px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-record-diagnosis">Diagnóstico</Label>
+              <Input
+                id="edit-record-diagnosis"
+                placeholder="Diagnóstico clínico presuntivo ou definitivo"
+                value={editFormData.diagnosis}
+                onChange={(e) => setEditFormData({ ...editFormData, diagnosis: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-record-treatment">Tratamento Prescrito / Orientações</Label>
+              <Textarea
+                id="edit-record-treatment"
+                rows={3}
+                placeholder="Medicações receitadas, dosagens, procedimentos realizados..."
+                value={editFormData.treatment}
+                onChange={(e) => setEditFormData({ ...editFormData, treatment: e.target.value })}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                disabled={editLoading}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={editLoading} className="gap-1.5 bg-primary">
+                <CheckCircle2 className="w-4 h-4" />
+                {editLoading ? 'Salvando...' : 'Salvar Alterações'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

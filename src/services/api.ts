@@ -109,6 +109,18 @@ export const api = {
     }
     return pb.collection('clinical_records').create(formData)
   },
+  updateClinicalRecord: (id: string, data: any) => {
+    const formData = new FormData()
+    for (const key in data) {
+      if (key === 'files' && Array.isArray(data[key])) {
+        data[key].forEach((file: File) => formData.append('files', file))
+      } else if (data[key] !== undefined && data[key] !== null) {
+        formData.append(key, data[key])
+      }
+    }
+    return pb.collection('clinical_records').update<ClinicalRecord>(id, formData)
+  },
+  deleteClinicalRecord: (id: string) => pb.collection('clinical_records').delete(id),
 
   getAppointments: (
     params?: string | { patientId?: string; status?: string; startDate?: Date; endDate?: Date },

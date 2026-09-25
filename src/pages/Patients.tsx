@@ -33,9 +33,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Plus, ChevronRight, MessageCircle, Edit2, Loader2, Save } from 'lucide-react'
+import {
+  Search,
+  Plus,
+  ChevronRight,
+  MessageCircle,
+  Edit2,
+  Loader2,
+  Save,
+  AlertTriangle,
+  Clock,
+} from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
+import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
 
 const openWhatsApp = (phone: string) => {
   const cleanPhone = phone?.replace(/\D/g, '') || ''
@@ -54,6 +65,7 @@ export default function Patients() {
   const [patients, setPatients] = useState<Patient[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
   const [allTutors, setAllTutors] = useState<Tutor[]>([])
+  const [patientAlertsMap, setPatientAlertsMap] = useState<Record<string, ReturnAlert>>({})
 
   const [isSheetOpen, setIsSheetOpen] = useState(false)
   const [tutorMode, setTutorMode] = useState<'existing' | 'new'>('existing')
@@ -110,6 +122,19 @@ export default function Patients() {
   const loadTutors = async () => setTutors(await api.getTutors(debouncedTutorSearch))
   const loadAllTutors = async () => setAllTutors(await api.getTutors())
 
+  const loadAlerts = async () => {
+    try {
+      const res = await getReturnAlerts({ daysAhead: 30 })
+      const map: Record<string, ReturnAlert> = {}
+      for (const a of res.alerts) {
+        map[a.patientId] = a
+      }
+      setPatientAlertsMap(map)
+    } catch {
+      // Ignora erro de alertas
+    }
+  }
+
   useEffect(() => {
     loadPatients()
   }, [debouncedPatientSearch])
@@ -118,9 +143,14 @@ export default function Patients() {
   }, [debouncedTutorSearch])
   useEffect(() => {
     loadAllTutors()
+    loadAlerts()
   }, [])
 
-  useRealtime('patients', () => loadPatients())
+  useRealtime('patients', () => {
+    loadPatients()
+    loadAlerts()
+  })
+  useRealtime('vaccines', () => loadAlerts())
   useRealtime('tutors', () => {
     loadTutors()
     loadAllTutors()
@@ -468,9 +498,33 @@ export default function Patients() {
                           <TableCell>
                             <Link
                               to={`/pacientes/${patient.id}`}
-                              className="font-semibold text-slate-900 group-hover:text-primary transition-colors block"
+                              className="font-semibold text-slate-900 group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap"
                             >
-                              {patient.name}
+                              <span>{patient.name}</span>
+                              {patientAlertsMap[patient.id] && (
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[10px] px-1.5 py-0 font-medium inline-flex items-center gap-1 ${
+                                    patientAlertsMap[patient.id].status === 'overdue'
+                                      ? 'bg-red-50 text-red-700 border-red-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}
+                                  title={`Retorno ${
+                                    patientAlertsMap[patient.id].status === 'overdue'
+                                      ? 'Vencido'
+                                      : 'Próximo'
+                                  }: ${patientAlertsMap[patient.id].description}`}
+                                >
+                                  {patientAlertsMap[patient.id].status === 'overdue' ? (
+                                    <AlertTriangle className="w-2.5 h-2.5 text-red-500" />
+                                  ) : (
+                                    <Clock className="w-2.5 h-2.5 text-amber-500" />
+                                  )}
+                                  {patientAlertsMap[patient.id].status === 'overdue'
+                                    ? 'Retorno vencido'
+                                    : 'Retorno próximo'}
+                                </Badge>
+                              )}
                             </Link>
                           </TableCell>
                           <TableCell>

@@ -6,7 +6,8 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, User, Activity, Printer, RefreshCw } from 'lucide-react'
+import { ArrowLeft, User, Activity, Printer, RefreshCw, AlertTriangle, Clock } from 'lucide-react'
+import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
 import pb from '@/lib/pocketbase/client'
 import { GeneralInfoTab } from '@/components/patient/GeneralInfoTab'
 import { ReturnsTab } from '@/components/patient/ReturnsTab'
@@ -19,6 +20,7 @@ export default function PatientProfile() {
   const [patient, setPatient] = useState<Patient | null>(null)
   const [records, setRecords] = useState<ClinicalRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [patientAlert, setPatientAlert] = useState<ReturnAlert | null>(null)
 
   const loadData = async () => {
     if (!id) return
@@ -27,6 +29,14 @@ export default function PatientProfile() {
       const recs = await api.getClinicalRecords(id)
       setPatient(data)
       setRecords(recs)
+
+      try {
+        const alertsData = await getReturnAlerts({ daysAhead: 30 })
+        const found = alertsData.alerts.find((a) => a.patientId === id)
+        setPatientAlert(found || null)
+      } catch {
+        setPatientAlert(null)
+      }
     } catch {
       setPatient(null)
     } finally {
@@ -40,6 +50,7 @@ export default function PatientProfile() {
   useRealtime('patients', () => loadData())
   useRealtime('tutors', () => loadData())
   useRealtime('clinical_records', () => loadData())
+  useRealtime('vaccines', () => loadData())
 
   if (loading)
     return <div className="p-8 text-center text-muted-foreground">Carregando ficha...</div>
@@ -116,6 +127,25 @@ export default function PatientProfile() {
                   {patient.deceased && (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
                       Óbito
+                    </span>
+                  )}
+                  {patientAlert && (
+                    <span
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-bold rounded-full ${
+                        patientAlert.status === 'overdue'
+                          ? 'bg-red-100 text-red-800 border border-red-200'
+                          : 'bg-amber-100 text-amber-800 border border-amber-200'
+                      }`}
+                      title={patientAlert.description}
+                    >
+                      {patientAlert.status === 'overdue' ? (
+                        <AlertTriangle className="w-3 h-3 text-red-600" />
+                      ) : (
+                        <Clock className="w-3 h-3 text-amber-600" />
+                      )}
+                      {patientAlert.status === 'overdue'
+                        ? 'Retorno Vencido'
+                        : 'Retorno Próximo (30d)'}
                     </span>
                   )}
                   {patient.ctrl && (

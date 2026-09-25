@@ -46,9 +46,11 @@ export const MANUAL_MODULES: ManualModule[] = [
         'Esta é a plataforma integrada de gestão para a clínica veterinária. Centraliza cadastros de tutores e animais, prontuário clínico eletrônico com fotos e exames, agenda de consultas e retornos, agendamento online para clientes, controle de estoque de insumos e identidade personalizada da clínica.',
       targetUsers: 'Médicos Veterinários, Recepcionistas, Atendentes e Administradores da clínica.',
       keyFeatures: [
-        'Painel com indicadores em tempo real: total de pacientes, tutores, atendimentos do dia e alertas de estoque baixo.',
+        'Painel com indicadores em tempo real: total de pacientes, tutores, atendimentos do dia, alertas de retorno e estoque baixo.',
+        'Seção exclusiva de "Alertas de Retorno dos Pacientes" com abas para filtrar Todos, Vencidos e Próximos (30 dias).',
+        'Botão para contato rápido via WhatsApp diretamente nos alertas de retorno do tutor.',
         'Acesso rápido com botão "+ Novo Paciente" no cabeçalho ou nas Ações Rápidas.',
-        'Atualização instantânea em tela (tempo real) de novos pacientes, alterações de agenda e estoque.',
+        'Atualização instantânea em tela (tempo real) de novos pacientes, retornos, alterações de agenda e estoque.',
         'Tabela de atendimentos recentes com link direto para o prontuário do paciente.',
         'Compatibilidade com atalhos de teclado: pressione F1 em qualquer tela para abrir a ajuda correspondente.',
       ],
@@ -67,9 +69,19 @@ export const MANUAL_MODULES: ManualModule[] = [
         description: 'Número de consultas, retornos ou procedimentos agendados para a data atual.',
       },
       {
+        name: 'Indicador Alertas de Retorno',
+        description:
+          'Contador de pacientes com retornos pendentes categorizados entre vencidos ou previstos para os próximos 30 dias.',
+      },
+      {
         name: 'Indicador Itens em Falta',
         description:
           'Contador de itens do estoque com quantidade em nível crítico (menor ou igual ao estoque mínimo).',
+      },
+      {
+        name: 'Tabela de Alertas de Retorno',
+        description:
+          'Listagem dos animais com retorno pendente, data prevista, situação (Vencido ou Próximo), motivo, contato do tutor e botão para abrir prontuário.',
       },
       {
         name: 'Tabela Atendimentos Recentes',
@@ -241,11 +253,13 @@ export const MANUAL_MODULES: ManualModule[] = [
       targetUsers: 'Médicos Veterinários e Cirurgiões.',
       keyFeatures: [
         'Registro de evoluções clínicas com sintomas, diagnósticos e tratamento prescrito.',
+        'Edição completa de qualquer evolução clínica (botão "Editar" no card), permitindo retificar data, hora, sintomas, diagnóstico e tratamento.',
         'Upload de anexos médicos (laudos em PDF, radiografias, fotos de lesões, exames laboratoriais).',
         'Aba de Retornos com listagem cronológica (Data + Histórico/Descrição) unificando dados importados do legado (VAC1-5 / VTX1-5) e novos lançamentos.',
         'Botão "Incluir retorno" para lançamento rápido de novos retornos diretamente na ficha do paciente.',
         'Exportação e impressão rápida do Prontuário Médico Veterinário via botão "Exportar Prontuário".',
         'Marcação de óbito com data e motivo, protegendo o histórico do animal.',
+        'Sinalização de alerta de retorno (badge Vencido ou Próximo) no cabeçalho da ficha do animal.',
       ],
     },
     fields: [
@@ -284,6 +298,11 @@ export const MANUAL_MODULES: ManualModule[] = [
         title: 'Como registrar uma nova evolução médica',
         description:
           '1. Dentro da ficha do paciente, selecione a aba "Ficha Clínica".\n2. Clique em "+ Nova Evolução Clínica".\n3. Preencha a queixa/sintomas observados, o diagnóstico e a prescrição com tratamentos.\n4. Se houver exames ou receitas impressas, selecione os arquivos em "Anexos".\n5. Clique em "Salvar Registro". O registro fica gravado com data, hora e veterinário.',
+      },
+      {
+        title: 'Como editar uma evolução clínica existente',
+        description:
+          '1. Na aba "Ficha Clínica", localize a evolução que deseja alterar (tanto registros legados quanto novos lançamentos).\n2. No cabeçalho do card da evolução, clique no botão "Editar" (ícone de lápis).\n3. No diálogo aberto, modifique a Data e Hora do atendimento se necessário, a descrição dos sintomas/evolução, diagnóstico ou tratamento prescrito.\n4. Clique no botão "Salvar Alterações". A evolução será regravada instantaneamente na mesma fonte de dados com mensagem de confirmação visual.',
       },
       {
         title: 'Como anexar exames a uma evolução já gravada',
