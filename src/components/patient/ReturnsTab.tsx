@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Patient, Appointment } from '@/lib/types'
+import { Patient, Vaccine } from '@/lib/types'
 import { api } from '@/services/api'
 import pb from '@/lib/pocketbase/client'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -13,8 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Plus, CheckCircle } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { Plus, Calendar, Clock, RefreshCw } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -25,161 +24,158 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 export function ReturnsTab({ patient }: { patient: Patient }) {
-  const [appointments, setAppointments] = useState<Appointment[]>([])
+  const [returnsList, setReturnsList] = useState<Vaccine[]>([])
+  const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [formData, setFormData] = useState({ date: '', time: '10:00', type: 'return', notes: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const [formData, setFormData] = useState({ date: '', notes: '' })
   const { toast } = useToast()
 
-  const loadApps = async () => {
+  const loadReturns = async () => {
     try {
-      const records = await pb.collection('appointments').getFullList<Appointment>({
+      // Carrega os retornos (gravados na collection 'vaccines', que armazena os pares VAC1-5 + VTX1-5 do legado)
+      const records = await pb.collection('vaccines').getFullList<Vaccine>({
         filter: `patient_id = "${patient.id}"`,
-        sort: '-date',
       })
-      setAppointments(records)
-    } catch (error) {
-      console.error(error)
-    }
-  }
 
-  useEffect(() => {
-    loadApps()
-  }, [patient.id])
-  useRealtime('appointments', () => loadApps())
+      // Ordenar por data cronológica (mais recentes primeiro ou sem data ao final)
+      const sorted = [...records].sort((a, b) => {
+        if (!a.date && !b.date) {
+          return new Date(b.created).getTime() - new Date(a.created).getTime()
+        }
+        if (!a.date) return 1
+        if (!b.date) return -1
+        return new Date(b.date).getTime() - new Date(a.date).getTime()
+      })
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const dateTime = new Date(`${formData.date}T${formData.time}:00`).toISOString()
-      await api.createAppointment({
-        patient_id: patient.id,
-        status: 'scheduled',
-        date: dateTime,
-        type: formData.type as any,
-        notes: formData.notes,
-      })
-      setIsDialogOpen(false)
-      setFormData({ date: '', time: '10:00', type: 'return', notes: '' })
-      toast({
-        title: 'Agendamento criado',
-        description: 'O agendamento foi salvo com sucesso.',
-      })
+      setReturnsList(sorted)
     } catch (error) {
-      toast({
-        title: 'Erro ao salvar',
-        description: getErrorMessage(error),
-        variant: 'destructive',
-      })
+      console.error('Erro ao carregar retornos:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleComplete = async (id: string) => {
+  useEffect(() => {
+    loadReturns()
+  }, [patient.id])
+
+  useRealtime('vaccines', () => loadReturns())
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
     try {
-      await api.updateAppointment(id, { status: 'completed' })
+      const payload: Record<string, any> = {
+        patient_id: patient.id,
+        name: formData.notes.trim() || 'Retorno',
+        date: formData.date ? new Date(formData.date + 'T12:00:00.000Z').toISOString() : '',
+        notes: '',
+      }
+
+      await api.createVaccine(payload)
+
+      setIsDialogOpen(false)
+      setFormData({ date: '', notes: '' })
       toast({
-        title: 'Concluído',
-        description: 'O status do agendamento foi atualizado.',
+        title: 'Retorno incluído',
+        description: 'O retorno foi registrado com sucesso.',
       })
-      loadApps()
+      await loadReturns()
     } catch (error) {
       toast({
-        title: 'Erro',
+        title: 'Erro ao salvar retorno',
         description: getErrorMessage(error),
         variant: 'destructive',
       })
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const getTypeLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      return: 'Retorno',
-      vaccine: 'Vacina',
-      surgery: 'Cirurgia',
-      consultation: 'Consulta',
+  const formatDisplayDate = (dateStr?: string) => {
+    if (!dateStr) return '-'
+    try {
+      const parsed = parseISO(dateStr)
+      if (isNaN(parsed.getTime())) return dateStr
+      return format(parsed, 'dd/MM/yyyy')
+    } catch {
+      return dateStr
     }
-    return labels[type] || type
+  }
+
+  const getHistoricalText = (item: Vaccine) => {
+    // Caso tenha texto no campo name ou notes, prioriza o texto existente
+    const text = item.name || item.notes || ''
+    return text.trim() || '-'
   }
 
   return (
     <Card className="border-none shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
       <CardHeader className="flex flex-row items-center justify-between border-b bg-slate-50/50 pb-4">
-        <CardTitle className="text-lg text-slate-800">Agenda de Retornos e Vacinas</CardTitle>
+        <div>
+          <CardTitle className="text-lg text-slate-800 flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-primary" /> Retornos do Paciente
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Histórico completo de retornos importados da base legado (VAC1-5 / VTX1-5) e novos
+            retornos lançados.
+          </p>
+        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" className="gap-2 bg-primary hover:bg-primary/90">
-              <Plus className="w-4 h-4" /> Novo Agendamento
+              <Plus className="w-4 h-4" /> Incluir retorno
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Agendar Retorno / Consulta</DialogTitle>
+              <DialogTitle>Incluir Retorno</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSave} className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Data</Label>
-                  <Input
-                    type="date"
-                    required
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Hora</Label>
-                  <Input
-                    type="time"
-                    required
-                    value={formData.time}
-                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-                  />
-                </div>
-              </div>
+            <form onSubmit={handleSave} className="space-y-4 mt-2">
               <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select
-                  value={formData.type}
-                  onValueChange={(v) => setFormData({ ...formData, type: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="consultation">Consulta</SelectItem>
-                    <SelectItem value="return">Retorno</SelectItem>
-                    <SelectItem value="vaccine">Vacina</SelectItem>
-                    <SelectItem value="surgery">Cirurgia</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="return-date">Data do Retorno</Label>
+                <Input
+                  id="return-date"
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Data prevista ou realizada para o retorno.
+                </p>
               </div>
+
               <div className="space-y-2">
-                <Label>Observações</Label>
+                <Label htmlFor="return-notes">Histórico / Descrição *</Label>
                 <Textarea
-                  placeholder="Notas..."
+                  id="return-notes"
+                  required
+                  placeholder="Ex: Retorno para avaliação de sutura, reavaliação pós-cirúrgica, reforço..."
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="min-h-[80px]"
+                  className="min-h-[100px]"
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Agendando...' : 'Confirmar Agendamento'}
-              </Button>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsDialogOpen(false)}
+                  disabled={submitting}
+                >
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? 'Salvando...' : 'Salvar Retorno'}
+                </Button>
+              </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -188,73 +184,66 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
         <Table>
           <TableHeader>
             <TableRow className="bg-white hover:bg-white">
-              <TableHead className="w-[150px]">Data Prevista</TableHead>
-              <TableHead>Tipo</TableHead>
-              <TableHead>Notas</TableHead>
-              <TableHead className="w-[100px]">Status</TableHead>
-              <TableHead className="text-right w-[120px]">Ação</TableHead>
+              <TableHead className="w-[180px] font-semibold text-slate-700">
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-slate-400" /> Data
+                </span>
+              </TableHead>
+              <TableHead className="font-semibold text-slate-700">
+                <span className="flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-slate-400" /> Histórico / Descrição
+                </span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {appointments.length === 0 ? (
+            {loading ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                  Nenhum agendamento encontrado para este paciente
+                <TableCell colSpan={2} className="h-32 text-center text-muted-foreground">
+                  Carregando retornos...
+                </TableCell>
+              </TableRow>
+            ) : returnsList.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={2} className="h-32 text-center text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <p className="font-medium">Nenhum retorno cadastrado para este paciente.</p>
+                    <p className="text-xs text-slate-400">
+                      Clique em &quot;Incluir retorno&quot; para registrar um novo retorno.
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
-              appointments.map((ret) => (
-                <TableRow key={ret.id}>
-                  <TableCell className="font-medium">
-                    {ret.date ? format(new Date(ret.date), 'dd/MM/yyyy HH:mm') : '-'}
-                  </TableCell>
-                  <TableCell className="font-semibold text-slate-800">
-                    {getTypeLabel(ret.type)}
-                  </TableCell>
-                  <TableCell
-                    className="text-sm text-slate-500 max-w-[200px] truncate"
-                    title={ret.notes}
-                  >
-                    {ret.notes || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        ret.status === 'scheduled'
-                          ? 'default'
-                          : ret.status === 'completed'
-                            ? 'secondary'
-                            : 'destructive'
-                      }
-                      className={
-                        ret.status === 'scheduled'
-                          ? 'bg-amber-100 text-amber-800'
-                          : ret.status === 'completed'
-                            ? 'bg-green-100 text-green-800'
-                            : ''
-                      }
-                    >
-                      {ret.status === 'scheduled'
-                        ? 'Agendado'
-                        : ret.status === 'completed'
-                          ? 'Concluído'
-                          : 'Cancelado'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {ret.status === 'scheduled' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                        onClick={() => handleComplete(ret.id)}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1" /> Concluir
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
+              returnsList.map((retorno) => {
+                const historyText = getHistoricalText(retorno)
+                const dateDisplay = formatDisplayDate(retorno.date)
+                const hasDate = Boolean(retorno.date)
+                const hasText = historyText !== '-'
+
+                return (
+                  <TableRow key={retorno.id} className="hover:bg-slate-50/70">
+                    <TableCell className="font-medium align-top py-3 text-slate-900 whitespace-nowrap">
+                      {hasDate ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                          {dateDisplay}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">
+                          Sem data informada
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="align-top py-3 text-slate-800 text-sm">
+                      {hasText ? (
+                        <span className="break-words font-medium">{historyText}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Sem descrição</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                )
+              })
             )}
           </TableBody>
         </Table>

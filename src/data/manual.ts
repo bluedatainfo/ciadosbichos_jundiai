@@ -237,13 +237,13 @@ export const MANUAL_MODULES: ManualModule[] = [
     iconName: 'FileText',
     overview: {
       purpose:
-        'Ambiente do prontuário eletrônico completo do paciente. Centraliza as quatro dimensões do cuidado veterinário: Dados Gerais (anamnese, pelagem, castração, microchip, foto), Ficha Clínica (histórico cronológico de queixas, diagnósticos e tratamentos com anexos de exames), Retornos/Agenda (marcação de reavaliações) e Carteira de Vacinação.',
+        'Ambiente do prontuário eletrônico completo do paciente. Centraliza as dimensões essenciais do cuidado veterinário: Dados Gerais (anamnese, pelagem, castração, microchip, foto), Ficha Clínica (histórico cronológico de queixas, diagnósticos e tratamentos com anexos de exames) e Retornos (histórico completo de retornos importados da base legado e novos retornos lançados).',
       targetUsers: 'Médicos Veterinários e Cirurgiões.',
       keyFeatures: [
         'Registro de evoluções clínicas com sintomas, diagnósticos e tratamento prescrito.',
         'Upload de anexos médicos (laudos em PDF, radiografias, fotos de lesões, exames laboratoriais).',
-        'Aba dedicada para Carteira de Vacinação com data de aplicação, revacinação e lote.',
-        'Aba de Retornos para agendamento de consultas subsequentes com alerta de proximidade (48h).',
+        'Aba de Retornos com listagem cronológica (Data + Histórico/Descrição) unificando dados importados do legado (VAC1-5 / VTX1-5) e novos lançamentos.',
+        'Botão "Incluir retorno" para lançamento rápido de novos retornos diretamente na ficha do paciente.',
         'Exportação e impressão rápida do Prontuário Médico Veterinário via botão "Exportar Prontuário".',
         'Marcação de óbito com data e motivo, protegendo o histórico do animal.',
       ],
@@ -291,9 +291,9 @@ export const MANUAL_MODULES: ManualModule[] = [
           '1. No card da evolução desejada, localize a seção "Anexos".\n2. Clique no botão "Adicionar".\n3. Selecione um ou mais arquivos (PDF, JPG, PNG).\n4. Os anexos ficam disponíveis para download e consulta por qualquer membro autorizado.',
       },
       {
-        title: 'Como registrar uma vacina e agendar o reforço',
+        title: 'Como lançar e consultar retornos do paciente',
         description:
-          '1. Selecione a aba "Vacinas".\n2. Clique em "+ Registrar Vacina".\n3. Informe o nome do imunizante (ex: V10, Antirrábica, Giárdia), lote, data de aplicação e data prevista para a próxima dose.\n4. Salve para atualizar a carteira de imunização do paciente.',
+          '1. Dentro da ficha do paciente, selecione a aba "Retornos".\n2. Consulte a lista de retornos cronológicos (Data e Histórico/Descrição), incluindo os importados do sistema legado (VAC1-5 / VTX1-5).\n3. Para registrar um novo retorno, clique no botão "Incluir retorno".\n4. Informe a data e a descrição/histórico do retorno e clique em "Salvar Retorno". O registro aparece imediatamente na lista.',
       },
       {
         title: 'Como exportar ou imprimir o prontuário para o tutor',
@@ -303,7 +303,7 @@ export const MANUAL_MODULES: ManualModule[] = [
     ],
     tips: [
       'Ao atualizar o peso do animal na aba "Dados Gerais", as prescrições futuras ficam mais precisas.',
-      'Veterinários podem consultar retornos passados e futuros diretamente na aba "Retornos / Agenda" sem sair da ficha do paciente.',
+      'Veterinários podem consultar e incluir novos retornos diretamente na aba "Retornos" sem sair da ficha do paciente.',
     ],
   },
   {
