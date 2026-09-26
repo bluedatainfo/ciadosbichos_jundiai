@@ -88,6 +88,11 @@ export function ReprocessFailuresModal({
       if (pendingList.length > 0) {
         setFailures(pendingList)
       }
+
+      // Notificar o componente pai para atualizar contadores no cabeçalho
+      if (onFailuresResolved) {
+        onFailuresResolved(0)
+      }
     } catch (err: any) {
       toast({
         title: 'Erro ao carregar CSV de pendências',
@@ -216,6 +221,34 @@ export function ReprocessFailuresModal({
         </DialogHeader>
 
         <div className="space-y-6 pt-2">
+          {/* Aviso Visível sobre o Arquivo Original da Base */}
+          {!rawRows || rawRows.length === 0 ? (
+            <div className="p-3.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-xs flex items-start gap-3 shadow-sm">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold text-amber-950">
+                  Atenção: Arquivo original da base necessário para a releitura das linhas
+                </p>
+                <p className="text-amber-800 leading-relaxed">
+                  Para que a releitura das linhas funcione durante o reprocessamento, o arquivo
+                  original da base (ex: <code>BD_TESTE.csv</code>) precisa estar carregado na tela
+                  de importação. Você pode carregar o CSV de falhas agora para gravar as pendências
+                  no banco e, em seguida, carregar o arquivo original na tela de importação antes de
+                  clicar em Reprocessar.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50/70 text-emerald-900 text-xs flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Arquivo original carregado na memória:{' '}
+                <strong>{rawRows.length.toLocaleString('pt-BR')} linhas</strong> prontas para a
+                releitura de dados.
+              </span>
+            </div>
+          )}
+
           {/* Status Geral das Falhas */}
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1">
@@ -231,9 +264,11 @@ export function ReprocessFailuresModal({
                 </Badge>
               </div>
               <p className="text-xs text-slate-500">
-                {rawRows
-                  ? `Arquivo original carregado na memória (${rawRows.length.toLocaleString('pt-BR')} linhas). Pronto para reprocessar.`
-                  : 'Aviso: Envie ou mantenha o arquivo original da base carregado para permitir a releitura dos dados.'}
+                {failures.length === 0
+                  ? 'Envie o arquivo CSV de pendências (pendencias_importacao_access_*.csv) para popular o banco de dados.'
+                  : rawRows
+                    ? `Arquivo original carregado na memória (${rawRows.length.toLocaleString('pt-BR')} linhas). Pronto para reprocessar.`
+                    : 'Aviso: Envie ou mantenha o arquivo original da base carregado na tela para permitir a releitura dos dados.'}
               </p>
             </div>
 

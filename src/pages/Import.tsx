@@ -45,6 +45,7 @@ import {
   AlertCircle,
   HelpCircle,
   RefreshCw,
+  Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -407,16 +408,28 @@ export default function Import() {
           </p>
         </div>
 
-        {/* Botão de Reprocessamento Global caso haja falhas no banco */}
-        {pendingFailuresCount > 0 && (
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {/* Botão sempre visível para carregar CSV de pendências mesmo com 0 falhas no banco */}
           <Button
+            variant="outline"
             onClick={() => setIsReprocessModalOpen(true)}
-            className="bg-amber-600 hover:bg-amber-700 text-white gap-2 shadow-sm shrink-0"
+            className="gap-2 shadow-sm shrink-0 border-slate-300 hover:bg-slate-50 text-slate-700"
           >
-            <RefreshCw className="w-4 h-4" />
-            Reprocessar Falhas ({pendingFailuresCount.toLocaleString('pt-BR')})
+            <Upload className="w-4 h-4 text-primary" />
+            Carregar CSV de Falhas
           </Button>
-        )}
+
+          {/* Botão de Reprocessamento Global caso haja falhas no banco */}
+          {pendingFailuresCount > 0 && (
+            <Button
+              onClick={() => setIsReprocessModalOpen(true)}
+              className="bg-amber-600 hover:bg-amber-700 text-white gap-2 shadow-sm shrink-0"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Reprocessar Falhas ({pendingFailuresCount.toLocaleString('pt-BR')})
+            </Button>
+          )}
+        </div>
       </div>
 
       {step === 'select' && (
