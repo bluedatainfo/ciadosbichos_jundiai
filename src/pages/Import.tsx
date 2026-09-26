@@ -24,6 +24,8 @@ import { DataPreview } from '@/components/import/DataPreview'
 import { ImportReport } from '@/components/import/ImportReport'
 import { AccessDataPreview } from '@/components/import/AccessDataPreview'
 import { AccessImportReportView } from '@/components/import/AccessImportReportView'
+import { ReprocessFailuresModal } from '@/components/import/ReprocessFailuresModal'
+import { importFailuresService, ImportFailureRecord } from '@/services/import-failures'
 import {
   Users,
   PawPrint,
@@ -42,6 +44,7 @@ import {
   CheckCircle2,
   AlertCircle,
   HelpCircle,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -76,22 +79,47 @@ export default function Import() {
   const [savedProgress, setSavedProgress] = useState<ImportProgressRecord | null>(null)
   const [isLoadingProgress, setIsLoadingProgress] = useState(false)
 
+  // Controle de Falhas Registradas no banco (import_failures)
+  const [pendingFailuresCount, setPendingFailuresCount] = useState<number>(0)
+  const [isReprocessModalOpen, setIsReprocessModalOpen] = useState(false)
+  const [storedFailures, setStoredFailures] = useState<ImportFailureRecord[]>([])
+
   // Opções do modo standard
   const [standardProgress, setStandardProgress] = useState(0)
   const [standardReport, setStandardReport] = useState<ImportReportType | null>(null)
 
-  // Carregar progresso salvo ao inicializar ou quando mudar arquivo
-  const loadSavedProgress = useCallback(async (currentFileName?: string) => {
-    setIsLoadingProgress(true)
+  // Carregar contagem de falhas do banco
+  const loadFailuresCount = useCallback(async () => {
     try {
-      const rec = await importProgressService.getLatestProgress(currentFileName)
-      setSavedProgress(rec)
+      const count = await importFailuresService.getPendingCount()
+      setPendingFailuresCount(count)
+      if (count > 0) {
+        const list = await importFailuresService.getAllPendingFailures()
+        setStoredFailures(list)
+      } else {
+        setStoredFailures([])
+      }
     } catch (e) {
-      console.warn('Erro ao carregar progresso:', e)
-    } finally {
-      setIsLoadingProgress(false)
+      console.warn('Erro ao carregar falhas:', e)
     }
   }, [])
+
+  // Carregar progresso salvo ao inicializar ou quando mudar arquivo
+  const loadSavedProgress = useCallback(
+    async (currentFileName?: string) => {
+      setIsLoadingProgress(true)
+      try {
+        const rec = await importProgressService.getLatestProgress(currentFileName)
+        setSavedProgress(rec)
+        await loadFailuresCount()
+      } catch (e) {
+        console.warn('Erro ao carregar progresso:', e)
+      } finally {
+        setIsLoadingProgress(false)
+      }
+    },
+    [loadFailuresCount],
+  )
 
   useEffect(() => {
     loadSavedProgress(fileName || undefined)
@@ -369,13 +397,26 @@ export default function Import() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          <FileSpreadsheet className="w-7 h-7 text-primary" /> Importação & Migração de Dados
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Importe arquivos do sistema legado Access 2.0 (tabela única) ou arquivos CSV padrão.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+            <FileSpreadsheet className="w-7 h-7 text-primary" /> Importação & Migração de Dados
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Importe arquivos do sistema legado Access 2.0 (tabela única) ou arquivos CSV padrão.
+          </p>
+        </div>
+
+        {/* Botão de Reprocessamento Global caso haja falhas no banco */}
+        {pendingFailuresCount > 0 && (
+          <Button
+            onClick={() => setIsReprocessModalOpen(true)}
+            className="bg-amber-600 hover:bg-amber-700 text-white gap-2 shadow-sm shrink-0"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Reprocessar Falhas ({pendingFailuresCount.toLocaleString('pt-BR')})
+          </Button>
+        )}
       </div>
 
       {step === 'select' && (
@@ -975,6 +1016,17 @@ export default function Import() {
               onRestart={() => setStep('preview')}
               onContinueNextRange={handleContinueNextRangeFromReport}
               nextRangeSuggested={nextRangeSuggested}
+              rawRows={parseResult?.rows}
+              onReprocessSuccess={(rec) => {
+                loadFailuresCount()
+                if (accessReport) {
+                  setAccessReport({
+                    ...accessReport,
+                    clinicalEntriesCreated: accessReport.clinicalEntriesCreated + rec,
+                    failed: Math.max(0, accessReport.failed - rec),
+                  })
+                }
+              }}
             />
           )}
           {mode === 'standard' && standardReport && entityType && (
@@ -982,6 +1034,16 @@ export default function Import() {
           )}
         </>
       )}
+      {/* Modal de Reprocessamento de Falhas */}
+      <ReprocessFailuresModal
+        open={isReprocessModalOpen}
+        onOpenChange={setIsReprocessModalOpen}
+        rawRows={parseResult?.rows}
+        initialFailures={storedFailures}
+        onFailuresResolved={async () => {
+          await loadFailuresCount()
+        }}
+      />
     </div>
   )
 }

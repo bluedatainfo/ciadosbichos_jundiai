@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   CheckCircle2,
   XCircle,
@@ -11,17 +12,23 @@ import {
   Syringe,
   CalendarCheck,
   Download,
+  RefreshCw,
+  Upload,
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { AccessImportReport } from '@/services/access-import'
+import { ReprocessFailuresModal } from './ReprocessFailuresModal'
+import { ImportFailureRecord } from '@/services/import-failures'
 
 interface AccessImportReportViewProps {
   report: AccessImportReport
   onRestart: () => void
   onContinueNextRange?: () => void
   nextRangeSuggested?: { start: number; end: number } | null
+  rawRows?: Record<string, string>[] | null
+  onReprocessSuccess?: (recoveredCount: number) => void
 }
 
 export function AccessImportReportView({
@@ -29,7 +36,11 @@ export function AccessImportReportView({
   onRestart,
   onContinueNextRange,
   nextRangeSuggested,
+  rawRows,
+  onReprocessSuccess,
 }: AccessImportReportViewProps) {
+  const [isReprocessModalOpen, setIsReprocessModalOpen] = useState(false)
+  const [currentErrors, setCurrentErrors] = useState(report.errors || [])
   // A taxa de sucesso mede a porcentagem de registros válidos processados sem falha de gravação (0 a 100%)
   const totalWithFailures = report.totalProcessed + report.failed
   const successRate =
@@ -221,25 +232,36 @@ export function AccessImportReportView({
           </div>
 
           {/* Erros / Falhas */}
-          {report.errors && report.errors.length > 0 ? (
+          {currentErrors && currentErrors.length > 0 ? (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-red-500" />
-                  Falhas Registradas ({report.errors.length})
+                  Falhas Registradas ({currentErrors.length})
                 </h4>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleDownloadErrors}
-                  className="gap-1.5 text-xs h-8"
-                >
-                  <Download className="w-3.5 h-3.5" /> Baixar Relatório de Falhas
-                </Button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={() => setIsReprocessModalOpen(true)}
+                    className="gap-1.5 text-xs h-8 bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reprocessar Falhas ({currentErrors.length.toLocaleString('pt-BR')})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDownloadErrors}
+                    className="gap-1.5 text-xs h-8"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Baixar Relatório de Falhas
+                  </Button>
+                </div>
               </div>
 
               <div className="max-h-72 overflow-y-auto rounded-lg border divide-y bg-white">
-                {report.errors.slice(0, 50).map((err, idx) => (
+                {currentErrors.slice(0, 50).map((err, idx) => (
                   <div key={idx} className="p-3 text-xs flex items-start gap-3 hover:bg-slate-50">
                     {err.type === 'parser_warning' ? (
                       <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
@@ -289,9 +311,9 @@ export function AccessImportReportView({
                     </div>
                   </div>
                 ))}
-                {report.errors.length > 50 && (
+                {currentErrors.length > 50 && (
                   <div className="p-2 text-xs text-center text-muted-foreground bg-slate-50">
-                    ... e mais {report.errors.length - 50} pendências adicionais
+                    ... e mais {currentErrors.length - 50} pendências adicionais
                   </div>
                 )}
               </div>
@@ -315,6 +337,34 @@ export function AccessImportReportView({
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal de Reprocessamento */}
+      <ReprocessFailuresModal
+        open={isReprocessModalOpen}
+        onOpenChange={setIsReprocessModalOpen}
+        rawRows={rawRows}
+        initialFailures={currentErrors.map((err) => ({
+          linha: err.row,
+          ctrl: err.ctrl || '',
+          tutor: err.tutorName || '',
+          animal: err.animalName || '',
+          tipo: (err.type === 'parser_warning'
+            ? 'parser_warning'
+            : 'clinical_entry') as ImportFailureRecord['tipo'],
+          erro: err.error,
+          trecho: err.problematicSnippet || '',
+          status: 'pending',
+        }))}
+        onFailuresResolved={(recovered) => {
+          if (recovered > 0) {
+            // Atualizar contagem no relatório atual
+            setCurrentErrors((prev) => prev.slice(recovered))
+            if (onReprocessSuccess) {
+              onReprocessSuccess(recovered)
+            }
+          }
+        }}
+      />
     </div>
   )
 }

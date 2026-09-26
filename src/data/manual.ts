@@ -507,6 +507,7 @@ export const MANUAL_MODULES: ManualModule[] = [
         'Extrator inteligente de texto clínico: transforma o campo de anotações livres em evoluções cronológicas, vacinas e retornos.',
         'Mecanismo de retry automático com backoff exponencial contra limites de requisição da nuvem.',
         'Relatório analítico ao final de cada faixa com total de tutores criados, pacientes, evoluções clínicas, vacinas e eventuais pendências.',
+        'Reprocessamento inteligente de falhas (Too Many Requests): grava pendências diretamente na base de dados (import_failures), permitindo reprocessar exclusivamente os registros faltantes com throttling (pausas de 200ms) e releitura do arquivo original sem duplicar pacientes ou tutores.',
       ],
     },
     fields: [
@@ -534,6 +535,11 @@ export const MANUAL_MODULES: ManualModule[] = [
         description:
           'Vinculação manual entre as colunas do seu arquivo e os atributos do sistema (Nome, Espécie, Tutor, Telefone etc.).',
       },
+      {
+        name: 'Reprocessamento de Falhas (Botão e Modal)',
+        description:
+          'Executa a releitura do arquivo original para recuperar entradas clínicas e agendamentos que receberam Too Many Requests (429), com acompanhamento de taxa e relatório final.',
+      },
     ],
     workflows: [
       {
@@ -556,9 +562,16 @@ export const MANUAL_MODULES: ManualModule[] = [
         description:
           'Se você desejar refazer uma migração desde a primeira linha, clique no botão "Zerar Progresso". O ponto de retomada será reiniciado para a linha 1.',
       },
+      {
+        title:
+          'Como reprocessar apenas as falhas de Too Many Requests (sem reimportar a base inteira)',
+        description:
+          '1. Quando uma faixa de importação ou carga massiva registrar falhas por rate limit (Too Many Requests), essas ocorrências ficam persistidas na collection "import_failures" do sistema.\n2. Na tela de Importação, clique no botão "Reprocessar Falhas (X)" (localizado no cabeçalho ou no painel de falhas registradas).\n3. O modal de reprocesso exibirá a quantidade de pendências e o arquivo da base carregado.\n4. Caso esteja acessando em outro momento, você pode enviar o arquivo CSV de pendências previamente baixado (botão "Carregar CSV de Falhas").\n5. Clique em "Reprocessar Falhas". O sistema relerá cada registro do arquivo original, aplicando pausas entre gravações (throttling de 200ms) e espera progressiva automática se o banco acusar sobrecarga.\n6. Ao término, veja o relatório com o total de registros recuperados e os motivos de eventuais falhas reais restantes.',
+      },
     ],
     tips: [
       'Recomendamos faixas de 500 a 1.000 linhas por vez para melhor controle e acompanhamento visual.',
+      'O recurso de Reprocessar Falhas NÃO recria tutores nem animais, garantindo integridade e evitando duplicidades.',
       'Você pode interromper a importação ao final de qualquer faixa e continuar mais tarde sem perder nenhum dado já gravado.',
       'Arquivos grandes com acentuação em português (ex: cão, fêmea) são decodificados automaticamente pelo parser com suporte a Windows ANSI.',
     ],

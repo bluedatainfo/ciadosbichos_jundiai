@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T02:43:13.384Z",
+  "generatedAt": "2026-09-26T17:05:06.974Z",
   "collections": [
     {
       "name": "users",
@@ -735,6 +735,97 @@
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "import_failures",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "linha",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ctrl",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tutor",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "animal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "clinical_entry",
+            "appointment",
+            "vaccine",
+            "tutor",
+            "patient",
+            "database_error",
+            "parser_warning",
+            "geral"
+          ]
+        },
+        {
+          "name": "erro",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "trecho",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pending", "resolved", "ignored"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_import_failures_linha ON import_failures (linha)",
+        "CREATE INDEX idx_import_failures_ctrl ON import_failures (ctrl)",
+        "CREATE INDEX idx_import_failures_status ON import_failures (status)"
+      ]
     }
   ]
 }

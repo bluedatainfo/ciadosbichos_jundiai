@@ -465,15 +465,33 @@ export async function processAccessImport(
                 clinicalEntriesCreated++
               } catch (recErr: any) {
                 console.warn('Erro ao criar registro clínico após retries:', recErr)
+                const errDetail = `Falha ao gravar entrada clínica: ${recErr?.message || 'Erro desconhecido'}`
+                const snippet = entry.text.slice(0, 300)
                 errors.push({
                   row: fileLineNumber,
                   ctrl,
                   tutorName: nomeTutor,
                   animalName: animNome,
-                  error: `Falha ao gravar entrada clínica: ${recErr?.message || 'Erro desconhecido'}`,
-                  problematicSnippet: entry.text.slice(0, 150),
+                  error: errDetail,
+                  problematicSnippet: snippet,
                   type: 'database_error',
                 })
+
+                // Persistir falha na collection import_failures
+                try {
+                  await pb.collection('import_failures').create({
+                    linha: fileLineNumber,
+                    ctrl: ctrl || '',
+                    tutor: nomeTutor || '',
+                    animal: animNome || '',
+                    tipo: 'clinical_entry',
+                    erro: errDetail,
+                    trecho: snippet,
+                    status: 'pending',
+                  })
+                } catch (persistErr) {
+                  console.warn('Não foi possível persistir falha no banco:', persistErr)
+                }
               }
             }
           }
@@ -546,15 +564,33 @@ export async function processAccessImport(
               appointmentsCreated++
             } catch (appErr: any) {
               console.warn('Erro ao criar agendamento legado após retries:', appErr)
+              const errDetail = `Falha ao gravar agendamento: ${appErr?.message || 'Erro desconhecido'}`
+              const snippet = `${appItem.date} ${appItem.notes}`.slice(0, 300)
               errors.push({
                 row: fileLineNumber,
                 ctrl,
                 tutorName: nomeTutor,
                 animalName: animNome,
-                error: `Falha ao gravar agendamento: ${appErr?.message || 'Erro desconhecido'}`,
-                problematicSnippet: `${appItem.date} ${appItem.notes}`.slice(0, 150),
+                error: errDetail,
+                problematicSnippet: snippet,
                 type: 'database_error',
               })
+
+              // Persistir falha na collection import_failures
+              try {
+                await pb.collection('import_failures').create({
+                  linha: fileLineNumber,
+                  ctrl: ctrl || '',
+                  tutor: nomeTutor || '',
+                  animal: animNome || '',
+                  tipo: 'appointment',
+                  erro: errDetail,
+                  trecho: snippet,
+                  status: 'pending',
+                })
+              } catch (persistErr) {
+                console.warn('Não foi possível persistir falha no banco:', persistErr)
+              }
             }
           }
         }
