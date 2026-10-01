@@ -762,7 +762,7 @@ export const MANUAL_MODULES: ManualModule[] = [
     title: 'Relatórios → Retornos',
     shortDescription:
       'Painel de filtros no modelo clássico TechnoVet com busca avançada de retornos, WhatsApp direto e impressão/PDF.',
-    routePatterns: ['/relatorios', '/relatorios/retornos'],
+    routePatterns: ['/relatorios/retornos'],
     iconName: 'FileBarChart',
     overview: {
       purpose:
@@ -840,16 +840,167 @@ export const MANUAL_MODULES: ManualModule[] = [
         description:
           '1. Aplique os filtros desejados para obter a listagem necessária.\n2. No topo direito da tela, clique no botão "Imprimir" ou "Gerar PDF".\n3. A janela de impressão do navegador abrirá o documento perfeitamente paginado em folha A4, contendo o cabeçalho da clínica repetido nas páginas, colunas ajustadas à largura e a listagem completa com Tutor, Animal, Data de Retorno e Telefone.',
       },
-      {
-        title: 'Como filtrar aniversariantes do mês para campanhas',
-        description:
-          '1. No painel de filtros, localize o seletor "Aniversário (Dia / Mês)".\n2. Deixe o dia como "Qualquer dia" e selecione o mês desejado (ex: 05 - Maio).\n3. Clique em "Filtrar".\n4. O sistema listará todos os pacientes que fazem aniversário naquele mês para envio de lembretes ou promoções.',
-      },
     ],
     tips: [
       'O relatório considera somente retornos com status pendente (não realizados). Quando o atendimento é concluído na ficha do paciente ou no Dashboard, ele sai automaticamente da lista.',
       'Você pode combinar múltiplos filtros simultaneamente, por exemplo: Espécie "Canino" + Retornos no período.',
       'Clique no ícone de atalho no final de qualquer linha da tabela para abrir o prontuário completo do paciente.',
+    ],
+  },
+  {
+    id: 'relatorios-aniversariantes',
+    title: 'Relatórios → Aniversariantes do Mês',
+    shortDescription:
+      'Listagem de animais que fazem aniversário no mês selecionado com idade completada, WhatsApp e impressão.',
+    routePatterns: ['/relatorios/aniversariantes'],
+    iconName: 'Cake',
+    overview: {
+      purpose:
+        'Relatório dedicado para fidelização e campanhas de relacionamento. Lista todos os pacientes (animais vivos) que fazem aniversário no mês selecionado, calculando a idade que o animal completará e fornecendo botão direto de felicitação pelo WhatsApp.',
+      targetUsers: 'Recepcionistas, Atendentes, Marketing da clínica e Médicos Veterinários.',
+      keyFeatures: [
+        'Abre exibindo os aniversariantes do mês corrente de forma instantânea sem necessidade de preencher filtros.',
+        'Seletor dinâmico de mês (Janeiro a Dezembro) e seletor opcional de dia do mês para ações diárias.',
+        'Filtro por espécie (Canino, Felino, etc.) e busca textual por animal ou tutor.',
+        'Cálculo automático da idade que o pet está completando no ano vigente.',
+        'Link direto para envio de mensagem de parabéns personalizada pelo WhatsApp (wa.me).',
+        'Exclusão automática de animais com óbito registrado (deceased = true).',
+        'Botões Imprimir e Gerar PDF formatados para folha A4 com cabeçalho institucional.',
+        'Contador de registros em destaque estilo visor digital clássico.',
+      ],
+    },
+    fields: [
+      {
+        name: 'Mês do Aniversário',
+        description: 'Selecione o mês desejado (padrão: mês atual).',
+        required: true,
+      },
+      {
+        name: 'Dia do Mês',
+        description: 'Opcional: filtre apenas os aniversariantes de um dia específico do mês.',
+      },
+      {
+        name: 'Espécie',
+        description: 'Filtra os aniversariantes por espécie animal.',
+      },
+      {
+        name: 'Animal ou Tutor',
+        description: 'Busca rápida pelo nome do paciente ou responsável.',
+      },
+    ],
+    workflows: [
+      {
+        title: 'Como enviar mensagens de parabéns aos aniversariantes do dia',
+        description:
+          '1. No menu Relatórios, clique em "Aniversariantes".\n2. No painel de filtros, o mês atual já vem selecionado.\n3. No campo "Dia do Mês", escolha o dia de hoje.\n4. Clique em "Filtrar Aniversariantes".\n5. Na tabela, clique no botão verde "Parabenizar" ao lado do telefone do tutor para abrir o WhatsApp com mensagem festiva pré-preenchida.',
+      },
+      {
+        title: 'Como gerar a lista mensal de aniversariantes para campanhas',
+        description:
+          '1. Selecione o mês da campanha.\n2. Clique em "Filtrar Aniversariantes".\n3. Clique em "Imprimir" ou "Gerar PDF" no topo da tela para obter a listagem em folha A4.',
+      },
+    ],
+    tips: [
+      'Mensagens de aniversário aumentam a retenção de clientes e incentivam o tutor a agendar check-ups preventivos.',
+    ],
+  },
+  {
+    id: 'relatorios-vacinas',
+    title: 'Relatórios → Vacinas Pendentes',
+    shortDescription:
+      'Identificação de animais com vacinação atrasada ou sem histórico de vacina para campanhas de imunização.',
+    routePatterns: ['/relatorios/vacinas'],
+    iconName: 'Syringe',
+    overview: {
+      purpose:
+        'Relatório focado em saúde preventiva e vigilância imunológica. Identifica pacientes que estão com o protocolo de vacinas atrasado com base no intervalo decorrido desde a última dose registrada ou que não possuem nenhum registro de vacinação na base.',
+      targetUsers: 'Médicos Veterinários, Recepcionistas e Administradores da clínica.',
+      keyFeatures: [
+        'Abre exibindo os pacientes com vacinação pendente considerando o intervalo padrão de 12 meses (1 ano).',
+        'Seletor configurável de intervalo: mais de 6 meses, 12 meses (1 ano), 24 meses (2 anos) ou 36 meses (3 anos).',
+        'Filtro de situação: Todos os pendentes, Apenas atrasadas (já vacinados no passado) ou Apenas sem registro.',
+        'Filtro por espécie animal e busca por nome de paciente, tutor ou código de controle.',
+        'Exclusão estrita e automática de pacientes com óbito registrado (deceased = true).',
+        'Botão para envio de lembrete de vacina diretamente via WhatsApp com mensagem convidando o tutor para atualização da carteirinha.',
+        'Impressão e geração de PDF formatados para folha A4 com cabeçalho institucional.',
+        'Contador de registros em destaque estilo visor digital clássico.',
+      ],
+    },
+    fields: [
+      {
+        name: 'Intervalo desde a Última Vacina',
+        description:
+          'Critério para considerar a vacinação atrasada (ex: mais de 12 meses sem registro de nova dose).',
+        required: true,
+      },
+      {
+        name: 'Situação',
+        description:
+          'Permite alternar entre visualizar todos os pendentes, apenas quem já tomou vacina mas está vencida, ou apenas quem nunca registrou vacina.',
+      },
+      {
+        name: 'Espécie',
+        description: 'Filtra os animais por espécie (Canino, Felino, etc.).',
+      },
+    ],
+    workflows: [
+      {
+        title: 'Como identificar animais que precisam de reforço vacinal anual',
+        description:
+          '1. No menu Relatórios, selecione "Vacinas Pendentes".\n2. Mantenha o intervalo padrão "Mais de 12 meses (1 ano)".\n3. No campo "Situação", selecione "Apenas Atrasadas (já vacinados no passado)".\n4. Clique em "Filtrar Vacinas". O sistema listará os pets com data da última vacina conhecida e link do WhatsApp para agendar o reforço.',
+      },
+    ],
+    tips: [
+      'Campanhas de vacinação pelo WhatsApp possuem alta taxa de conversão quando enviadas informando a data da última dose.',
+    ],
+  },
+  {
+    id: 'relatorios-estatisticas',
+    title: 'Relatórios → Estatísticas de Espécies',
+    shortDescription:
+      'Visão consolidada da base clínica: total de tutores, pacientes ativos, distribuição por espécie e top raças.',
+    routePatterns: ['/relatorios/estatisticas', '/relatorios'],
+    iconName: 'BarChart3',
+    overview: {
+      purpose:
+        'Painel executivo com visão quantitativa consolidada de toda a base da clínica veterinária. Apresenta o panorama de pacientes ativos por espécie, tutores cadastrados, histórico de óbitos, distribuição por sexo e ranking das raças caninas e felinas mais atendidas.',
+      targetUsers: 'Gestores, Administradores e Médicos Veterinários responsáveis.',
+      keyFeatures: [
+        'Totalizador em cards executivos: Tutores cadastrados, Pacientes ativos (vivos), Doses de vacinas registradas e Total acumulado.',
+        'Tabela analítica de distribuição por espécie com contagem e percentual (%) sobre a base viva.',
+        'Distribuição por sexo do paciente (Macho, Fêmea e Não informado).',
+        'Ranking das 10 principais raças caninas e 10 principais raças felinas da clínica.',
+        'Processamento agregado de alta performance no banco de dados, ideal para bases com dezenas de milhares de registros.',
+        'Botões Imprimir e Gerar PDF para relatórios gerenciais e apresentações.',
+      ],
+    },
+    fields: [
+      {
+        name: 'Total de Tutores',
+        description: 'Contagem de proprietários e clientes cadastrados no sistema.',
+      },
+      {
+        name: 'Pacientes Ativos',
+        description: 'Quantidade de animais cadastrados vivos.',
+      },
+      {
+        name: 'Vacinações',
+        description: 'Total de doses de vacinas registradas na base histórica.',
+      },
+      {
+        name: 'Distribuição por Espécie',
+        description: 'Percentual relativo de cada espécie atendida pela clínica.',
+      },
+    ],
+    workflows: [
+      {
+        title: 'Como exportar o resumo gerencial da clínica',
+        description:
+          '1. No menu Relatórios, clique em "Estatísticas de Espécies".\n2. Os dados serão consolidados automaticamente na tela.\n3. Clique em "Imprimir" ou "Gerar PDF" no topo direito para gerar um documento formatado em folha A4.',
+      },
+    ],
+    tips: [
+      'Use as estatísticas de raças para direcionar a compra de medicamentos específicos e insumos veterinários.',
     ],
   },
   {

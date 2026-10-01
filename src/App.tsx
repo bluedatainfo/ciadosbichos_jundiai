@@ -17,6 +17,9 @@ import Import from '@/pages/Import'
 import Login from '@/pages/Login'
 import PublicBooking from '@/pages/PublicBooking'
 import ReturnReportPage from '@/pages/ReturnReportPage'
+import BirthdayReportPage from '@/pages/BirthdayReportPage'
+import PendingVaccinesReportPage from '@/pages/PendingVaccinesReportPage'
+import SpeciesStatsReportPage from '@/pages/SpeciesStatsReportPage'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 
@@ -44,6 +47,9 @@ const AppRoutes = () => {
         <Route path="/pacientes" element={<Patients />} />
         <Route path="/pacientes/:id" element={<PatientProfile />} />
         <Route path="/relatorios/retornos" element={<ReturnReportPage />} />
+        <Route path="/relatorios/aniversariantes" element={<BirthdayReportPage />} />
+        <Route path="/relatorios/vacinas" element={<PendingVaccinesReportPage />} />
+        <Route path="/relatorios/estatisticas" element={<SpeciesStatsReportPage />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/estoque" element={<Inventory />} />
         <Route path="/importacao" element={<Import />} />

@@ -51,6 +51,34 @@ export function buildWhatsAppLink(phone: string, animalName: string): string {
   return `https://wa.me/${number}?text=${msg}`
 }
 
+export function buildBirthdayWhatsAppLink(
+  phone: string,
+  animalName: string,
+  turningAge?: number | null,
+): string {
+  const cleanPhone = phone?.replace(/\D/g, '') || ''
+  if (!cleanPhone) return ''
+  const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+  const ageText =
+    turningAge && turningAge > 0
+      ? ` que está completando ${turningAge} ${turningAge === 1 ? 'ano' : 'anos'}`
+      : ''
+  const msg = encodeURIComponent(
+    `Parabéns! 🎂 Toda a equipe da clínica veterinária deseja um feliz aniversário para o(a) querido(a) ${animalName}${ageText}! Muita saúde e alegria! 🐾🎉`,
+  )
+  return `https://wa.me/${number}?text=${msg}`
+}
+
+export function buildVaccineWhatsAppLink(phone: string, animalName: string): string {
+  const cleanPhone = phone?.replace(/\D/g, '') || ''
+  if (!cleanPhone) return ''
+  const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
+  const msg = encodeURIComponent(
+    `Olá! Notamos em nosso sistema que a vacinação do seu pet ${animalName} está pendente/atrasada. A imunização é fundamental para a saúde dele. Gostaria de agendar a vacinação?`,
+  )
+  return `https://wa.me/${number}?text=${msg}`
+}
+
 /**
  * Busca valores distintos de espécies e raças existentes no banco
  */
@@ -234,4 +262,154 @@ export async function fetchReturnReportData(
   }
 
   return rows
+}
+
+export interface BirthdayReportFilters {
+  month: number // 1 a 12
+  day?: number // 1 a 31
+  species?: string
+  search?: string
+  page?: number
+  limit?: number
+}
+
+export interface BirthdayReportItem {
+  id: string
+  patientId: string
+  animalName: string
+  species: string
+  breed: string
+  gender: string
+  ctrl: string
+  birthDate: string
+  birthdayDay: number | null
+  birthdayMonth: number
+  turningAge: number | null
+  tutorName: string
+  tutorPhone: string
+}
+
+export interface BirthdayReportResponse {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  month: number
+  items: BirthdayReportItem[]
+}
+
+/**
+ * Busca aniversariantes do mês com contagem e paginação otimizadas
+ */
+export async function fetchBirthdaysReport(
+  filters: BirthdayReportFilters,
+): Promise<BirthdayReportResponse> {
+  const params = new URLSearchParams()
+  params.set('month', String(filters.month))
+  if (filters.day && filters.day > 0) params.set('day', String(filters.day))
+  if (filters.species && filters.species !== 'all') params.set('species', filters.species)
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim())
+  if (filters.page) params.set('page', String(filters.page))
+  if (filters.limit) params.set('limit', String(filters.limit))
+
+  return pb.send<BirthdayReportResponse>(`/backend/v1/reports/birthdays?${params.toString()}`, {
+    method: 'GET',
+  })
+}
+
+export interface PendingVaccinesReportFilters {
+  species?: string
+  intervalMonths?: number
+  status?: 'all' | 'overdue' | 'no_record'
+  search?: string
+  page?: number
+  limit?: number
+}
+
+export interface PendingVaccineReportItem {
+  id: string
+  patientId: string
+  animalName: string
+  species: string
+  breed: string
+  gender: string
+  ctrl: string
+  lastVisit: string | null
+  birthDate: string | null
+  tutorName: string
+  tutorPhone: string
+  lastVaccineDate: string | null
+  situation: string
+  status: 'overdue' | 'no_record'
+  vaccineCount: number
+}
+
+export interface PendingVaccinesReportResponse {
+  total: number
+  page: number
+  limit: number
+  totalPages: number
+  cutoffDate: string
+  intervalMonths: number
+  items: PendingVaccineReportItem[]
+}
+
+/**
+ * Busca vacinas pendentes e atrasadas com contagem agregada e paginação
+ */
+export async function fetchPendingVaccinesReport(
+  filters: PendingVaccinesReportFilters,
+): Promise<PendingVaccinesReportResponse> {
+  const params = new URLSearchParams()
+  if (filters.intervalMonths) params.set('interval_months', String(filters.intervalMonths))
+  if (filters.species && filters.species !== 'all') params.set('species', filters.species)
+  if (filters.status && filters.status !== 'all') params.set('status', filters.status)
+  if (filters.search && filters.search.trim()) params.set('search', filters.search.trim())
+  if (filters.page) params.set('page', String(filters.page))
+  if (filters.limit) params.set('limit', String(filters.limit))
+
+  return pb.send<PendingVaccinesReportResponse>(
+    `/backend/v1/reports/pending-vaccines?${params.toString()}`,
+    {
+      method: 'GET',
+    },
+  )
+}
+
+export interface SpeciesDistributionItem {
+  species: string
+  count: number
+  percentage: number
+}
+
+export interface GenderDistributionItem {
+  gender: string
+  count: number
+  percentage: number
+}
+
+export interface TopBreedItem {
+  breed: string
+  count: number
+}
+
+export interface SpeciesStatsReportResponse {
+  totalTutors: number
+  totalPatients: number
+  totalAlivePatients: number
+  totalDeceasedPatients: number
+  totalVaccines: number
+  speciesDistribution: SpeciesDistributionItem[]
+  genderDistribution: GenderDistributionItem[]
+  topBreedsCanine: TopBreedItem[]
+  topBreedsFeline: TopBreedItem[]
+}
+
+/**
+ * Busca estatísticas consolidadas agregadas da clínica (espécies, raças, tutores, pacientes)
+ */
+export async function fetchSpeciesStatsReport(): Promise<SpeciesStatsReportResponse> {
+  return pb.send<SpeciesStatsReportResponse>('/backend/v1/reports/species-stats', {
+    method: 'GET',
+  })
 }

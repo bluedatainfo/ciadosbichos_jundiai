@@ -72,6 +72,21 @@ const menuItems = [
         path: '/relatorios/retornos',
         roles: ['admin', 'veterinarian', 'attendant'],
       },
+      {
+        title: 'Aniversariantes',
+        path: '/relatorios/aniversariantes',
+        roles: ['admin', 'veterinarian', 'attendant'],
+      },
+      {
+        title: 'Vacinas Pendentes',
+        path: '/relatorios/vacinas',
+        roles: ['admin', 'veterinarian', 'attendant'],
+      },
+      {
+        title: 'Estatísticas de Espécies',
+        path: '/relatorios/estatisticas',
+        roles: ['admin', 'veterinarian', 'attendant'],
+      },
     ],
   },
   {

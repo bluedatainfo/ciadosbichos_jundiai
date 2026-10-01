@@ -32,6 +32,10 @@ import {
   X,
   Keyboard,
   ExternalLink,
+  FileBarChart,
+  Cake,
+  Syringe,
+  BarChart3,
 } from 'lucide-react'
 
 // Mapa de ícones correspondente às strings de iconName
@@ -45,6 +49,10 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Settings,
   Globe,
   UserCog,
+  FileBarChart,
+  Cake,
+  Syringe,
+  BarChart3,
 }
 
 export function ManualSheet() {
