@@ -20,7 +20,7 @@ export interface ReturnReportRow {
   id: string // vaccine id ou patient id
   vaccineId?: string
   patientId: string
-  code: string // patient.ctrl ou patient.id encurtado
+  code?: string // opcional (mantido retrocompatível se necessário)
   tutorName: string
   tutorPhone: string
   animalName: string

@@ -773,10 +773,10 @@ export const MANUAL_MODULES: ManualModule[] = [
         'Contador de registros em destaque estilo visor digital clássico (ex: "161 reg.") atualizado dinamicamente.',
         'Regra de negócio inteligente: lista estritamente retornos NÃO realizados (completed = false/null) para que a equipe entre em contato com os tutores.',
         'Exclusão automática de animais marcados com óbito (deceased = true).',
-        'Relação de resultados no formato Código | Tutor | Animal | Retorno | Telefone.',
+        'Relação de resultados no formato Tutor | Animal | Retorno | Telefone.',
         'Link direto para conversa no WhatsApp (wa.me) ao lado de cada número de telefone com mensagem pré-formatada informando o retorno do animal.',
         'Otimização de desempenho para bases grandes com paginação e rolagem suave.',
-        'Botões Imprimir e Gerar PDF com cabeçalho oficial da clínica, período filtrado e data de emissão.',
+        'Botões Imprimir e Gerar PDF configurados para folha A4 com largura ajustada, cabeçalho da clínica repetido nas páginas e paginação correta.',
       ],
     },
     fields: [
@@ -828,7 +828,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         title: 'Como gerar a relação de retornos do mês',
         description:
-          '1. No menu lateral esquerdo, clique em "Relatórios" e selecione "Retornos".\n2. No painel de filtros à esquerda, localize o campo "Retornos (Previsão)".\n3. Preencha a data inicial no primeiro campo e a data final no segundo campo (ex: 01/07/2026 a 31/07/2026).\n4. Clique no botão "Filtrar".\n5. O contador em destaque informará o número de registros (ex: 161 reg.) e a tabela à direita listará os animais com Código, Tutor, Animal e Contato.',
+          '1. No menu lateral esquerdo, clique em "Relatórios" e selecione "Retornos".\n2. No painel de filtros à esquerda, localize o campo "Retornos (Previsão)".\n3. Preencha a data inicial no primeiro campo e a data final no segundo campo (ex: 01/07/2026 a 31/07/2026).\n4. Clique no botão "Filtrar".\n5. O contador em destaque informará o número de registros (ex: 161 reg.) e a tabela à direita listará os animais com Tutor, Animal e Contato.',
       },
       {
         title: 'Como acionar o tutor pelo WhatsApp diretamente da listagem',
@@ -836,9 +836,9 @@ export const MANUAL_MODULES: ManualModule[] = [
           '1. Na tabela de resultados, localize o animal que deseja contatar.\n2. Na coluna "Telefone / WhatsApp", clique no botão verde "WhatsApp".\n3. O sistema abrirá uma janela no WhatsApp Web ou no aplicativo de celular com o número preenchido e mensagem sugerindo o retorno do animal.',
       },
       {
-        title: 'Como imprimir ou gerar PDF do relatório de retornos',
+        title: 'Como imprimir ou gerar PDF do relatório de retornos em folha A4',
         description:
-          '1. Aplique os filtros desejados para obter a listagem necessária.\n2. No topo direito da tela, clique no botão "Imprimir" ou "Gerar PDF".\n3. A janela de impressão do navegador abrirá uma folha formatada limpa contendo o nome da clínica no cabeçalho, os filtros de período aplicados, a data de emissão e a tabela completa com Código, Tutor, Animal e Telefone.',
+          '1. Aplique os filtros desejados para obter a listagem necessária.\n2. No topo direito da tela, clique no botão "Imprimir" ou "Gerar PDF".\n3. A janela de impressão do navegador abrirá o documento perfeitamente paginado em folha A4, contendo o cabeçalho da clínica repetido nas páginas, colunas ajustadas à largura e a listagem completa com Tutor, Animal, Data de Retorno e Telefone.',
       },
       {
         title: 'Como filtrar aniversariantes do mês para campanhas',
@@ -883,6 +883,11 @@ export const MANUAL_MODULES: ManualModule[] = [
         required: true,
       },
       {
+        name: 'Número do Celular',
+        description: 'Telefone celular do profissional para contato direto da equipe ou avisos.',
+        example: '(11) 98765-4321',
+      },
+      {
         name: 'Senha de Acesso',
         description: 'Senha individual com no mínimo 8 caracteres.',
         required: true,
@@ -896,9 +901,9 @@ export const MANUAL_MODULES: ManualModule[] = [
     ],
     workflows: [
       {
-        title: 'Como adicionar um novo veterinário à equipe',
+        title: 'Como adicionar um novo colaborador à equipe',
         description:
-          '1. Acesse o menu Equipe & Usuários.\n2. Clique no botão "Adicionar Usuário".\n3. Preencha o nome do profissional, e-mail institucional e uma senha provisória de pelo menos 8 caracteres.\n4. No campo Papel, selecione "Veterinário".\n5. Clique em "Salvar". O profissional já pode acessar o sistema.',
+          '1. Acesse o menu Equipe & Usuários.\n2. Clique no botão "Adicionar Usuário".\n3. Preencha o nome do profissional, e-mail institucional, número do celular e uma senha provisória de pelo menos 8 caracteres.\n4. No campo Papel, selecione a função ("Veterinário", "Atendente" ou "Administrador").\n5. Clique em "Salvar". O profissional já pode acessar o sistema.',
       },
       {
         title: 'Como redefinir a senha de um colaborador',

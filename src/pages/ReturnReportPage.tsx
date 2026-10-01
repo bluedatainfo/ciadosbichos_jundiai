@@ -222,27 +222,9 @@ export default function ReturnReportPage() {
         </div>
       </div>
 
-      {/* Cabeçalho exclusivo para o documento de impressão (Print Only) */}
-      <div className="hidden print:block mb-6 border-b border-slate-300 pb-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 uppercase">
-              {clinicName || 'Clínica Veterinária'}
-            </h1>
-            <h2 className="text-base font-semibold text-slate-800 mt-0.5">
-              Relatório de Retornos de Pacientes
-            </h2>
-          </div>
-          <div className="text-right text-xs text-slate-500">
-            <p>Data de emissão: {format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-            <p className="font-semibold text-slate-800 mt-1">
-              Total de registros: {results.length}
-            </p>
-          </div>
-        </div>
-
-        {/* Resumo dos filtros no documento impresso */}
-        <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded text-xs text-slate-700 grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {/* Resumo dos filtros no documento impresso/PDF (visível apenas na primeira página de impressão antes da tabela) */}
+      {(returnDateFrom || returnDateTo || species !== 'all' || breed !== 'all' || animalName) && (
+        <div className="hidden print:block mb-3 p-2 bg-slate-50 border border-slate-300 rounded text-[9px] text-slate-700 grid grid-cols-4 gap-2">
           {returnDateFrom || returnDateTo ? (
             <div>
               <span className="font-semibold">Período de Retorno:</span>{' '}
@@ -270,7 +252,7 @@ export default function ReturnReportPage() {
             </div>
           )}
         </div>
-      </div>
+      )}
 
       {/* Layout Principal: Painel de Filtros estilo TechnoVet (Esquerda) + Tabela de Resultados (Direita) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -529,7 +511,7 @@ export default function ReturnReportPage() {
                 Relação de Pacientes para Retorno
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Formato clássico: Código | Tutor | Animal | Contato WhatsApp
+                Relação: Tutor | Animal | Previsão de Retorno | Contato
               </p>
             </div>
 
@@ -544,17 +526,16 @@ export default function ReturnReportPage() {
           </CardHeader>
 
           <CardContent className="p-0">
-            {/* Lista rolável de resultados */}
-            <div className="overflow-x-auto overflow-y-auto max-h-[640px] print:max-h-none print:overflow-visible">
+            {/* Lista rolável na tela (paginada em tela, oculta na impressão pois a impressão imprime a lista completa em A4) */}
+            <div className="overflow-x-auto overflow-y-auto max-h-[640px] print:hidden">
               <Table>
-                <TableHeader className="bg-slate-100/90 sticky top-0 z-10 border-b shadow-2xs print:static">
+                <TableHeader className="bg-slate-100/90 sticky top-0 z-10 border-b shadow-2xs">
                   <TableRow className="border-b border-slate-200">
-                    <TableHead className="w-[90px] font-bold text-slate-800">Código</TableHead>
                     <TableHead className="font-bold text-slate-800">Tutor</TableHead>
                     <TableHead className="font-bold text-slate-800">Animal</TableHead>
                     <TableHead className="font-bold text-slate-800">Data Retorno</TableHead>
                     <TableHead className="font-bold text-slate-800">Telefone / WhatsApp</TableHead>
-                    <TableHead className="w-[60px] text-right font-bold text-slate-800 print:hidden">
+                    <TableHead className="w-[60px] text-right font-bold text-slate-800">
                       Ação
                     </TableHead>
                   </TableRow>
@@ -563,13 +544,13 @@ export default function ReturnReportPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
                         Carregando registros de retorno...
                       </TableCell>
                     </TableRow>
                   ) : results.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
+                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
                         Nenhum retorno encontrado com os filtros selecionados.
                       </TableCell>
                     </TableRow>
@@ -579,13 +560,8 @@ export default function ReturnReportPage() {
                       return (
                         <TableRow
                           key={row.id}
-                          className="hover:bg-slate-50/80 transition-colors border-b border-slate-100 print:border-slate-300"
+                          className="hover:bg-slate-50/80 transition-colors border-b border-slate-100"
                         >
-                          {/* Código (Código original CTRL do Access ou ID) */}
-                          <TableCell className="font-mono font-semibold text-xs text-slate-800">
-                            {row.code}
-                          </TableCell>
-
                           {/* Tutor */}
                           <TableCell className="font-medium text-slate-900 text-xs sm:text-sm">
                             <span className="uppercase">{row.tutorName}</span>
@@ -630,7 +606,7 @@ export default function ReturnReportPage() {
                                     href={waLink}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 hover:text-green-800 transition-colors print:hidden"
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 hover:text-green-800 transition-colors"
                                     title="Enviar mensagem pelo WhatsApp"
                                   >
                                     <MessageCircle className="w-3 h-3 text-green-600 fill-green-600" />
@@ -646,7 +622,7 @@ export default function ReturnReportPage() {
                           </TableCell>
 
                           {/* Ação: Ver Prontuário */}
-                          <TableCell className="text-right print:hidden">
+                          <TableCell className="text-right">
                             <Button
                               variant="ghost"
                               size="sm"
@@ -665,6 +641,92 @@ export default function ReturnReportPage() {
                   )}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* TABELA DE IMPRESSÃO / PDF (EXCLUSIVA PARA FOLHA A4) */}
+            {/* Ocupa 100% da largura A4, repete thead por página e inclui cabeçalho da clínica no thead para paginação perfeita */}
+            <div className="hidden print:block w-full">
+              <table className="w-full border-collapse text-[10px] text-slate-900 table-fixed">
+                <thead className="table-header-group">
+                  {/* Cabeçalho da clínica repetido no topo de cada página A4 impressa */}
+                  <tr className="border-b-2 border-slate-800">
+                    <th colSpan={4} className="p-0 pb-3 text-left font-normal">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
+                            {clinicName || 'Clínica Veterinária'}
+                          </div>
+                          <div className="text-xs font-semibold text-slate-700 mt-0.5">
+                            Relatório de Retornos de Pacientes
+                          </div>
+                        </div>
+                        <div className="text-right text-[9px] text-slate-500 font-normal">
+                          <div>
+                            Emissão: {format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                          </div>
+                          <div className="font-semibold text-slate-800 mt-0.5">
+                            Total: {results.length} retornos
+                          </div>
+                        </div>
+                      </div>
+                    </th>
+                  </tr>
+                  {/* Cabeçalho das colunas com larguras proporcionais para folha A4 (sem Código) */}
+                  <tr className="bg-slate-100 border-b border-slate-400 text-left">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[32%]">
+                      Tutor
+                    </th>
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[30%]">
+                      Animal
+                    </th>
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[18%]">
+                      Data Retorno
+                    </th>
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[20%]">
+                      Telefone
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {results.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-center text-slate-500 italic">
+                        Nenhum retorno encontrado com os filtros selecionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    results.map((row, idx) => (
+                      <tr
+                        key={row.id || idx}
+                        className="border-b border-slate-200 break-inside-avoid"
+                      >
+                        <td className="py-1.5 px-2 font-medium uppercase align-top truncate">
+                          {row.tutorName}
+                        </td>
+                        <td className="py-1.5 px-2 align-top">
+                          <div className="font-bold uppercase text-slate-900">{row.animalName}</div>
+                          <div className="text-[9px] text-slate-500 truncate">
+                            {[row.species, row.breed].filter(Boolean).join(' • ')}
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-2 align-top">
+                          <div className="font-semibold text-slate-900">
+                            {formatDateStr(row.returnDate)}
+                          </div>
+                          {row.returnReason && (
+                            <div className="text-[9px] text-slate-500 truncate max-w-[140px]">
+                              {row.returnReason}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-2 font-mono align-top text-slate-800">
+                          {row.tutorPhone || '-'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
 
             {/* Barra de Paginação (oculta na impressão) */}

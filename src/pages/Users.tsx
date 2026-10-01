@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { UserCog, Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { UserCog, Plus, MoreHorizontal, Pencil, Trash2, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -63,6 +63,7 @@ export default function UsersPage() {
   const initialFormData = {
     name: '',
     email: '',
+    phone: '',
     password: '',
     role: 'attendant' as 'admin' | 'veterinarian' | 'attendant',
   }
@@ -103,6 +104,7 @@ export default function UsersPage() {
       const data = {
         name: formData.name,
         email: formData.email,
+        phone: formData.phone.trim(),
         password: formData.password,
         passwordConfirm: formData.password,
         role: formData.role,
@@ -128,6 +130,7 @@ export default function UsersPage() {
     setFormData({
       name: u.name || '',
       email: u.email || '',
+      phone: u.phone || '',
       password: '',
       role: u.role || 'attendant',
     })
@@ -142,6 +145,7 @@ export default function UsersPage() {
       const data: any = {
         name: formData.name,
         email: formData.email,
+        phone: formData.phone.trim(),
         role: formData.role,
         emailVisibility: true,
       }
@@ -235,6 +239,7 @@ export default function UsersPage() {
                 <TableRow className="bg-slate-50/50">
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
+                  <TableHead>Celular</TableHead>
                   <TableHead>Papel</TableHead>
                   <TableHead className="w-[100px] text-right">Ações</TableHead>
                 </TableRow>
@@ -244,6 +249,16 @@ export default function UsersPage() {
                   <TableRow key={u.id}>
                     <TableCell className="font-medium text-slate-900">{u.name || '-'}</TableCell>
                     <TableCell>{u.email}</TableCell>
+                    <TableCell className="text-slate-700 font-mono text-xs">
+                      {u.phone ? (
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
+                          {u.phone}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground italic text-xs">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>{getRoleBadge(u.role)}</TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
@@ -271,7 +286,7 @@ export default function UsersPage() {
                 ))}
                 {users.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       Nenhum usuário encontrado.
                     </TableCell>
                   </TableRow>
@@ -307,6 +322,17 @@ export default function UsersPage() {
                 required
               />
               {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-phone">Número do celular</Label>
+              <Input
+                id="create-phone"
+                type="tel"
+                placeholder="(00) 00000-0000"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+              {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-password">Senha</Label>
@@ -369,6 +395,17 @@ export default function UsersPage() {
                 required
               />
               {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-phone">Número do celular</Label>
+              <Input
+                id="edit-phone"
+                type="tel"
+                placeholder="(00) 00000-0000"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              />
+              {errors.phone && <p className="text-sm text-red-500">{errors.phone}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-password">Nova Senha (opcional)</Label>
