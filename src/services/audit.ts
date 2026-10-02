@@ -173,6 +173,10 @@ export const auditService = {
 
   /**
    * Calcula o diff entre dois objetos de dados para salvar no JSON de alterações.
+   * Compara somente os campos presentes no payload de alteração (newData),
+   * ignorando campos ausentes (evitando falsos positivos como campos não editados
+   * serem marcados indevidamente como 'Removido/Vazio').
+   * Campos presentes explicitamente com valor vazio/limpo continuam gerando diff válido.
    */
   computeDiff: (
     oldData: Record<string, any> | null | undefined,
@@ -190,12 +194,16 @@ export const auditService = {
     const diff: Record<string, FieldDiff> = {}
     if (!oldData && !newData) return diff
 
-    const allKeys = Array.from(
-      new Set([...Object.keys(oldData || {}), ...Object.keys(newData || {})]),
-    )
+    // Ao comparar um registro original (oldData) com um payload de atualização (newData),
+    // devemos considerar apenas as chaves presentes no payload (newData).
+    // Se newData não for fornecido mas oldData sim (ex.: exclusão), usamos as chaves de oldData.
+    const keysToCompare = newData ? Object.keys(newData) : Object.keys(oldData || {})
 
-    for (const key of allKeys) {
+    for (const key of keysToCompare) {
       if (ignoredKeys.includes(key)) continue
+
+      // Se newData foi fornecido mas a chave não existe nele (ausente), ignorar
+      if (newData && !(key in newData)) continue
 
       const oldVal = oldData ? oldData[key] : undefined
       const newVal = newData ? newData[key] : undefined
