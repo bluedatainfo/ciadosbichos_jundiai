@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { auditService } from '@/services/audit'
+import { auditService, formatClinicalRecordAuditLabel } from '@/services/audit'
 
 export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   const { user } = useAuth()
@@ -61,11 +61,18 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
       })
 
       // Auditoria: Lançamento de nova evolução / prescrição
+      const recordDateForLabel = createdRecord?.created || new Date().toISOString()
+      const recordLabel = formatClinicalRecordAuditLabel(
+        patient.name,
+        recordDateForLabel,
+        formData.description,
+      )
+
       auditService.log({
         action: 'create',
         module: 'clinical_records',
         recordId: createdRecord?.id || '',
-        recordLabel: `Evolução clínica de ${patient.name}`,
+        recordLabel,
         patientName: patient.name,
         tutorName: patient.expand?.tutor_id?.name || '',
         changes: {
@@ -154,11 +161,20 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
       await api.updateClinicalRecord(editingRecord.id, payload)
 
       // Auditoria: Edição de evolução clínica / prescrição
+      // Identifica com a data de atendimento do registro e o trecho da queixa/evolução
+      const recordDateForLabel = payload.created || editingRecord.created
+      const recordDescForLabel = payload.description || editingRecord.description
+      const recordLabel = formatClinicalRecordAuditLabel(
+        patient.name,
+        recordDateForLabel,
+        recordDescForLabel,
+      )
+
       auditService.log({
         action: 'update',
         module: 'clinical_records',
         recordId: editingRecord.id,
-        recordLabel: `Evolução clínica de ${patient.name}`,
+        recordLabel,
         patientName: patient.name,
         tutorName: patient.expand?.tutor_id?.name || '',
         changes: diff,

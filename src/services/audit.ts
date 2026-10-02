@@ -136,6 +136,65 @@ export const MODULE_LABELS: Record<AuditModule, { label: string; colorClass: str
   },
 }
 
+/**
+ * Formata a identificação legível de uma evolução clínica para logs de auditoria.
+ * Inclui:
+ * (1) Nome do paciente;
+ * (2) Data e hora do atendimento (ex: 15/03/2026 09:42);
+ * (3) Trecho de até ~80 caracteres da Queixa/Evolução.
+ * Exemplo: "Evolução clínica de THOR — 15/03/2026 09:42 — Queixa: \"Vomitando há 2 dias, recusa...\""
+ */
+export function formatClinicalRecordAuditLabel(
+  patientName: string,
+  recordDate?: string | Date | null,
+  description?: string | null,
+): string {
+  const cleanPatient = (patientName || 'Paciente').trim()
+
+  // Formatação de data e hora do atendimento
+  let formattedDate = ''
+  if (recordDate) {
+    try {
+      const d = typeof recordDate === 'string' ? new Date(recordDate) : recordDate
+      if (!isNaN(d.getTime())) {
+        const dateStr = d.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+        const timeStr = d.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        formattedDate = `${dateStr} ${timeStr}`
+      }
+    } catch {
+      formattedDate = ''
+    }
+  }
+
+  // Trecho de até ~80 caracteres da queixa/evolução
+  let snippet = ''
+  const cleanDesc = (description || '').replace(/\s+/g, ' ').trim()
+  if (cleanDesc) {
+    if (cleanDesc.length > 80) {
+      snippet = cleanDesc.substring(0, 80).trim() + '...'
+    } else {
+      snippet = cleanDesc
+    }
+  }
+
+  const parts = [`Evolução clínica de ${cleanPatient}`]
+  if (formattedDate) {
+    parts.push(formattedDate)
+  }
+  if (snippet) {
+    parts.push(`Queixa: "${snippet}"`)
+  }
+
+  return parts.join(' — ')
+}
+
 export const auditService = {
   /**
    * Grava um log de auditoria no PocketBase de forma síncrona/não-bloqueante.

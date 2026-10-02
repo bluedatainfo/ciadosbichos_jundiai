@@ -268,13 +268,20 @@ export const api = {
     }
     const res = await pb.collection('clinical_records').delete(id)
     if (recordData) {
-      const { auditService } = await import('@/services/audit')
+      const { auditService, formatClinicalRecordAuditLabel } = await import('@/services/audit')
+      const patientName = recordData.expand?.patient_id?.name || ''
+      const recordLabel = formatClinicalRecordAuditLabel(
+        patientName || id,
+        recordData.created,
+        recordData.description,
+      )
+
       auditService.log({
         action: 'delete',
         module: 'clinical_records',
         recordId: id,
-        recordLabel: `Evolução clínica de ${recordData.expand?.patient_id?.name || id}`,
-        patientName: recordData.expand?.patient_id?.name || '',
+        recordLabel,
+        patientName: patientName,
         tutorName: recordData.expand?.patient_id?.expand?.tutor_id?.name || '',
         details: `Exclusão de evolução clínica. Diagnóstico: ${recordData.diagnosis || '-'} | Tratamento: ${recordData.treatment || '-'}`,
       })

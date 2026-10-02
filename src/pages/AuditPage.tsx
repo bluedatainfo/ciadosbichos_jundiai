@@ -613,8 +613,14 @@ export function AuditPage() {
                               Tutor: {log.tutor_name}
                             </div>
                           )}
-                          {log.record_label && !log.patient_name && (
-                            <div className="font-medium text-slate-800">{log.record_label}</div>
+                          {log.record_label && (
+                            <div
+                              className={`text-[11px] text-slate-700 font-medium ${
+                                log.patient_name ? 'mt-1 pt-1 border-t border-slate-100' : ''
+                              }`}
+                            >
+                              {log.record_label}
+                            </div>
                           )}
                         </TableCell>
 
@@ -748,6 +754,16 @@ export function AuditPage() {
                       <span className="text-slate-500 font-medium block">Tutor:</span>
                       <span className="font-semibold text-slate-800">
                         {inspectRecord.tutor_name}
+                      </span>
+                    </div>
+                  )}
+                  {inspectRecord.record_label && (
+                    <div className="col-span-2">
+                      <span className="text-slate-500 font-medium block">
+                        Rótulo / Identificação do Registro:
+                      </span>
+                      <span className="font-semibold text-slate-800 whitespace-pre-wrap">
+                        {inspectRecord.record_label}
                       </span>
                     </div>
                   )}
