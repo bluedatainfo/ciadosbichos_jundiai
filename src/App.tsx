@@ -20,6 +20,7 @@ import ReturnReportPage from '@/pages/ReturnReportPage'
 import BirthdayReportPage from '@/pages/BirthdayReportPage'
 import PendingVaccinesReportPage from '@/pages/PendingVaccinesReportPage'
 import SpeciesStatsReportPage from '@/pages/SpeciesStatsReportPage'
+import { AuditPage } from '@/pages/AuditPage'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 
@@ -55,6 +56,7 @@ const AppRoutes = () => {
         <Route path="/importacao" element={<Import />} />
         <Route path="/usuarios" element={<UsersPage />} />
         <Route path="/configuracoes" element={<Settings />} />
+        <Route path="/auditoria" element={<AuditPage />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

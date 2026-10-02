@@ -16,6 +16,7 @@ import {
 import { Save, Loader2, MessageCircle, UploadCloud } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
+import { auditService } from '@/services/audit'
 
 export function GeneralInfoTab({ patient }: { patient: Patient }) {
   const { toast } = useToast()
@@ -97,7 +98,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await api.updatePatient(patient.id, {
+      const patientUpdatePayload = {
         name: patientData.name,
         species: patientData.species,
         breed: patientData.breed,
@@ -110,9 +111,27 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
         deceased: patientData.deceased,
         status_notes: patientData.status_notes,
         ...(photoFile ? { photo: photoFile } : {}),
-      })
+      }
+
+      const patientDiff = auditService.computeDiff(patient, patientUpdatePayload)
+
+      await api.updatePatient(patient.id, patientUpdatePayload)
+
+      if (Object.keys(patientDiff).length > 0) {
+        auditService.log({
+          action: 'update',
+          module: 'patients',
+          recordId: patient.id,
+          recordLabel: patientData.name,
+          patientName: patientData.name,
+          tutorName: tutor?.name || tutorData.name,
+          changes: patientDiff,
+          details: `Atualização dos dados gerais do paciente ${patientData.name} (${Object.keys(patientDiff).length} campos alterados)`,
+        })
+      }
+
       if (tutor) {
-        await api.updateTutor(tutor.id, {
+        const tutorUpdatePayload = {
           name: tutorData.name,
           phone: tutorData.phone,
           phone_secondary: tutorData.phone_secondary,
@@ -126,7 +145,24 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           state: tutorData.state,
           neighborhood: tutorData.neighborhood,
           indication: tutorData.indication,
-        })
+        }
+
+        const tutorDiff = auditService.computeDiff(tutor, tutorUpdatePayload)
+
+        await api.updateTutor(tutor.id, tutorUpdatePayload)
+
+        if (Object.keys(tutorDiff).length > 0) {
+          auditService.log({
+            action: 'update',
+            module: 'tutors',
+            recordId: tutor.id,
+            recordLabel: tutorData.name,
+            tutorName: tutorData.name,
+            patientName: patientData.name,
+            changes: tutorDiff,
+            details: `Atualização de dados cadastrais do tutor ${tutorData.name} via ficha do paciente`,
+          })
+        }
       }
       toast({ title: 'Sucesso', description: 'Dados gerais atualizados com sucesso.' })
     } catch (err) {

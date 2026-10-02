@@ -51,6 +51,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
+import { auditService } from '@/services/audit'
 
 const openWhatsApp = (phone: string) => {
   const cleanPhone = phone?.replace(/\D/g, '') || ''
@@ -242,6 +243,7 @@ export default function Patients() {
     setErrors({})
     try {
       let finalTutorId = formData.tutorId
+      let createdTutorName = ''
       if (tutorMode === 'new') {
         if (!formData.newTutorName) throw new Error('Nome do tutor é obrigatório')
         const newTutor = await api.createTutor({
@@ -251,10 +253,30 @@ export default function Patients() {
           cpf: formData.newTutorCpf,
         })
         finalTutorId = newTutor.id
+        createdTutorName = newTutor.name
+
+        // Auditoria: Criação de novo tutor
+        auditService.log({
+          action: 'create',
+          module: 'tutors',
+          recordId: newTutor.id,
+          recordLabel: newTutor.name,
+          tutorName: newTutor.name,
+          changes: {
+            name: { label: 'Nome', oldValue: null, newValue: newTutor.name },
+            phone: { label: 'Telefone', oldValue: null, newValue: newTutor.phone },
+            email: { label: 'E-mail', oldValue: null, newValue: newTutor.email },
+            cpf: { label: 'CPF', oldValue: null, newValue: newTutor.cpf },
+          },
+          details: `Novo tutor cadastrado: ${newTutor.name}`,
+        })
+      } else {
+        const found = selectableTutors.find((t) => t.id === finalTutorId)
+        createdTutorName = found?.name || ''
       }
       if (!finalTutorId) throw new Error('Selecione um tutor')
 
-      await api.createPatient({
+      const newPatient = await api.createPatient({
         name: formData.name,
         species: formData.species,
         breed: formData.breed,
@@ -263,6 +285,25 @@ export default function Patients() {
         weight: parseFloat(formData.weight) || 0,
         tutor_id: finalTutorId,
       })
+
+      // Auditoria: Criação de novo paciente
+      auditService.log({
+        action: 'create',
+        module: 'patients',
+        recordId: newPatient.id,
+        recordLabel: newPatient.name,
+        patientName: newPatient.name,
+        tutorName: createdTutorName,
+        changes: {
+          name: { label: 'Nome', oldValue: null, newValue: newPatient.name },
+          species: { label: 'Espécie', oldValue: null, newValue: newPatient.species },
+          breed: { label: 'Raça', oldValue: null, newValue: newPatient.breed },
+          gender: { label: 'Sexo', oldValue: null, newValue: newPatient.gender },
+          weight: { label: 'Peso (kg)', oldValue: null, newValue: newPatient.weight },
+        },
+        details: `Novo paciente cadastrado: ${newPatient.name} (${newPatient.species} / ${newPatient.breed || '-'}) vinculado a ${createdTutorName || 'tutor existente'}`,
+      })
+
       setIsSheetOpen(false)
       setFormData({
         tutorId: '',
@@ -346,7 +387,7 @@ export default function Patients() {
     setTutorEditLoading(true)
     setTutorEditErrors({})
     try {
-      await api.updateTutor(editingTutor.id, {
+      const updatePayload = {
         name: tutorEditData.name.trim(),
         phone: tutorEditData.phone.trim(),
         phone_secondary: tutorEditData.phone_secondary.trim(),
@@ -360,7 +401,24 @@ export default function Patients() {
         state: tutorEditData.state.trim().toUpperCase(),
         indication: tutorEditData.indication.trim(),
         additional_info: tutorEditData.additional_info.trim(),
-      })
+      }
+
+      const diff = auditService.computeDiff(editingTutor, updatePayload)
+
+      await api.updateTutor(editingTutor.id, updatePayload)
+
+      // Auditoria: Edição de tutor
+      if (Object.keys(diff).length > 0) {
+        auditService.log({
+          action: 'update',
+          module: 'tutors',
+          recordId: editingTutor.id,
+          recordLabel: updatePayload.name,
+          tutorName: updatePayload.name,
+          changes: diff,
+          details: `Alteração de dados cadastrais do tutor ${updatePayload.name} (${Object.keys(diff).length} campos alterados)`,
+        })
+      }
 
       toast({ title: 'Sucesso', description: 'Dados do tutor atualizados com sucesso.' })
       setIsEditTutorOpen(false)

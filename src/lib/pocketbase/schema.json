@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T20:45:08.245Z",
+  "generatedAt": "2026-10-02T12:28:33.332Z",
   "collections": [
     {
       "name": "users",
@@ -831,6 +831,115 @@
         "CREATE INDEX idx_import_failures_linha ON import_failures (linha)",
         "CREATE INDEX idx_import_failures_ctrl ON import_failures (ctrl)",
         "CREATE INDEX idx_import_failures_status ON import_failures (status)"
+      ]
+    },
+    {
+      "name": "audit_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "view": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "create": "@request.auth.id != ''",
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "user_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "user_email",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user_role",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "action",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["create", "update", "delete", "mark_completed", "reopen"]
+        },
+        {
+          "name": "module",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["patients", "tutors", "clinical_records", "returns"]
+        },
+        {
+          "name": "record_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "record_label",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "patient_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tutor_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "changes",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "details",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_user_id ON audit_logs (user_id)",
+        "CREATE INDEX idx_audit_action ON audit_logs (action)",
+        "CREATE INDEX idx_audit_module ON audit_logs (module)",
+        "CREATE INDEX idx_audit_created ON audit_logs (created DESC)",
+        "CREATE INDEX idx_audit_record_id ON audit_logs (record_id)"
       ]
     }
   ]

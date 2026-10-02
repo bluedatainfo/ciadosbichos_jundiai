@@ -133,7 +133,29 @@ export const api = {
     return pb.collection('patients').update(id, formData)
   },
   createPatient: (data: any) => pb.collection('patients').create(data),
-  deletePatient: (id: string) => pb.collection('patients').delete(id),
+  deletePatient: async (id: string) => {
+    // Buscar antes de excluir para salvar detalhes na auditoria
+    let patientData: any = null
+    try {
+      patientData = await pb.collection('patients').getOne(id, { expand: 'tutor_id' })
+    } catch {
+      /* intentionally ignored */
+    }
+    const res = await pb.collection('patients').delete(id)
+    if (patientData) {
+      const { auditService } = await import('@/services/audit')
+      auditService.log({
+        action: 'delete',
+        module: 'patients',
+        recordId: id,
+        recordLabel: patientData.name || 'Paciente',
+        patientName: patientData.name || '',
+        tutorName: patientData.expand?.tutor_id?.name || '',
+        details: `Exclusão do paciente ${patientData.name || id} (${patientData.species || ''} / ${patientData.breed || ''})`,
+      })
+    }
+    return res
+  },
 
   getTutors: (search?: string) => {
     const clean = search?.trim().replace(/"/g, '\\"') || ''
@@ -187,6 +209,27 @@ export const api = {
   },
   updateTutor: (id: string, data: any) => pb.collection('tutors').update(id, data),
   createTutor: (data: any) => pb.collection('tutors').create(data),
+  deleteTutor: async (id: string) => {
+    let tutorData: any = null
+    try {
+      tutorData = await pb.collection('tutors').getOne(id)
+    } catch {
+      /* intentionally ignored */
+    }
+    const res = await pb.collection('tutors').delete(id)
+    if (tutorData) {
+      const { auditService } = await import('@/services/audit')
+      auditService.log({
+        action: 'delete',
+        module: 'tutors',
+        recordId: id,
+        recordLabel: tutorData.name || 'Tutor',
+        tutorName: tutorData.name || '',
+        details: `Exclusão do tutor ${tutorData.name || id} (CPF: ${tutorData.cpf || '-'}, Tel: ${tutorData.phone || '-'})`,
+      })
+    }
+    return res
+  },
 
   getClinicalRecords: (patientId: string) =>
     pb
@@ -214,7 +257,30 @@ export const api = {
     }
     return pb.collection('clinical_records').update<ClinicalRecord>(id, formData)
   },
-  deleteClinicalRecord: (id: string) => pb.collection('clinical_records').delete(id),
+  deleteClinicalRecord: async (id: string) => {
+    let recordData: any = null
+    try {
+      recordData = await pb
+        .collection('clinical_records')
+        .getOne(id, { expand: 'patient_id.tutor_id' })
+    } catch {
+      /* intentionally ignored */
+    }
+    const res = await pb.collection('clinical_records').delete(id)
+    if (recordData) {
+      const { auditService } = await import('@/services/audit')
+      auditService.log({
+        action: 'delete',
+        module: 'clinical_records',
+        recordId: id,
+        recordLabel: `Evolução clínica de ${recordData.expand?.patient_id?.name || id}`,
+        patientName: recordData.expand?.patient_id?.name || '',
+        tutorName: recordData.expand?.patient_id?.expand?.tutor_id?.name || '',
+        details: `Exclusão de evolução clínica. Diagnóstico: ${recordData.diagnosis || '-'} | Tratamento: ${recordData.treatment || '-'}`,
+      })
+    }
+    return res
+  },
 
   getAppointments: (
     params?: string | { patientId?: string; status?: string; startDate?: Date; endDate?: Date },

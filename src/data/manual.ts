@@ -1066,6 +1066,108 @@ export const MANUAL_MODULES: ManualModule[] = [
       'Nunca compartilhe a mesma conta de Administrador entre todos os colaboradores; crie logins individuais para manter a rastreabilidade do prontuário.',
     ],
   },
+  {
+    id: 'auditoria',
+    title: 'Auditoria e Rastreabilidade',
+    shortDescription:
+      'Controle por usuário com registro e histórico detalhado de tudo o que cada veterinário e operador realizou no sistema, exclusivo para o perfil Administrador.',
+    routePatterns: ['/auditoria'],
+    iconName: 'ShieldCheck',
+    overview: {
+      purpose:
+        'O módulo de Auditoria foi desenvolvido especificamente para os proprietários da clínica veterinária e gestores administrativos acompanharem com precisão o que cada profissional logado executou.',
+      targetUsers: 'Apenas Administradores (Proprietários da clínica e gestores de TI).',
+      keyFeatures: [
+        'Rastreabilidade total: registra quem fez, quando fez, qual paciente/tutor e exatamente quais campos foram alterados.',
+        'Foco clínico: registro das prescrições médicas, evoluções clínicas, diagnósticos e tratamentos aplicados por cada veterinário.',
+        'Controle completo dos retornos: inclusões, edições de datas/histórico, baixas ("Marcar como realizado") e reaberturas.',
+        'Paginação direta no servidor (PocketBase), suportando bases massivas sem lentidão no navegador.',
+        'Impressão e geração de PDF A4 com cabeçalho personalizado da clínica e repetição de colunas.',
+      ],
+    },
+    subtopics: [
+      {
+        id: 'quem-acessa-auditoria',
+        title: 'Quem acessa a tela de Auditoria',
+        description:
+          'O acesso é EXCLUSIVO para usuários com perfil "Administrador" (proprietários e responsáveis técnicos). Os perfis Veterinário e Atendente não visualizam o botão no menu e têm a rota /auditoria protegida por redirecionamento automático.',
+      },
+      {
+        id: 'escopo-auditoria',
+        title: 'Escopo auditado no sistema',
+        description:
+          'O sistema registra automaticamente as seguintes operações:\n• Pacientes: cadastro de novos animais, alterações de dados cadastrais e exclusões.\n• Tutores: inclusões, alterações de telefones/endereço/documentos e exclusões.\n• Ficha Clínica: evolução clínica, diagnósticos e prescrições de tratamentos (interesse central dos proprietários sobre o que foi prescrito por cada veterinário).\n• Agenda de Retornos: agendamentos, edições de prazos/motivos, "Marcar como realizado" e "Reabrir" (tanto na ficha do paciente quanto no Dashboard).\n\nNÃO são auditados: cadastros de usuários, importações e configurações gerais do sistema.',
+      },
+      {
+        id: 'comparativo-diff',
+        title: 'Comparativo de Alterações (Diff)',
+        description:
+          'Ao clicar no ícone de "olho" na tabela de auditoria, uma janela exibe o comparativo detalhado da alteração: campo por campo, com o valor anterior e o novo valor salvo pelo usuário.',
+      },
+      {
+        id: 'filtros-paginacao-servidor',
+        title: 'Filtros e Paginação no Servidor',
+        description:
+          'Você pode filtrar por:\n• Usuário específico (selecione qualquer veterinário ou colaborador cadastrado);\n• Módulo (Ficha Clínica, Agenda de Retornos, Pacientes, Tutores);\n• Tipo de ação (Criou, Alterou, Excluiu, Marcou Realizado, Reabriu);\n• Período (data inicial e data final);\n• Busca livre por texto (paciente, tutor ou observação).\nA paginação é processada no servidor PocketBase, garantindo rapidez mesmo com dezenas de milhares de registros.',
+      },
+      {
+        id: 'impressao-pdf-a4',
+        title: 'Impressão e Relatório em PDF A4',
+        description:
+          'O botão "Imprimir / Gerar PDF A4" formata a listagem no padrão oficial dos relatórios da clínica (margens A4 portrait, cabeçalho institucional com nome e contato, quebra de página inteligente e repetição dos títulos de colunas no topo de cada folha).',
+      },
+    ],
+    fields: [
+      {
+        name: 'Usuário',
+        description:
+          'Nome, e-mail e papel do profissional logado no momento em que a ação foi efetuada.',
+      },
+      {
+        name: 'Data / Hora',
+        description: 'Timestamp oficial do servidor indicando o momento exato da gravação.',
+      },
+      {
+        name: 'Módulo',
+        description:
+          'Área do sistema afetada: Pacientes, Tutores, Ficha Clínica ou Agenda de Retornos.',
+      },
+      {
+        name: 'Ação',
+        description: 'Operação realizada: Criou, Alterou, Excluiu, Marcou Realizado ou Reabriu.',
+      },
+      {
+        name: 'Registro Afetado',
+        description: 'Identificação humana do paciente e tutor vinculados ao atendimento.',
+      },
+      {
+        name: 'Diferencial (Changes JSON)',
+        description:
+          'Objeto estruturado com cada campo modificado e seus respectivos valores antigos e novos.',
+      },
+    ],
+    workflows: [
+      {
+        title: 'Como verificar as prescrições e atendimentos de um veterinário específico',
+        description:
+          '1. No menu lateral, acesse "Auditoria" (apenas visível para Administradores).\n2. No filtro "Usuário", selecione o veterinário desejado.\n3. No filtro "Módulo", escolha "Ficha Clínica (Evolução/Prescrição)".\n4. Se desejar, selecione um período de datas (ex.: última semana).\n5. A tabela exibirá todas as evoluções e prescrições lançadas ou editadas pelo profissional.\n6. Clique no botão de olho (Detalhes) para inspecionar os medicamentos prescritos e diagnósticos gravados.',
+      },
+      {
+        title: 'Como auditar baixas e reaberturas de retornos',
+        description:
+          '1. Acesse o menu "Auditoria".\n2. No filtro "Módulo", selecione "Agenda de Retornos".\n3. No filtro "Ação", selecione "Marcou Realizado" ou "Reabriu".\n4. Veja instantaneamente qual usuário deu baixa ou reabriu cada retorno, com data e hora exatas.',
+      },
+      {
+        title: 'Como exportar ou imprimir o relatório de auditoria',
+        description:
+          '1. Aplique os filtros desejados (usuário, módulo ou período).\n2. Clique no botão "Imprimir / Gerar PDF A4" no canto superior direito.\n3. Na janela do navegador, escolha a impressora ou "Salvar como PDF" em formato A4.',
+      },
+    ],
+    tips: [
+      'A auditoria é gravada de modo síncrono e não-bloqueante: mesmo em caso de instabilidade de rede para gravação do log, o atendimento clínico do veterinário nunca é interrompido.',
+      'Os logs de auditoria são imutáveis no banco de dados e não podem ser apagados ou alterados por nenhum usuário pela aplicação.',
+    ],
+  },
 ]
 
 /**

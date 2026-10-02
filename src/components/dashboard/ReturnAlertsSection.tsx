@@ -36,6 +36,7 @@ import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { auditService } from '@/services/audit'
 import { cn } from '@/lib/utils'
 
 const openWhatsApp = (phone: string, patientName: string) => {
@@ -159,9 +160,31 @@ export function ReturnAlertsSection() {
     if (!editingAlert || !editingAlert.vaccineId) return
     setEditSubmitting(true)
     try {
+      const newName = editFormData.notes.trim() || 'Retorno'
+      const newDate = editFormData.date
+        ? new Date(editFormData.date + 'T12:00:00.000Z').toISOString()
+        : ''
+
+      const diff = auditService.computeDiff(
+        { notes: editingAlert.description, date: editingAlert.returnDate },
+        { notes: newName, date: newDate },
+      )
+
       await api.updateVaccine(editingAlert.vaccineId, {
-        name: editFormData.notes.trim() || 'Retorno',
-        date: editFormData.date ? new Date(editFormData.date + 'T12:00:00.000Z').toISOString() : '',
+        name: newName,
+        date: newDate,
+      })
+
+      // Auditoria: Edição de retorno no Dashboard
+      auditService.log({
+        action: 'update',
+        module: 'returns',
+        recordId: editingAlert.vaccineId,
+        recordLabel: `Retorno de ${editingAlert.patientName}`,
+        patientName: editingAlert.patientName,
+        tutorName: editingAlert.tutorName,
+        changes: diff,
+        details: `Edição de retorno do paciente ${editingAlert.patientName} pelo Dashboard. Nova descrição: ${newName}`,
       })
 
       const alertId = editingAlert.id
@@ -190,6 +213,27 @@ export function ReturnAlertsSection() {
     setMarkingAlertId(alert.id)
     try {
       await api.updateVaccine(alert.vaccineId, { completed: markAs })
+
+      // Auditoria: Marcar como realizado ou Reabrir no Dashboard
+      auditService.log({
+        action: markAs ? 'mark_completed' : 'reopen',
+        module: 'returns',
+        recordId: alert.vaccineId,
+        recordLabel: `Retorno de ${alert.patientName}`,
+        patientName: alert.patientName,
+        tutorName: alert.tutorName,
+        changes: {
+          completed: {
+            label: 'Status do Retorno',
+            oldValue: markAs ? 'Pendente' : 'Realizado',
+            newValue: markAs ? 'Realizado' : 'Pendente',
+          },
+        },
+        details: markAs
+          ? `Retorno do paciente ${alert.patientName} marcado como REALIZADO pelo Dashboard.`
+          : `Retorno do paciente ${alert.patientName} REABERTO como pendente pelo Dashboard.`,
+      })
+
       if (justSavedAlertId === alert.id) {
         setJustSavedAlertId(null)
       }

@@ -37,6 +37,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { format, parseISO, differenceInCalendarDays, startOfDay } from 'date-fns'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { auditService } from '@/services/audit'
 
 export type ReturnItemSituation = 'overdue' | 'due_soon' | 'completed' | 'normal'
 
@@ -151,6 +152,26 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
 
       const created = await api.createVaccine(payload)
 
+      // Auditoria: Inclusão de retorno
+      auditService.log({
+        action: 'create',
+        module: 'returns',
+        recordId: created.id,
+        recordLabel: `Retorno de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: {
+          date: {
+            label: 'Data Prevista',
+            oldValue: null,
+            newValue: payload.date ? format(new Date(payload.date), 'dd/MM/yyyy') : 'Sem data',
+          },
+          notes: { label: 'Histórico / Descrição', oldValue: null, newValue: payload.name },
+          completed: { label: 'Realizado', oldValue: null, newValue: 'Não' },
+        },
+        details: `Inclusão de retorno para o paciente ${patient.name}. Motivo: ${payload.name}`,
+      })
+
       setIsDialogOpen(false)
       setFormData({ date: '', notes: '' })
       // Se foi cadastrado sem data ou com data pendente, oferece o botão rápido de marcar como realizado
@@ -200,7 +221,24 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
         date: editFormData.date ? new Date(editFormData.date + 'T12:00:00.000Z').toISOString() : '',
       }
 
+      const diff = auditService.computeDiff(
+        { name: editingItem.name, date: editingItem.date },
+        { name: payload.name, date: payload.date },
+      )
+
       await api.updateVaccine(editingItem.id, payload)
+
+      // Auditoria: Edição de retorno
+      auditService.log({
+        action: 'update',
+        module: 'returns',
+        recordId: editingItem.id,
+        recordLabel: `Retorno de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: diff,
+        details: `Edição de retorno do paciente ${patient.name}. Nova descrição: ${payload.name}`,
+      })
 
       const savedId = editingItem.id
       setEditingItem(null)
@@ -228,6 +266,27 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
     setMarkingId(item.id)
     try {
       await api.updateVaccine(item.id, { completed: markAs })
+
+      // Auditoria: Marcar como realizado ou Reabrir
+      auditService.log({
+        action: markAs ? 'mark_completed' : 'reopen',
+        module: 'returns',
+        recordId: item.id,
+        recordLabel: `Retorno de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: {
+          completed: {
+            label: 'Status do Retorno',
+            oldValue: markAs ? 'Pendente' : 'Realizado',
+            newValue: markAs ? 'Realizado' : 'Pendente',
+          },
+        },
+        details: markAs
+          ? `Retorno do paciente ${patient.name} marcado como REALIZADO.`
+          : `Retorno do paciente ${patient.name} REABERTO como pendente.`,
+      })
+
       // Se acabou de marcar como realizado, remove o estado justSavedId
       if (justSavedId === item.id) {
         setJustSavedId(null)

@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
+import { auditService } from '@/services/audit'
 
 export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   const { user } = useAuth()
@@ -53,7 +54,40 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
     e.preventDefault()
     setLoading(true)
     try {
-      await api.createClinicalRecord({ patient_id: patient.id, ...formData, files })
+      const createdRecord = await api.createClinicalRecord({
+        patient_id: patient.id,
+        ...formData,
+        files,
+      })
+
+      // Auditoria: Lançamento de nova evolução / prescrição
+      auditService.log({
+        action: 'create',
+        module: 'clinical_records',
+        recordId: createdRecord?.id || '',
+        recordLabel: `Evolução clínica de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: {
+          description: {
+            label: 'Queixa / Evolução',
+            oldValue: null,
+            newValue: formData.description,
+          },
+          diagnosis: {
+            label: 'Diagnóstico',
+            oldValue: null,
+            newValue: formData.diagnosis || 'Não informado',
+          },
+          treatment: {
+            label: 'Tratamento Prescrito',
+            oldValue: null,
+            newValue: formData.treatment || 'Não informado',
+          },
+        },
+        details: `Nova evolução clínica registrada para ${patient.name}. Prescrição: ${formData.treatment || 'Sem prescrição informada'}`,
+      })
+
       setIsDialogOpen(false)
       setFormData({ description: '', diagnosis: '', treatment: '' })
       setFiles([])
@@ -115,7 +149,22 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
         payload.created = new Date(editFormData.date).toISOString()
       }
 
+      const diff = auditService.computeDiff(editingRecord, payload)
+
       await api.updateClinicalRecord(editingRecord.id, payload)
+
+      // Auditoria: Edição de evolução clínica / prescrição
+      auditService.log({
+        action: 'update',
+        module: 'clinical_records',
+        recordId: editingRecord.id,
+        recordLabel: `Evolução clínica de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: diff,
+        details: `Alteração de evolução clínica / prescrição de ${patient.name}. Nova prescrição: ${payload.treatment || '-'}`,
+      })
+
       setIsEditDialogOpen(false)
       setEditingRecord(null)
       toast({

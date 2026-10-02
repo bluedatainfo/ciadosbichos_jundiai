@@ -42,6 +42,7 @@ import {
   BookOpen,
   FileBarChart,
   ChevronDown,
+  ShieldCheck,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -101,6 +102,7 @@ const menuItems = [
     icon: Package,
     roles: ['admin', 'veterinarian', 'attendant'],
   },
+  { title: 'Auditoria', path: '/auditoria', icon: ShieldCheck, roles: ['admin'] },
   { title: 'Equipe & Usuários', path: '/usuarios', icon: UserCog, roles: ['admin'] },
   { title: 'Importação de Dados', path: '/importacao', icon: Upload, roles: ['admin'] },
   { title: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },

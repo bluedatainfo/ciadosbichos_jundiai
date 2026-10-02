@@ -36,6 +36,7 @@ import {
   Cake,
   Syringe,
   BarChart3,
+  ShieldCheck,
 } from 'lucide-react'
 
 // Mapa de ícones correspondente às strings de iconName
@@ -53,6 +54,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Cake,
   Syringe,
   BarChart3,
+  ShieldCheck,
 }
 
 export function ManualSheet() {
