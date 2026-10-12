@@ -8,6 +8,12 @@ import {
   AccessImportReport as AccessImportReportType,
 } from '@/services/access-import'
 import {
+  ServerImportFinalReport,
+  ServerImportProgress,
+  serverImportPipelineService,
+} from '@/services/server-import-pipeline'
+import { ServerImportReportView } from '@/components/import/ServerImportReportView'
+import {
   incrementalSyncService,
   SyncBalanceSummary,
   SyncProgress,
@@ -59,11 +65,13 @@ import {
   GitCompare,
   Pause,
   ShieldCheck,
+  Zap,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 
-type ImportMode = 'access_legacy' | 'standard' | 'incremental_sync'
+type ImportMode = 'server_reload' | 'access_legacy' | 'standard' | 'incremental_sync'
 type Step = 'select' | 'upload' | 'map' | 'preview' | 'sync_balance' | 'importing' | 'report'
 type AccessBatchSelection = 'range' | '50' | '200' | 'full'
 
@@ -75,13 +83,19 @@ const ENTITY_ICONS = {
 
 export default function Import() {
   const { toast } = useToast()
-  const [mode, setMode] = useState<ImportMode>('access_legacy')
+  const [mode, setMode] = useState<ImportMode>('server_reload')
   const [step, setStep] = useState<Step>('select')
   const [entityType, setEntityType] = useState<EntityType | null>(null)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [fileName, setFileName] = useState('')
   const [fileCount, setFileCount] = useState<number>(1)
   const [mapping, setMapping] = useState<Record<string, string>>({})
+
+  // Estados do Pipeline de Servidor (Wipe Prévio + Recarga Completa)
+  const [serverImportProgress, setServerImportProgress] = useState<ServerImportProgress | null>(
+    null,
+  )
+  const [serverImportReport, setServerImportReport] = useState<ServerImportFinalReport | null>(null)
 
   // Opções para importação do Access
   const [batchSelection, setBatchSelection] = useState<AccessBatchSelection>('range')
@@ -178,31 +192,39 @@ export default function Import() {
         if (result.headers.length === 0) return
       }
 
-      // Se estamos no modo Access legado OU se detectamos os cabeçalhos do Access
+      // Se estamos no modo de recarga no servidor (padrão)
       const detectedAccess = isAccessHeader(result.headers)
-      if (
-        (mode as ImportMode) === 'incremental_sync' ||
-        (detectedAccess && (mode as ImportMode) === 'incremental_sync')
-      ) {
-        setMode('incremental_sync')
-        setStep('preview')
-        setRangeStart(1)
-        setRangeEnd(Math.min(result.rows.length, 1000))
-        toast({
-          title: 'Arquivos Carregados para Sincronização',
-          description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados em ${files.length} partes.`,
-        })
-        return
-      }
+      if (mode === 'server_reload' || detectedAccess) {
+        if (mode === 'incremental_sync') {
+          setMode('incremental_sync')
+          setStep('preview')
+          setRangeStart(1)
+          setRangeEnd(Math.min(result.rows.length, 1000))
+          toast({
+            title: 'Arquivos Carregados para Sincronização',
+            description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados em ${files.length} partes.`,
+          })
+          return
+        }
 
-      if (mode === 'access_legacy' || detectedAccess) {
-        setMode('access_legacy')
+        if (mode === 'access_legacy') {
+          setMode('access_legacy')
+          setStep('preview')
+          setRangeStart(1)
+          setRangeEnd(Math.min(result.rows.length, 1000))
+          toast({
+            title: 'Arquivo Access Detectado',
+            description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados a partir de ${files.length} partes.`,
+          })
+          return
+        }
+
+        // Padrão: server_reload
+        setMode('server_reload')
         setStep('preview')
-        setRangeStart(1)
-        setRangeEnd(Math.min(result.rows.length, 1000))
         toast({
-          title: 'Arquivo Access Detectado',
-          description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados a partir de ${files.length} partes.`,
+          title: 'Arquivo Completo Carregado',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para limpeza prévia e recarga oficial no servidor.`,
         })
         return
       }
@@ -258,49 +280,57 @@ export default function Import() {
         console.warn('Erro ao verificar suite de testes:', tErr)
       }
 
-      // Se estamos no modo Access legado OU se detectamos os cabeçalhos do Access
+      // Se estamos no modo de recarga no servidor (padrão)
       const detectedAccess = isAccessHeader(result.headers)
-      if (
-        (mode as ImportMode) === 'incremental_sync' ||
-        (detectedAccess && (mode as ImportMode) === 'incremental_sync')
-      ) {
-        setMode('incremental_sync')
-        setStep('preview')
-        setRangeStart(1)
-        setRangeEnd(Math.min(result.rows.length, 1000))
-        toast({
-          title: 'Arquivo Carregado para Sincronização',
-          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para comparação incremental.`,
-        })
-        return
-      }
+      if (mode === 'server_reload' || detectedAccess) {
+        if (mode === 'incremental_sync') {
+          setMode('incremental_sync')
+          setStep('preview')
+          setRangeStart(1)
+          setRangeEnd(Math.min(result.rows.length, 1000))
+          toast({
+            title: 'Arquivo Carregado para Sincronização',
+            description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para comparação incremental.`,
+          })
+          return
+        }
 
-      if (mode === 'access_legacy' || detectedAccess) {
-        setMode('access_legacy')
-        setStep('preview')
+        if (mode === 'access_legacy') {
+          setMode('access_legacy')
+          setStep('preview')
 
-        // Checar progresso prévio deste arquivo
-        try {
-          const prev = await importProgressService.getLatestProgress(file.name)
-          setSavedProgress(prev)
-          if (prev && prev.last_processed_line > 0) {
-            const nextStart = prev.last_processed_line + 1
-            const nextEnd = Math.min(result.rows.length, nextStart + 999)
-            setRangeStart(nextStart)
-            setRangeEnd(nextEnd)
-            setBatchSelection('range')
-          } else {
+          // Checar progresso prévio deste arquivo
+          try {
+            const prev = await importProgressService.getLatestProgress(file.name)
+            setSavedProgress(prev)
+            if (prev && prev.last_processed_line > 0) {
+              const nextStart = prev.last_processed_line + 1
+              const nextEnd = Math.min(result.rows.length, nextStart + 999)
+              setRangeStart(nextStart)
+              setRangeEnd(nextEnd)
+              setBatchSelection('range')
+            } else {
+              setRangeStart(1)
+              setRangeEnd(Math.min(result.rows.length, 1000))
+            }
+          } catch (_) {
             setRangeStart(1)
             setRangeEnd(Math.min(result.rows.length, 1000))
           }
-        } catch (_) {
-          setRangeStart(1)
-          setRangeEnd(Math.min(result.rows.length, 1000))
+
+          toast({
+            title: 'Arquivo Access Detectado',
+            description: `${result.rows.length.toLocaleString('pt-BR')} registros carregados com sucesso.`,
+          })
+          return
         }
 
+        // Padrão: server_reload
+        setMode('server_reload')
+        setStep('preview')
         toast({
-          title: 'Arquivo Access Detectado',
-          description: `${result.rows.length.toLocaleString('pt-BR')} registros carregados com sucesso.`,
+          title: 'Arquivo Completo Carregado',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para limpeza prévia e recarga oficial no servidor.`,
         })
         return
       }
@@ -321,6 +351,64 @@ export default function Import() {
     },
     [entityType, mode, toast],
   )
+
+  // Executar a Carga Oficial pelo Pipeline de Servidor (Wipe Primeiro, Depois Carga)
+  const handleStartServerReload = async () => {
+    if (!parseResult || !parseResult.rows.length) return
+
+    const confirmMsg =
+      'ATENÇÃO: Esta ação executará a limpeza completa (wipe) de pacientes, tutores, prontuários, vacinas, retornos e logs de teste no banco de dados, preservando exclusivamente o administrador bluedata@bluedatainfo.com.br. Em seguida, o arquivo completo será importado diretamente no servidor. Deseja prosseguir?'
+
+    if (!confirm(confirmMsg)) {
+      return
+    }
+
+    setStep('importing')
+    setServerImportProgress({
+      phase: 'wiping',
+      current: 0,
+      total: parseResult.rows.length,
+      percent: 0,
+      statusMessage: 'Iniciando limpeza prévia da base no servidor...',
+      counts: {
+        tutorsCreated: 0,
+        tutorsReused: 0,
+        patientsCreated: 0,
+        patientsWithNume: 0,
+        patientsWithoutNume: 0,
+        clinicalCreated: 0,
+        vaccinesCreated: 0,
+        appointmentsCreated: 0,
+        failed: 0,
+      },
+    })
+
+    try {
+      const finalRep = await serverImportPipelineService.executeFullServerImport(parseResult.rows, {
+        batchSize: 200,
+        onProgress: (p) => {
+          setServerImportProgress(p)
+        },
+      })
+
+      setServerImportReport(finalRep)
+      setStep('report')
+      toast({
+        title: finalRep.success
+          ? 'Recarga Oficial Concluída com Sucesso!'
+          : 'Recarga Concluída com Pendências',
+        description: `${finalRep.counts.patientsCreated} pacientes (${finalRep.counts.patientsWithNume} com NUME, ${finalRep.counts.patientsWithoutNume} sem NUME) e ${finalRep.counts.tutorsCreated} tutores criados.`,
+      })
+    } catch (err: any) {
+      console.error('Falha no pipeline de servidor:', err)
+      toast({
+        title: 'Erro na recarga de servidor',
+        description: err.message || 'Falha ao executar pipeline no servidor.',
+        variant: 'destructive',
+      })
+      setStep('preview')
+    }
+  }
 
   const handleStartAccessImport = async () => {
     if (!parseResult) return
@@ -576,10 +664,13 @@ export default function Import() {
     setStep('select')
     setEntityType(null)
     setMapping({})
+    setMode('server_reload')
     setStandardProgress(0)
     setStandardReport(null)
     setAccessProgress(null)
     setAccessReport(null)
+    setServerImportProgress(null)
+    setServerImportReport(null)
     setSyncBalance(null)
     setSyncProgress(null)
     setSyncReport(null)
@@ -648,47 +739,86 @@ export default function Import() {
 
       {step === 'select' && (
         <div className="space-y-6">
-          {/* Card em Destaque 1: Sincronização Incremental (Novo - Produção) */}
+          {/* Card em Destaque 1: Recarga Oficial no Servidor com Limpeza Prévia (Wipe Primeiro) */}
+          <Card
+            onClick={() => {
+              setMode('server_reload')
+              setStep('upload')
+            }}
+            className="cursor-pointer border-2 border-emerald-600 hover:border-emerald-700 hover:shadow-xl transition-all bg-gradient-to-r from-emerald-500/15 via-white to-emerald-500/5 p-2 group ring-1 ring-emerald-500/30"
+          >
+            <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md">
+                  <Zap className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xl font-bold text-slate-900">
+                      Recarga Oficial no Servidor (Arquivo Completo com NUME)
+                    </h3>
+                    <Badge className="bg-emerald-600 text-white font-semibold">
+                      Fluxo Oficial Recomendado
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
+                    <strong>1. Zera completamente a base</strong> de pacientes, tutores, fichas,
+                    vacinas, agendamentos e logs de teste (preserva apenas o administrador{' '}
+                    <code>bluedata@bluedatainfo.com.br</code> e as configurações da clínica).
+                    <br />
+                    <strong>2. Processa e grava o arquivo inteiro no servidor</strong> com os campos{' '}
+                    <code>nume</code>, <code>import_key</code> e <code>import_hash</code>,
+                    conferindo que 100% dos pacientes possuam NUME preenchido.
+                  </p>
+                  <p className="text-xs text-emerald-800 font-medium flex items-center gap-1.5 pt-1">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    Arquivo único enviado inteiro sem divisão em partes — alta performance direta no
+                    SQLite nativo.
+                  </p>
+                </div>
+              </div>
+              <Button className="shrink-0 gap-2 shadow-md bg-emerald-600 hover:bg-emerald-700 text-white group-hover:translate-x-1 transition-transform font-bold">
+                Iniciar Recarga Oficial <ArrowRight className="w-4 h-4" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Sincronização Incremental */}
           <Card
             onClick={() => {
               setMode('incremental_sync')
               setStep('upload')
             }}
-            className="cursor-pointer border-2 border-emerald-500/50 hover:border-emerald-600 hover:shadow-lg transition-all bg-gradient-to-r from-emerald-500/10 via-white to-transparent p-2 group"
+            className="cursor-pointer border border-slate-300 hover:border-slate-400 hover:shadow-md transition-all bg-white p-2 group"
           >
             <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0 group-hover:bg-slate-200 transition-colors shadow-sm">
                   <GitCompare className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-xl font-bold text-slate-900">
-                      Sincronização Incremental da Nova Base Oficial
+                      Sincronização Incremental (Pós-Carga Oficial)
                     </h3>
-                    <Badge className="bg-emerald-600 text-white font-semibold">
-                      Recomendado para Produção
+                    <Badge variant="outline" className="text-slate-600">
+                      Modo Comparativo
                     </Badge>
                   </div>
                   <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
-                    Compara a nova cópia oficial do Access com os dados já existentes no sistema.{' '}
-                    <strong>Pula registros idênticos</strong>,{' '}
-                    <strong>
-                      atualiza dados divergentes restaurando o arquivo oficial com log na Auditoria
-                    </strong>{' '}
-                    (&ldquo;vale o do arquivo&rdquo;) e{' '}
-                    <strong>importa apenas os registros novos</strong>. Não duplica dados nem
-                    recarrega desnecessariamente a base inteira.
-                  </p>
-                  <p className="text-xs text-emerald-800 font-medium flex items-center gap-1.5 pt-1">
-                    <Scale className="w-3.5 h-3.5 text-emerald-600" />
-                    Exibe relatório de balanceamento (idênticos / a atualizar / novos) para
-                    confirmação antes de gravar.
+                    Compara uma cópia do Access com os dados já existentes no sistema.{' '}
+                    <strong>Pula idênticos</strong>,{' '}
+                    <strong>atualiza divergentes com auditoria</strong> (&ldquo;vale o do
+                    arquivo&rdquo;) e <strong>cria novos</strong>. Deve ser executada apenas após
+                    conferir o preview e o relatório de balanceamento.
                   </p>
                 </div>
               </div>
-              <Button className="shrink-0 gap-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white group-hover:translate-x-1 transition-transform">
-                Iniciar Sincronização <ArrowRight className="w-4 h-4" />
+              <Button
+                variant="outline"
+                className="shrink-0 gap-2 shadow-sm group-hover:translate-x-1 transition-transform"
+              >
+                Sincronizar <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
           </Card>
@@ -773,7 +903,12 @@ export default function Import() {
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              {mode === 'access_legacy' ? (
+              {mode === 'server_reload' ? (
+                <>
+                  <Zap className="w-5 h-5 text-emerald-600" /> Enviar Arquivo Completo de 12/10
+                  (.csv ou .txt)
+                </>
+              ) : mode === 'access_legacy' ? (
                 <>
                   <Database className="w-5 h-5 text-primary" /> Enviar Arquivo Exportado do Access
                   2.0 (.csv ou .txt)
@@ -782,6 +917,12 @@ export default function Import() {
                 `Enviar arquivo — ${entityType ? ENTITY_LABELS[entityType] : ''}`
               )}
             </CardTitle>
+            {mode === 'server_reload' && (
+              <CardDescription className="text-xs">
+                Envie o arquivo completo de uma única vez (sem dividir em partes). O sistema fará a
+                limpeza prévia e a importação pelo servidor nativo.
+              </CardDescription>
+            )}
             {mode === 'access_legacy' && (
               <CardDescription className="text-xs">
                 Selecione o arquivo exportado como texto delimitado por vírgula (ex:{' '}
@@ -799,6 +940,73 @@ export default function Import() {
             <div className="flex justify-between pt-2">
               <Button variant="ghost" onClick={() => setStep('select')}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Passo PREVIEW (Modo Recarga Oficial no Servidor) */}
+      {step === 'preview' && mode === 'server_reload' && parseResult && (
+        <Card className="border-none shadow-sm space-y-6">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
+                  <Zap className="w-5 h-5 text-emerald-600" /> Prévia da Recarga Oficial no Servidor
+                </CardTitle>
+                <CardDescription>
+                  Confira as linhas lidas do arquivo completo antes de executar a limpeza prévia e o
+                  processamento no servidor.
+                </CardDescription>
+              </div>
+              <Badge
+                variant="outline"
+                className="w-fit text-xs bg-emerald-50 text-emerald-800 border-emerald-300 font-mono"
+              >
+                {fileName || 'Arquivo Oficial'} ({parseResult.rows.length.toLocaleString('pt-BR')}{' '}
+                linhas)
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <div className="p-4 rounded-xl border border-amber-300 bg-amber-50/70 space-y-2">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                Aviso de Limpeza Completa Prévia (Wipe Obrigatório)
+              </div>
+              <p className="text-xs text-amber-900 leading-relaxed">
+                Ao clicar em &ldquo;Zerar Base e Iniciar Carga no Servidor&rdquo;, o servidor
+                primeiro apagará completamente todas as duplicações e dados das cargas anteriores de
+                teste (pacientes, tutores, fichas, vacinas, retornos, agendamentos, logs de
+                auditoria e tabelas de trabalho de deduplicação). Apenas o usuário administrador{' '}
+                <strong>bluedata@bluedatainfo.com.br</strong> com a sua senha atual e as
+                configurações da clínica serão preservados.
+              </p>
+            </div>
+
+            {/* Prévia dos Dados */}
+            <AccessDataPreview
+              rows={parseResult.rows}
+              limit={50}
+              rangeStart={1}
+              rangeEnd={Math.min(50, parseResult.rows.length)}
+              isRangeMode={false}
+            />
+
+            {/* Ações Inferiores */}
+            <div className="flex justify-between items-center pt-2 flex-wrap gap-3">
+              <Button variant="ghost" onClick={() => setStep('upload')}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Escolher Outro Arquivo
+              </Button>
+              <Button
+                onClick={handleStartServerReload}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-lg font-bold px-6 text-sm"
+              >
+                <Zap className="w-4 h-4" />
+                Zerar Base e Iniciar Carga no Servidor (
+                {parseResult.rows.length.toLocaleString('pt-BR')} linhas)
               </Button>
             </div>
           </CardContent>
@@ -1556,49 +1764,94 @@ export default function Import() {
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
             <div className="text-center space-y-1">
               <p className="font-semibold text-lg text-slate-800">
-                {mode === 'incremental_sync'
-                  ? 'Aplicando Sincronização no Servidor (Alta Performance)...'
-                  : mode === 'access_legacy'
-                    ? 'Processando migração em lotes...'
-                    : 'Processando importação...'}
+                {mode === 'server_reload'
+                  ? serverImportProgress?.phase === 'wiping'
+                    ? 'Zerando Base de Dados e Preservando Administrador...'
+                    : 'Processando Recarga Completa no Servidor...'
+                  : mode === 'incremental_sync'
+                    ? 'Aplicando Sincronização no Servidor (Alta Performance)...'
+                    : mode === 'access_legacy'
+                      ? 'Processando migração em lotes...'
+                      : 'Processando importação...'}
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
-                {mode === 'incremental_sync'
-                  ? 'Processamento em tempo real direto no banco de dados (pb_hooks): sem requisições HTTP individuais e sem sofrer rate limit. Regra "vale o do arquivo" com auditoria campo a campo.'
-                  : mode === 'access_legacy'
-                    ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
-                    : 'Gravando registros no banco de dados.'}
+                {mode === 'server_reload'
+                  ? 'Execução 100% no servidor nativo (pb_hooks / SQLite): sem limites de requisição do navegador. Gravando tutores, pacientes com NUME, fichas e vacinas em transações atômicas.'
+                  : mode === 'incremental_sync'
+                    ? 'Processamento em tempo real direto no banco de dados (pb_hooks): sem requisições HTTP individuais e sem sofrer rate limit. Regra "vale o do arquivo" com auditoria campo a campo.'
+                    : mode === 'access_legacy'
+                      ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
+                      : 'Gravando registros no banco de dados.'}
               </p>
             </div>
 
             <div className="w-full max-w-md space-y-2">
               <Progress
                 value={
-                  mode === 'incremental_sync'
-                    ? syncProgress?.percent || 0
-                    : mode === 'access_legacy'
-                      ? accessProgress?.percent || 0
-                      : standardProgress
+                  mode === 'server_reload'
+                    ? serverImportProgress?.percent || 0
+                    : mode === 'incremental_sync'
+                      ? syncProgress?.percent || 0
+                      : mode === 'access_legacy'
+                        ? accessProgress?.percent || 0
+                        : standardProgress
                 }
                 className="w-full h-3"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {mode === 'incremental_sync'
-                    ? syncProgress?.statusMessage || 'Iniciando sincronização...'
-                    : mode === 'access_legacy'
-                      ? accessProgress?.statusMessage || 'Iniciando...'
-                      : `${standardProgress}% concluído`}
+                  {mode === 'server_reload'
+                    ? serverImportProgress?.statusMessage || 'Iniciando...'
+                    : mode === 'incremental_sync'
+                      ? syncProgress?.statusMessage || 'Iniciando sincronização...'
+                      : mode === 'access_legacy'
+                        ? accessProgress?.statusMessage || 'Iniciando...'
+                        : `${standardProgress}% concluído`}
                 </span>
                 <span className="font-semibold">
-                  {mode === 'incremental_sync'
-                    ? `${syncProgress?.percent || 0}%`
-                    : mode === 'access_legacy'
-                      ? `${accessProgress?.percent || 0}%`
-                      : `${standardProgress}%`}
+                  {mode === 'server_reload'
+                    ? `${serverImportProgress?.percent || 0}%`
+                    : mode === 'incremental_sync'
+                      ? `${syncProgress?.percent || 0}%`
+                      : mode === 'access_legacy'
+                        ? `${accessProgress?.percent || 0}%`
+                        : `${standardProgress}%`}
                 </span>
               </div>
             </div>
+
+            {/* Contadores ao vivo do modo server_reload */}
+            {mode === 'server_reload' && serverImportProgress && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-xl mt-4 text-center">
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-blue-700">
+                    {serverImportProgress.counts.tutorsCreated.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Tutores Criados</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-emerald-700">
+                    {serverImportProgress.counts.patientsCreated.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Pacientes (
+                    {serverImportProgress.counts.patientsWithNume.toLocaleString('pt-BR')} com NUME)
+                  </p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-amber-700">
+                    {serverImportProgress.counts.clinicalCreated.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Prontuários / Fichas</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-purple-700">
+                    {serverImportProgress.counts.vaccinesCreated.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Vacinas</p>
+                </div>
+              </div>
+            )}
 
             {/* Painel de Contadores de Sincronização */}
             {mode === 'incremental_sync' && syncProgress && (
@@ -1682,6 +1935,14 @@ export default function Import() {
       {/* Passo REPORT */}
       {step === 'report' && (
         <>
+          {mode === 'server_reload' && serverImportReport && (
+            <ServerImportReportView
+              report={serverImportReport}
+              fileName={fileName}
+              onRestart={reset}
+            />
+          )}
+
           {mode === 'incremental_sync' && syncReport && (
             <SyncResultReportView
               report={syncReport}
