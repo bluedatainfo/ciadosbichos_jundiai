@@ -247,6 +247,7 @@ export class IncrementalSyncService {
 
     if (onProgress) onProgress(20, 'Carregando índices de pacientes do banco...')
 
+    const dbPatientsByNume = new Map<string, any>()
     const dbPatientsByCtrl = new Map<string, any>()
     const dbPatientsByImportKey = new Map<string, any>()
     const dbPatientsMatched = new Set<string>()
@@ -254,10 +255,13 @@ export class IncrementalSyncService {
     try {
       const patients = await pb.collection('patients').getFullList({
         fields:
-          'id,ctrl,import_key,name,species,breed,gender,birth_date,pelagem,microchip,deceased,status_notes,last_visit,registration_date,tutor_id',
+          'id,nume,ctrl,import_key,name,species,breed,gender,birth_date,pelagem,microchip,deceased,status_notes,last_visit,registration_date,tutor_id',
         requestKey: null,
       })
       for (const p of patients) {
+        if (p.nume && p.nume.trim() !== '') {
+          dbPatientsByNume.set(p.nume.trim(), p)
+        }
         if (p.ctrl && p.ctrl !== '0' && p.ctrl.trim() !== '') {
           dbPatientsByCtrl.set(p.ctrl.trim(), p)
         }
@@ -390,8 +394,13 @@ export class IncrementalSyncService {
       runOccurrenceCounters.set(baseKey, count)
       const importKey = buildPatientImportKey(baseKey, count)
 
+      const nume = sanitizeText(row.NUME || row.nume)
+
+      // Ordem de prioridade estrita: NUME > CTRL (ignora '0') > import_key
       let existingPatient =
-        (ctrl && ctrl !== '0' && dbPatientsByCtrl.get(ctrl)) || dbPatientsByImportKey.get(importKey)
+        (nume && dbPatientsByNume.get(nume)) ||
+        (ctrl && ctrl !== '0' && dbPatientsByCtrl.get(ctrl)) ||
+        dbPatientsByImportKey.get(importKey)
 
       let patientIdForHash = existingPatient ? existingPatient.id : `new_patient_${i}`
 
@@ -459,7 +468,10 @@ export class IncrementalSyncService {
     const tutorsOnlyInSystem = Math.max(0, dbTutorsById.size - dbTutorsMatched.size)
     const patientsOnlyInSystem = Math.max(
       0,
-      dbPatientsByCtrl.size + dbPatientsByImportKey.size - dbPatientsMatched.size,
+      dbPatientsByNume.size +
+        dbPatientsByCtrl.size +
+        dbPatientsByImportKey.size -
+        dbPatientsMatched.size,
     )
     const clinicalOnlyInSystem = Math.max(0, dbClinicalHashes.size - clinicalIdentical)
     const vaccinesOnlyInSystem = Math.max(0, dbVaccineHashes.size - vaccinesIdentical)
@@ -549,7 +561,9 @@ export class IncrementalSyncService {
     // Caches em memória para agilidade
     const tutorIdCache = new Map<string, string>() // dedupeKey -> tutorId
     const tutorDataCache = new Map<string, any>() // tutorId -> tutorRecord
-    const patientIdCache = new Map<string, string>() // importKey/ctrl -> patientId
+    const patientIdByNumeCache = new Map<string, string>() // nume -> patientId
+    const patientIdByCtrlCache = new Map<string, string>() // ctrl -> patientId
+    const patientIdByImportKeyCache = new Map<string, string>() // importKey -> patientId
     const patientDataCache = new Map<string, any>() // patientId -> patientRecord
 
     const processedPatientsThisRun = new Set<string>()
@@ -575,15 +589,18 @@ export class IncrementalSyncService {
     try {
       const existingPatients = await pb.collection('patients').getFullList({
         fields:
-          'id,ctrl,import_key,name,species,breed,gender,birth_date,pelagem,microchip,deceased,status_notes,last_visit,registration_date,tutor_id',
+          'id,nume,ctrl,import_key,name,species,breed,gender,birth_date,pelagem,microchip,deceased,status_notes,last_visit,registration_date,tutor_id',
         requestKey: null,
       })
       for (const p of existingPatients) {
+        if (p.nume && p.nume.trim() !== '') {
+          patientIdByNumeCache.set(p.nume.trim(), p.id)
+        }
         if (p.ctrl && p.ctrl !== '0' && p.ctrl.trim() !== '') {
-          patientIdCache.set(p.ctrl.trim(), p.id)
+          patientIdByCtrlCache.set(p.ctrl.trim(), p.id)
         }
         if (p.import_key && p.import_key.trim() !== '') {
-          patientIdCache.set(p.import_key.trim(), p.id)
+          patientIdByImportKeyCache.set(p.import_key.trim(), p.id)
         }
         patientDataCache.set(p.id, p)
       }
@@ -753,11 +770,23 @@ export class IncrementalSyncService {
           const currentCount = (runOccurrenceCounters.get(baseKey) || 0) + 1
           runOccurrenceCounters.set(baseKey, currentCount)
           const importKey = buildPatientImportKey(baseKey, currentCount)
+          const nume = sanitizeText(row.NUME || row.nume)
 
+          // Prioridade estrita de correspondência: NUME > CTRL (ignora '0') > import_key
           let patientId =
-            (ctrl && ctrl !== '0' && patientIdCache.get(ctrl)) || patientIdCache.get(importKey)
+            (nume && patientIdByNumeCache.get(nume)) ||
+            (ctrl && ctrl !== '0' && patientIdByCtrlCache.get(ctrl)) ||
+            patientIdByImportKeyCache.get(importKey)
 
-          const filePatientData = this.mapPatientFromRow(row, animalName, tutorId, importKey, ctrl)
+          const existingPatient = patientId ? patientDataCache.get(patientId) : undefined
+          const filePatientData = this.mapPatientFromRow(
+            row,
+            animalName,
+            tutorId,
+            importKey,
+            ctrl,
+            existingPatient,
+          )
 
           if (!patientId) {
             // Criar novo paciente
@@ -765,19 +794,22 @@ export class IncrementalSyncService {
               pb.collection('patients').create(filePatientData),
             )
             patientId = patientRecord.id
-            patientIdCache.set(importKey, patientId)
-            if (ctrl && ctrl !== '0') patientIdCache.set(ctrl, patientId)
+            patientIdByImportKeyCache.set(importKey, patientId)
+            if (ctrl && ctrl !== '0') patientIdByCtrlCache.set(ctrl, patientId)
+            if (nume) patientIdByNumeCache.set(nume, patientId)
             patientDataCache.set(patientId, patientRecord)
             patientsCreated++
           } else {
             // Paciente já existe: comparar campo a campo
-            const existingPatient = patientDataCache.get(patientId)
             const diff = this.computePatientDiff(existingPatient, row)
 
             if (Object.keys(diff).length > 0) {
               const updatedPatient = await safeDbWrite(() =>
                 pb.collection('patients').update(patientId!, filePatientData),
               )
+              if (updatedPatient.nume && updatedPatient.nume.trim()) {
+                patientIdByNumeCache.set(updatedPatient.nume.trim(), patientId!)
+              }
               patientDataCache.set(patientId, updatedPatient)
               patientsUpdated++
 
@@ -975,8 +1007,8 @@ export class IncrementalSyncService {
     const rawEmail = sanitizeText(row.EMAIL || row.email).toLowerCase()
     const validEmail = rawEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail) ? rawEmail : ''
     const ende = sanitizeText(row.ENDE || row.ende)
-    const nume = sanitizeText(row.NUME || row.nume)
-    const address = ende ? (nume ? `${ende}, ${nume}` : ende) : nume || ''
+    // Requisito: Não concatenar NUME ao endereço do tutor
+    const address = ende || ''
     const bair = sanitizeText(row.BAIR || row.bair)
     const rawCep = sanitizeText(row.CEP || row.cep)
     const cleanCep = rawCep.replace(/[^\d-]/g, '').slice(0, 9)
@@ -1015,7 +1047,9 @@ export class IncrementalSyncService {
     tutorId: string,
     importKey: string,
     ctrl: string,
+    existing?: any,
   ) {
+    const nume = sanitizeText(row.NUME || row.nume) || existing?.nume || ''
     const espeRaw = row.ESPE || row.espe
     const racaRaw = sanitizeText(row.RACA || row.raca)
     const pelaRaw = sanitizeText(row.PELA || row.pela)
@@ -1044,6 +1078,7 @@ export class IncrementalSyncService {
       tutor_id: tutorId,
       weight: 0,
       ctrl,
+      nume,
       import_key: importKey,
       microchip: chipRaw,
       deceased,
@@ -1104,6 +1139,7 @@ export class IncrementalSyncService {
       existing.tutor_id,
       existing.import_key,
       existing.ctrl,
+      existing,
     )
 
     const checkField = (field: string, label: string) => {
@@ -1139,6 +1175,8 @@ export class IncrementalSyncService {
     }
 
     checkField('name', 'Nome do Animal')
+    checkField('nume', 'Nº Oficial (NUME)')
+    checkField('ctrl', 'Código CTRL')
     checkField('species', 'Espécie')
     checkField('breed', 'Raça')
     checkField('gender', 'Sexo')

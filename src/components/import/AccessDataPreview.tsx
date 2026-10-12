@@ -244,8 +244,7 @@ export function AccessDataPreview({
                       {selectedRow.TEL1 || selectedRow.tel1 || 'Não informado'}
                     </p>
                     <p className="text-slate-500 text-[11px] truncate">
-                      End: {selectedRow.ENDE || selectedRow.ende || ''}{' '}
-                      {selectedRow.NUME || selectedRow.nume || ''} -{' '}
+                      End: {selectedRow.ENDE || selectedRow.ende || 'Não informado'} -{' '}
                       {selectedRow.BAIR || selectedRow.bair || ''} -{' '}
                       {selectedRow.CIDA || selectedRow.cida || ''}
                     </p>
@@ -263,6 +262,24 @@ export function AccessDataPreview({
                       {parsedDetail.deceased && (
                         <Badge variant="destructive" className="text-[10px] px-1 py-0">
                           Marcado como Óbito
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {(selectedRow.NUME || selectedRow.nume) && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-800 border-blue-300 font-mono"
+                        >
+                          Nº Oficial: {selectedRow.NUME || selectedRow.nume}
+                        </Badge>
+                      )}
+                      {(selectedRow.CTRL || selectedRow.ctrl) && (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 bg-slate-50 text-slate-700 border-slate-300 font-mono"
+                        >
+                          CTRL: {selectedRow.CTRL || selectedRow.ctrl}
                         </Badge>
                       )}
                     </div>

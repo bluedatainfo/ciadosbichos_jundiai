@@ -37,7 +37,7 @@ routerAdd('GET', '/backend/v1/reports/birthdays', (e) => {
     if (search) {
       const cleanSearch = search.replace(/'/g, "''")
       whereClauses.push(
-        `(p.name LIKE '%${cleanSearch}%' OR t.name LIKE '%${cleanSearch}%' OR p.ctrl LIKE '%${cleanSearch}%')`,
+        `(p.name LIKE '%${cleanSearch}%' OR t.name LIKE '%${cleanSearch}%' OR p.ctrl LIKE '%${cleanSearch}%' OR p.nume LIKE '%${cleanSearch}%')`,
       )
     }
 
@@ -61,6 +61,7 @@ routerAdd('GET', '/backend/v1/reports/birthdays', (e) => {
         p.species,
         p.breed,
         p.gender,
+        p.nume,
         p.ctrl,
         p.birth_date,
         p.last_visit,
@@ -96,6 +97,7 @@ routerAdd('GET', '/backend/v1/reports/birthdays', (e) => {
         species: String(r.species || ''),
         breed: String(r.breed || ''),
         gender: String(r.gender || ''),
+        nume: String(r.nume || ''),
         ctrl: String(r.ctrl || ''),
         birthDate: String(r.birth_date || ''),
         birthdayDay: isNaN(bDay) ? null : bDay,

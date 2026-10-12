@@ -65,7 +65,7 @@ export const api = {
   getPatients: (search?: string) => {
     const clean = search?.trim().replace(/"/g, '\\"') || ''
     const filter = clean
-      ? `name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}"`
+      ? `name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}"`
       : ''
     return pb.collection('patients').getFullList<Patient>({
       filter,
@@ -87,7 +87,7 @@ export const api = {
     if (options?.search?.trim()) {
       const clean = options.search.trim().replace(/"/g, '\\"')
       filterParts.push(
-        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}")`,
+        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}")`,
       )
     }
 
@@ -110,7 +110,7 @@ export const api = {
     if (search?.trim()) {
       const clean = search.trim().replace(/"/g, '\\"')
       filterParts.push(
-        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}")`,
+        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}")`,
       )
     }
     if (species?.trim() && species !== 'all') {

@@ -202,6 +202,12 @@ export const MANUAL_MODULES: ManualModule[] = [
         example: 'Thor',
       },
       {
+        name: 'Nº Oficial (NUME)',
+        description:
+          'Número de identificação oficial do paciente e registro clínico na base da clínica (antigo campo NUME do Access). Identificador prioritário do animal, exibido na listagem e na ficha clínica.',
+        example: '21202',
+      },
+      {
         name: 'Espécie e Raça',
         description: 'Espécie (Cão, Gato, Ave, Silvestre etc.) e raça correspondente.',
         required: true,
@@ -297,8 +303,10 @@ export const MANUAL_MODULES: ManualModule[] = [
         description: 'Indicação se o paciente é castrado ou fértil.',
       },
       {
-        name: 'Identificação (Microchip e CTRL)',
-        description: 'Número de chip implantado e código de controle do prontuário legado.',
+        name: 'Identificação (Nº Oficial NUME, Microchip e CTRL)',
+        description:
+          'Identificadores do paciente: Nº Oficial (NUME - registro oficial da clínica em destaque), microchip e código de controle legado (CTRL).',
+        example: 'Nº Oficial: 21202 | CTRL: 16884',
       },
     ],
     workflows: [
@@ -521,7 +529,12 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         name: 'Sincronização Incremental ("Vale o do Arquivo")',
         description:
-          'Compara a nova cópia oficial do arquivo com os dados já existentes no sistema. Registros idênticos são pulados, divergências são atualizadas para refletir o arquivo oficial (com registro no módulo de Auditoria), novos registros são inseridos e dados exclusivos do sistema são preservados.',
+          'Compara a nova cópia oficial do arquivo com os dados já existentes no sistema. A correspondência de pacientes segue a ordem de prioridade estrita: 1. Nº Oficial (NUME) > 2. Código CTRL (ignorando CTRL="0") > 3. Chave composta (import_key). Registros idênticos são pulados, divergências são atualizadas para refletir o arquivo oficial (com registro no módulo de Auditoria), novos registros são inseridos e dados exclusivos do sistema são preservados.',
+      },
+      {
+        name: 'Número Oficial (NUME) vs Endereço',
+        description:
+          'Na base original do Access, o campo NUME continha o número oficial de registro do paciente e vinha incorretamente concatenado ao endereço do tutor. Agora o NUME é gravado em campo próprio no cadastro do animal, e o endereço do tutor mantém apenas o logradouro real (ENDE). Sincronizações posteriores preenchem o NUME retroativamente nos pacientes legados já cadastrados.',
       },
       {
         name: 'Relatório de Balanceamento Pré-Sincronização',
@@ -561,7 +574,12 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         title: 'Como funciona a regra "Vale o do arquivo" e a Auditoria',
         description:
-          'Durante a Sincronização Incremental, caso um tutor ou paciente já exista no sistema com dados divergentes da nova planilha oficial, os valores da nova cópia do arquivo prevalecem automaticamente. Cada alteração feita (ex: telefone antigo → telefone do arquivo, raça anterior → raça do arquivo) gera um registro imediato no módulo Auditoria com o usuário responsável, data/hora e o diferencial de cada campo.',
+          'Durante a Sincronização Incremental, caso um tutor ou paciente já exista no sistema com dados divergentes da nova planilha oficial, os valores da nova cópia do arquivo prevalecem automaticamente. Cada alteração feita (ex: telefone antigo → telefone do arquivo, raça anterior → raça do arquivo, preenchimento de Nº Oficial NUME em cadastro legado) gera um registro imediato no módulo Auditoria com o usuário responsável, data/hora e o diferencial de cada campo.',
+      },
+      {
+        title: 'Como funciona a prioridade de reconciliação de pacientes (NUME > CTRL > Chave)',
+        description:
+          'Para garantir que cada animal seja vinculado com 100% de precisão mesmo se o tutor mudar de telefone ou o nome do pet tiver pequenas variações, o algoritmo de sincronização adota a seguinte ordem de correspondência:\n1. Nº Oficial (NUME): se o arquivo traz o campo NUME e já existe um paciente no banco com esse número, o sistema reconcilia imediatamente com ele;\n2. Código CTRL: caso o NUME não exista ou seja novo, busca pelo CTRL original legado (ignorando valores zero "0");\n3. Chave composta (import_key): formada por tutor_normalizado + nome_animal + ocorrência.\nAo sincronizar uma base que traz NUME para cadastros antigos sem esse campo, o sistema preenche o Nº Oficial e audita a mudança (anterior vazio → novo NUME).',
       },
       {
         title: 'Passo a passo: Importação completa por faixas do Access 2.0',

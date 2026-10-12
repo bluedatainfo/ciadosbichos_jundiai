@@ -68,6 +68,7 @@ export const FIELD_LABELS: Record<string, string> = {
   pelagem: 'Pelagem',
   microchip: 'Microchip',
   ctrl: 'Código CTRL',
+  nume: 'Nº Oficial (NUME)',
   deceased: 'Óbito',
   status_notes: 'Observações de Status',
   phone: 'Telefone Principal',

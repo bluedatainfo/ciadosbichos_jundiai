@@ -533,6 +533,7 @@ export default function ReturnReportPage() {
                   <TableRow className="border-b border-slate-200">
                     <TableHead className="font-bold text-slate-800">Tutor</TableHead>
                     <TableHead className="font-bold text-slate-800">Animal</TableHead>
+                    <TableHead className="font-bold text-slate-800">Nº Oficial</TableHead>
                     <TableHead className="font-bold text-slate-800">Data Retorno</TableHead>
                     <TableHead className="font-bold text-slate-800">Telefone / WhatsApp</TableHead>
                     <TableHead className="w-[60px] text-right font-bold text-slate-800">
@@ -544,13 +545,13 @@ export default function ReturnReportPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
                         Carregando registros de retorno...
                       </TableCell>
                     </TableRow>
                   ) : results.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
+                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
                         Nenhum retorno encontrado com os filtros selecionados.
                       </TableCell>
                     </TableRow>
@@ -577,6 +578,22 @@ export default function ReturnReportPage() {
                                 {[row.species, row.breed].filter(Boolean).join(' • ')}
                               </span>
                             </div>
+                          </TableCell>
+
+                          {/* Nº Oficial */}
+                          <TableCell className="text-xs font-mono">
+                            {row.nume ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-50 text-blue-800 border-blue-200 font-bold text-[11px]"
+                              >
+                                {row.nume}
+                              </Badge>
+                            ) : row.ctrl && row.ctrl !== '0' ? (
+                              <span className="text-slate-500 text-[11px]">CTRL: {row.ctrl}</span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
                           </TableCell>
 
                           {/* Data de Retorno e Motivo */}
@@ -650,7 +667,7 @@ export default function ReturnReportPage() {
                 <thead className="table-header-group">
                   {/* Cabeçalho da clínica repetido no topo de cada página A4 impressa */}
                   <tr className="border-b-2 border-slate-800">
-                    <th colSpan={4} className="p-0 pb-3 text-left font-normal">
+                    <th colSpan={5} className="p-0 pb-3 text-left font-normal">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
@@ -671,18 +688,21 @@ export default function ReturnReportPage() {
                       </div>
                     </th>
                   </tr>
-                  {/* Cabeçalho das colunas com larguras proporcionais para folha A4 (sem Código) */}
+                  {/* Cabeçalho das colunas com larguras proporcionais para folha A4 */}
                   <tr className="bg-slate-100 border-b border-slate-400 text-left">
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[32%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[28%]">
                       Tutor
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[30%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[26%]">
                       Animal
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[18%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[14%]">
+                      Nº Oficial
+                    </th>
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[16%]">
                       Data Retorno
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[20%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[16%]">
                       Telefone
                     </th>
                   </tr>
@@ -690,7 +710,7 @@ export default function ReturnReportPage() {
                 <tbody className="divide-y divide-slate-200">
                   {results.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="py-6 text-center text-slate-500 italic">
+                      <td colSpan={5} className="py-6 text-center text-slate-500 italic">
                         Nenhum retorno encontrado com os filtros selecionados.
                       </td>
                     </tr>
@@ -708,6 +728,9 @@ export default function ReturnReportPage() {
                           <div className="text-[9px] text-slate-500 truncate">
                             {[row.species, row.breed].filter(Boolean).join(' • ')}
                           </div>
+                        </td>
+                        <td className="py-1.5 px-2 font-mono align-top text-slate-800 text-[9px]">
+                          {row.nume || (row.ctrl && row.ctrl !== '0' ? `CTRL:${row.ctrl}` : '-')}
                         </td>
                         <td className="py-1.5 px-2 align-top">
                           <div className="font-semibold text-slate-900">

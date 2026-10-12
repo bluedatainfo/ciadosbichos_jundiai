@@ -293,8 +293,9 @@ export async function processAccessImport(
         const rg = sanitizeText(row.RG || row.rg)
         const email = sanitizeText(row.EMAIL || row.email).toLowerCase()
         const ende = sanitizeText(row.ENDE || row.ende)
-        const nume = sanitizeText(row.NUME || row.nume)
-        const address = ende ? (nume ? `${ende}, ${nume}` : ende) : nume || ''
+        // Requisito: O campo NUME é o número oficial do paciente/registro.
+        // O endereço do tutor NÃO deve mais concatenar o NUME.
+        const address = ende || ''
         const bair = sanitizeText(row.BAIR || row.bair)
         const rawCep = sanitizeText(row.CEP || row.cep)
         // Limpar CEP caso venha sujo ou com letras
@@ -352,6 +353,7 @@ export async function processAccessImport(
         // e reimportar o mesmo lote reconhece a chave exata (#1, #2, ...) já gravada,
         // evitando duplicatas.
         // -------------------------------------------------------------
+        const nume = sanitizeText(row.NUME || row.nume)
         const animalName = animNome || 'Sem nome'
         const espeRaw = row.ESPE || row.espe
         const racaRaw = sanitizeText(row.RACA || row.raca)
@@ -401,6 +403,7 @@ export async function processAccessImport(
               tutor_id: tutorId,
               weight: 0,
               ctrl,
+              nume,
               import_key: importKey,
               microchip: chipRaw,
               deceased,

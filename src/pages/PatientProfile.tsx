@@ -119,6 +119,14 @@ export default function PatientProfile() {
                   <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">
                     {patient.name}
                   </h2>
+                  {patient.nume && (
+                    <span
+                      className="px-2.5 py-0.5 text-xs font-bold rounded-md bg-blue-100 text-blue-900 border border-blue-300 font-mono shadow-sm"
+                      title="Número Oficial do Paciente (NUME)"
+                    >
+                      Nº Oficial: {patient.nume}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
                   <div className="flex items-center gap-1 font-medium text-slate-800">
@@ -222,6 +230,9 @@ export default function PatientProfile() {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div>
               <strong>Nome:</strong> {patient.name}
+            </div>
+            <div>
+              <strong>Nº Oficial:</strong> {patient.nume || patient.ctrl || '-'}
             </div>
             <div>
               <strong>Espécie/Raça:</strong> {patient.species} - {patient.breed}

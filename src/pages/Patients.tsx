@@ -99,6 +99,7 @@ export default function Patients() {
     birth_date: '',
     gender: 'Macho',
     weight: '',
+    nume: '',
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
@@ -283,6 +284,7 @@ export default function Patients() {
         birth_date: formData.birth_date ? new Date(formData.birth_date).toISOString() : '',
         gender: formData.gender as 'Macho' | 'Fêmea',
         weight: parseFloat(formData.weight) || 0,
+        nume: formData.nume ? formData.nume.trim() : undefined,
         tutor_id: finalTutorId,
       })
 
@@ -300,6 +302,7 @@ export default function Patients() {
           breed: { label: 'Raça', oldValue: null, newValue: newPatient.breed },
           gender: { label: 'Sexo', oldValue: null, newValue: newPatient.gender },
           weight: { label: 'Peso (kg)', oldValue: null, newValue: newPatient.weight },
+          nume: { label: 'Nº Oficial (NUME)', oldValue: null, newValue: newPatient.nume || null },
         },
         details: `Novo paciente cadastrado: ${newPatient.name} (${newPatient.species} / ${newPatient.breed || '-'}) vinculado a ${createdTutorName || 'tutor existente'}`,
       })
@@ -317,6 +320,7 @@ export default function Patients() {
         birth_date: '',
         gender: 'Macho',
         weight: '',
+        nume: '',
       })
     } catch (err: any) {
       if (err.message) setErrors({ form: err.message })
@@ -534,12 +538,24 @@ export default function Patients() {
 
               <div className="space-y-4 pt-4">
                 <h4 className="font-medium text-sm border-b pb-2">Dados do Animal</h4>
-                <Input
-                  placeholder="Nome do Animal *"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="col-span-2">
+                    <Input
+                      placeholder="Nome do Animal *"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Input
+                      placeholder="Nº Oficial (NUME)"
+                      value={formData.nume}
+                      onChange={(e) => setFormData({ ...formData, nume: e.target.value })}
+                      title="Número Oficial do Paciente / Registro Oficial"
+                    />
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     placeholder="Espécie"
@@ -621,7 +637,7 @@ export default function Patients() {
                   <div className="relative w-full max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar por paciente, espécie, raça ou tutor..."
+                      placeholder="Buscar por paciente, nº oficial, espécie, raça ou tutor..."
                       value={patientSearch}
                       onChange={(e) => setPatientSearch(e.target.value)}
                       className="pl-9 bg-slate-50 border-slate-200 w-full"
@@ -669,7 +685,8 @@ export default function Patients() {
                 <Table className="min-w-[700px]">
                   <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
-                      <TableHead className="min-w-[150px]">Paciente</TableHead>
+                      <TableHead className="min-w-[180px]">Paciente</TableHead>
+                      <TableHead className="min-w-[130px]">Nº Oficial</TableHead>
                       <TableHead className="min-w-[180px]">Espécie/Raça</TableHead>
                       <TableHead className="min-w-[180px]">Tutor</TableHead>
                       <TableHead className="min-w-[150px]">Telefone</TableHead>
@@ -679,14 +696,14 @@ export default function Patients() {
                   <TableBody>
                     {patientsLoading && patients.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
                           Carregando pacientes...
                         </TableCell>
                       </TableRow>
                     ) : patients.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           Nenhum paciente encontrado.
                         </TableCell>
                       </TableRow>
@@ -725,6 +742,32 @@ export default function Patients() {
                                     ? 'Retorno vencido'
                                     : 'Retorno próximo'}
                                 </Badge>
+                              )}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <Link
+                              to={`/pacientes/${patient.id}`}
+                              className="flex items-center gap-1.5 flex-wrap"
+                            >
+                              {patient.nume ? (
+                                <Badge
+                                  variant="outline"
+                                  className="font-mono text-xs bg-blue-50 text-blue-800 border-blue-200 font-bold"
+                                  title="Número Oficial do Paciente"
+                                >
+                                  {patient.nume}
+                                </Badge>
+                              ) : patient.ctrl && patient.ctrl !== '0' ? (
+                                <Badge
+                                  variant="outline"
+                                  className="font-mono text-[11px] bg-slate-50 text-slate-600 border-slate-200"
+                                  title="Código Legado CTRL"
+                                >
+                                  CTRL: {patient.ctrl}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-mono">-</span>
                               )}
                             </Link>
                           </TableCell>

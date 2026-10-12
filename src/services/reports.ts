@@ -20,6 +20,8 @@ export interface ReturnReportRow {
   id: string // vaccine id ou patient id
   vaccineId?: string
   patientId: string
+  nume?: string
+  ctrl?: string
   code?: string // opcional (mantido retrocompatível se necessário)
   tutorName: string
   tutorPhone: string
@@ -239,14 +241,20 @@ export async function fetchReturnReportData(
     }
 
     const tutor = p.expand?.tutor_id
-    // Código: preferência para CTRL (código legado ex: 16884, C1), se não houver ou for 0, usa p.id
+    // Código: preferência para NUME (oficial) ou CTRL (código legado), se não houver ou for 0, usa p.id
     const code =
-      p.ctrl && p.ctrl !== '0' && p.ctrl.trim() !== '' ? p.ctrl.trim() : p.id.toUpperCase()
+      p.nume && p.nume.trim() !== ''
+        ? p.nume.trim()
+        : p.ctrl && p.ctrl !== '0' && p.ctrl.trim() !== ''
+          ? p.ctrl.trim()
+          : p.id.toUpperCase()
 
     rows.push({
       id: v.id,
       vaccineId: v.id,
       patientId: p.id,
+      nume: p.nume?.trim() || undefined,
+      ctrl: p.ctrl?.trim() || undefined,
       code,
       tutorName: tutor?.name || 'Não informado',
       tutorPhone: tutor?.phone || tutor?.phone_secondary || '',
@@ -280,6 +288,7 @@ export interface BirthdayReportItem {
   species: string
   breed: string
   gender: string
+  nume: string
   ctrl: string
   birthDate: string
   birthdayDay: number | null
@@ -333,6 +342,7 @@ export interface PendingVaccineReportItem {
   species: string
   breed: string
   gender: string
+  nume: string
   ctrl: string
   lastVisit: string | null
   birthDate: string | null

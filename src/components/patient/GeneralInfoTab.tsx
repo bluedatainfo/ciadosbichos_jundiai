@@ -52,6 +52,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     pelagem: patient.pelagem || '',
     microchip: patient.microchip || '',
     ctrl: patient.ctrl || '',
+    nume: patient.nume || '',
     import_key: patient.import_key || '',
     deceased: patient.deceased || false,
     status_notes: patient.status_notes || '',
@@ -108,6 +109,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
         pelagem: patientData.pelagem,
         microchip: patientData.microchip,
         ctrl: patientData.ctrl,
+        nume: patientData.nume,
         deceased: patientData.deceased,
         status_notes: patientData.status_notes,
         ...(photoFile ? { photo: photoFile } : {}),
@@ -351,15 +353,26 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <Label>Nome</Label>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1 col-span-2">
+                <Label>Nome do Animal</Label>
                 <Input
                   value={patientData.name}
                   onChange={(e) => setPatientData({ ...patientData, name: e.target.value })}
                   className="bg-white"
                 />
               </div>
+              <div className="space-y-1">
+                <Label>Nº Oficial (NUME)</Label>
+                <Input
+                  value={patientData.nume}
+                  onChange={(e) => setPatientData({ ...patientData, nume: e.target.value })}
+                  className="bg-white font-mono font-semibold text-blue-900 border-blue-200"
+                  placeholder="Ex: 21202"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Nascimento</Label>
                 <Input

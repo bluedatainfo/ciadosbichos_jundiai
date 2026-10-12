@@ -367,6 +367,7 @@ export default function PendingVaccinesReportPage() {
                 <TableHeader className="bg-slate-100/90 sticky top-0 z-10 border-b shadow-2xs">
                   <TableRow className="border-b border-slate-200">
                     <TableHead className="font-bold text-slate-800">Animal</TableHead>
+                    <TableHead className="font-bold text-slate-800">Nº Oficial</TableHead>
                     <TableHead className="font-bold text-slate-800">Espécie / Raça</TableHead>
                     <TableHead className="font-bold text-slate-800">Última Vacina</TableHead>
                     <TableHead className="font-bold text-slate-800">Situação</TableHead>
@@ -380,20 +381,20 @@ export default function PendingVaccinesReportPage() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                        Carregando registros de vacinas pendentes...
+                      <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                        Carregando registros...
                       </TableCell>
                     </TableRow>
                   ) : results.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-40 text-center text-muted-foreground">
-                        Nenhum animal com vacinação pendente para os filtros selecionados.
+                      <TableCell colSpan={7} className="h-40 text-center text-muted-foreground">
+                        Nenhum registro de vacina pendente encontrado para os critérios
+                        selecionados.
                       </TableCell>
                     </TableRow>
                   ) : (
                     results.map((row) => {
                       const waLink = buildVaccineWhatsAppLink(row.tutorPhone, row.animalName)
-
                       return (
                         <TableRow
                           key={row.id}
@@ -405,19 +406,29 @@ export default function PendingVaccinesReportPage() {
                               <span className="font-bold text-slate-900 uppercase">
                                 {row.animalName}
                               </span>
-                              {row.ctrl && row.ctrl !== '0' && (
-                                <span className="text-[10px] text-muted-foreground font-mono">
-                                  Cód: {row.ctrl}
-                                </span>
-                              )}
                             </div>
+                          </TableCell>
+
+                          {/* Nº Oficial */}
+                          <TableCell className="text-xs font-mono">
+                            {row.nume ? (
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-50 text-blue-800 border-blue-200 font-bold text-[11px]"
+                              >
+                                {row.nume}
+                              </Badge>
+                            ) : row.ctrl && row.ctrl !== '0' ? (
+                              <span className="text-slate-500 text-[11px]">CTRL: {row.ctrl}</span>
+                            ) : (
+                              <span className="text-slate-300">-</span>
+                            )}
                           </TableCell>
 
                           {/* Espécie / Raça */}
                           <TableCell className="text-xs text-slate-700">
                             {[row.species, row.breed].filter(Boolean).join(' • ') || '-'}
                           </TableCell>
-
                           {/* Última Vacinação */}
                           <TableCell className="text-xs">
                             <div className="flex flex-col">
@@ -516,7 +527,7 @@ export default function PendingVaccinesReportPage() {
               <table className="w-full border-collapse text-[10px] text-slate-900 table-fixed">
                 <thead className="table-header-group">
                   <tr className="border-b-2 border-slate-800">
-                    <th colSpan={5} className="p-0 pb-3 text-left font-normal">
+                    <th colSpan={6} className="p-0 pb-3 text-left font-normal">
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-sm font-bold uppercase tracking-wide text-slate-900">
@@ -538,19 +549,22 @@ export default function PendingVaccinesReportPage() {
                     </th>
                   </tr>
                   <tr className="bg-slate-100 border-b border-slate-400 text-left">
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[26%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[22%]">
                       Animal
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[22%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[12%]">
+                      Nº Oficial
+                    </th>
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[20%]">
                       Espécie / Raça
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[16%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[14%]">
                       Última Vacina
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[14%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[12%]">
                       Situação
                     </th>
-                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[22%]">
+                    <th className="py-1.5 px-2 font-bold text-slate-900 uppercase text-[9px] w-[20%]">
                       Tutor / Telefone
                     </th>
                   </tr>
@@ -558,7 +572,7 @@ export default function PendingVaccinesReportPage() {
                 <tbody className="divide-y divide-slate-200">
                   {results.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate-500 italic">
+                      <td colSpan={6} className="py-6 text-center text-slate-500 italic">
                         Nenhum registro de vacina pendente encontrado.
                       </td>
                     </tr>
@@ -570,6 +584,9 @@ export default function PendingVaccinesReportPage() {
                       >
                         <td className="py-1.5 px-2 font-bold uppercase align-top">
                           {row.animalName}
+                        </td>
+                        <td className="py-1.5 px-2 font-mono align-top text-[9px] text-slate-800">
+                          {row.nume || (row.ctrl && row.ctrl !== '0' ? `CTRL:${row.ctrl}` : '-')}
                         </td>
                         <td className="py-1.5 px-2 align-top text-slate-700">
                           {[row.species, row.breed].filter(Boolean).join(' • ') || '-'}
