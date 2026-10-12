@@ -374,3 +374,51 @@ export async function parseFile(file: File): Promise<ParseResult> {
   const text = decodeBuffer(arrayBuffer)
   return parseCSV(text)
 }
+
+/**
+ * Junta múltiplos arquivos parciais (ex: partes 1-8000, 8001-16000, 16001-21296) em um único ParseResult unificado.
+ * Assegura que os cabeçalhos são preservados a partir do primeiro arquivo e que linhas das partes subsequentes
+ * são adicionadas em ordem sem duplicar o cabeçalho.
+ */
+export async function parseMultipleFiles(files: File[]): Promise<ParseResult> {
+  if (!files || files.length === 0) {
+    return { headers: [], rows: [], errors: ['Nenhum arquivo fornecido.'] }
+  }
+  if (files.length === 1) {
+    return parseFile(files[0])
+  }
+
+  // Ordenar arquivos por nome caso estejam nomeados sequencialmente (ex: parte1, parte2, parte3)
+  const sortedFiles = [...files].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
+  )
+
+  let combinedHeaders: string[] = []
+  const combinedRows: ParsedRow[] = []
+  const combinedErrors: string[] = []
+
+  for (let idx = 0; idx < sortedFiles.length; idx++) {
+    const file = sortedFiles[idx]
+    const res = await parseFile(file)
+
+    if (res.errors && res.errors.length > 0) {
+      combinedErrors.push(`[${file.name}] ${res.errors.join('; ')}`)
+    }
+
+    if (idx === 0) {
+      combinedHeaders = res.headers
+      combinedRows.push(...res.rows)
+    } else {
+      // Se os cabeçalhos forem idênticos ou compatíveis, apenas adiciona as linhas
+      // Caso a parte não tenha cabeçalho ou tenha cabeçalho idêntico, parseCSV já trata a primeira linha
+      // Se a primeira linha da parte 2 for cabeçalho igual, já veio em res.rows sem ela.
+      combinedRows.push(...res.rows)
+    }
+  }
+
+  return {
+    headers: combinedHeaders,
+    rows: combinedRows,
+    errors: combinedErrors,
+  }
+}

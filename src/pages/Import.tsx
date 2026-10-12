@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { parseFile, ParseResult } from '@/lib/csv-parser'
+import { parseFile, parseMultipleFiles, ParseResult } from '@/lib/csv-parser'
 import { EntityType, ENTITY_LABELS, FIELD_CONFIGS, validateRow } from '@/lib/import-config'
 import { processImport, ImportReport as ImportReportType } from '@/services/import'
 import {
@@ -80,6 +80,7 @@ export default function Import() {
   const [entityType, setEntityType] = useState<EntityType | null>(null)
   const [parseResult, setParseResult] = useState<ParseResult | null>(null)
   const [fileName, setFileName] = useState('')
+  const [fileCount, setFileCount] = useState<number>(1)
   const [mapping, setMapping] = useState<Record<string, string>>({})
 
   // Opções para importação do Access
@@ -161,8 +162,57 @@ export default function Import() {
     return accessCols.filter((c) => upper.includes(c)).length >= 3
   }
 
+  const handleMultipleFiles = useCallback(
+    async (files: File[]) => {
+      const summaryName =
+        files.length > 1
+          ? `${files.length} partes (${files.map((f) => f.name).join(', ')})`
+          : files[0]?.name || ''
+      setFileName(summaryName)
+      setFileCount(files.length)
+      const result = await parseMultipleFiles(files)
+      setParseResult(result)
+
+      if (result.errors.length > 0) {
+        toast({ title: 'Aviso', description: result.errors[0], variant: 'destructive' })
+        if (result.headers.length === 0) return
+      }
+
+      // Se estamos no modo Access legado OU se detectamos os cabeçalhos do Access
+      const detectedAccess = isAccessHeader(result.headers)
+      if (
+        (mode as ImportMode) === 'incremental_sync' ||
+        (detectedAccess && (mode as ImportMode) === 'incremental_sync')
+      ) {
+        setMode('incremental_sync')
+        setStep('preview')
+        setRangeStart(1)
+        setRangeEnd(Math.min(result.rows.length, 1000))
+        toast({
+          title: 'Arquivos Carregados para Sincronização',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados em ${files.length} partes.`,
+        })
+        return
+      }
+
+      if (mode === 'access_legacy' || detectedAccess) {
+        setMode('access_legacy')
+        setStep('preview')
+        setRangeStart(1)
+        setRangeEnd(Math.min(result.rows.length, 1000))
+        toast({
+          title: 'Arquivo Access Detectado',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros combinados a partir de ${files.length} partes.`,
+        })
+        return
+      }
+    },
+    [mode, toast],
+  )
+
   const handleFile = useCallback(
     async (file: File) => {
+      setFileCount(1)
       setFileName(file.name)
       const result = await parseFile(file)
       setParseResult(result)
@@ -740,7 +790,12 @@ export default function Import() {
             )}
           </CardHeader>
           <CardContent className="space-y-4">
-            <FileUpload onFile={handleFile} fileName={fileName} />
+            <FileUpload
+              onFile={handleFile}
+              onFiles={handleMultipleFiles}
+              fileName={fileName}
+              fileCount={fileCount}
+            />
             <div className="flex justify-between pt-2">
               <Button variant="ghost" onClick={() => setStep('select')}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
