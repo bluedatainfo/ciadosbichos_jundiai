@@ -39,12 +39,6 @@ import {
   generateVaccineHash,
 } from '@/lib/sync-hash-utils'
 import { auditService, FieldDiff } from '@/services/audit'
-import {
-  executeWithRateLimitRetry,
-  DEFAULT_ITEM_DELAY_MS,
-  DEFAULT_MAX_RETRIES,
-  DEFAULT_RETRY_BACKOFF_MS,
-} from './access-import'
 
 export interface SyncBalanceSummary {
   // Tutores
@@ -509,6 +503,14 @@ export class IncrementalSyncService {
    * Grava apenas diferenças/novos com throttling, auditoria ("vale o do arquivo")
    * e controle de parada/retomada.
    */
+  /**
+   * ETAPA 2: Aplicação da Sincronização Incremental no Servidor (pb_hooks)
+   *
+   * Envia lotes de linhas para o endpoint backend `/backend/v1/sync/apply-batch`.
+   * O backend executa comparações e gravações diretamente no banco SQLite/PocketBase,
+   * sem requisições HTTP individuais por registro e sem disparar rate limit (429).
+   * Suporta pausa, cancelamento cooperativo e emissão de progresso contínuo consultado do servidor.
+   */
   async applySync(
     rawRows: Record<string, string>[],
     balance: SyncBalanceSummary,
@@ -516,22 +518,12 @@ export class IncrementalSyncService {
   ): Promise<SyncResultReport> {
     const startTime = Date.now()
     const {
-      batchSize = 25,
-      itemDelayMs = DEFAULT_ITEM_DELAY_MS,
-      maxRetries = DEFAULT_MAX_RETRIES,
-      retryBackoffMs = DEFAULT_RETRY_BACKOFF_MS,
+      batchSize = 200,
       startIndex = 1,
       endIndex = rawRows.length,
       onProgress,
       shouldPause,
     } = options
-
-    const safeDbWrite = <T>(op: () => Promise<T>) =>
-      executeWithRateLimitRetry(op, {
-        itemDelayMs,
-        maxRetries,
-        retryBackoffMs,
-      })
 
     const sliceStart = Math.max(0, startIndex - 1)
     const sliceEnd = Math.min(rawRows.length, endIndex)
@@ -558,127 +550,18 @@ export class IncrementalSyncService {
     let auditsLogged = 0
     const failures: SyncFailureDetail[] = []
 
-    // Caches em memória para agilidade
-    const tutorIdCache = new Map<string, string>() // dedupeKey -> tutorId
-    const tutorDataCache = new Map<string, any>() // tutorId -> tutorRecord
-    const patientIdByNumeCache = new Map<string, string>() // nume -> patientId
-    const patientIdByCtrlCache = new Map<string, string>() // ctrl -> patientId
-    const patientIdByImportKeyCache = new Map<string, string>() // importKey -> patientId
-    const patientDataCache = new Map<string, any>() // patientId -> patientRecord
-
-    const processedPatientsThisRun = new Set<string>()
-    const runOccurrenceCounters = new Map<string, number>()
-
-    // Pré-carregar tutores existentes
-    try {
-      const existingTutors = await pb.collection('tutors').getFullList({
-        fields:
-          'id,name,cpf,phone,phone_secondary,email,rg,address,neighborhood,cep,city,state,indication,additional_info',
-        requestKey: null,
-      })
-      for (const t of existingTutors) {
-        const key = getTutorDedupeKey(t.name, t.cpf)
-        tutorIdCache.set(key, t.id)
-        tutorDataCache.set(t.id, t)
-      }
-    } catch (e) {
-      console.warn('Erro ao pré-carregar tutores para sincronização:', e)
-    }
-
-    // Pré-carregar pacientes existentes
-    try {
-      const existingPatients = await pb.collection('patients').getFullList({
-        fields:
-          'id,nume,ctrl,import_key,name,species,breed,gender,birth_date,pelagem,microchip,deceased,status_notes,last_visit,registration_date,tutor_id',
-        requestKey: null,
-      })
-      for (const p of existingPatients) {
-        if (p.nume && p.nume.trim() !== '') {
-          patientIdByNumeCache.set(p.nume.trim(), p.id)
-        }
-        if (p.ctrl && p.ctrl !== '0' && p.ctrl.trim() !== '') {
-          patientIdByCtrlCache.set(p.ctrl.trim(), p.id)
-        }
-        if (p.import_key && p.import_key.trim() !== '') {
-          patientIdByImportKeyCache.set(p.import_key.trim(), p.id)
-        }
-        patientDataCache.set(p.id, p)
-      }
-    } catch (e) {
-      console.warn('Erro ao pré-carregar pacientes para sincronização:', e)
-    }
-
-    // Hashes já gravados no banco
-    const existingClinicalHashes = new Set<string>()
-    try {
-      const cl = await pb.collection('clinical_records').getFullList({
-        fields: 'id,patient_id,description,import_hash',
-        requestKey: null,
-      })
-      for (const c of cl) {
-        const h = c.import_hash || generateClinicalRecordHash(c.patient_id, c.description || '')
-        existingClinicalHashes.add(h)
-      }
-    } catch {
-      /* intentionally ignored */
-    }
-
-    const existingVaccineHashes = new Set<string>()
-    try {
-      const vc = await pb.collection('vaccines').getFullList({
-        fields: 'id,patient_id,name,date,import_hash',
-        requestKey: null,
-      })
-      for (const v of vc) {
-        const h = v.import_hash || generateVaccineHash(v.patient_id, v.name || '', v.date)
-        existingVaccineHashes.add(h)
-      }
-    } catch {
-      /* intentionally ignored */
-    }
-
-    const existingAppointmentHashes = new Set<string>()
-    try {
-      const ap = await pb.collection('appointments').getFullList({
-        fields: 'id,patient_id,date,type,notes,import_hash',
-        requestKey: null,
-      })
-      for (const a of ap) {
-        const h =
-          a.import_hash ||
-          generateAppointmentHash(a.patient_id, a.date || '', a.type || '', a.notes || '')
-        existingAppointmentHashes.add(h)
-      }
-    } catch {
-      /* intentionally ignored */
-    }
-
     const totalBatches = Math.ceil(total / batchSize)
+    let processedRowsCount = 0
 
     for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
       if (shouldPause && shouldPause()) {
-        break
-      }
-
-      const startRowIdx = batchIdx * batchSize
-      const currentBatch = rowsToProcess.slice(startRowIdx, startRowIdx + batchSize)
-
-      for (let i = 0; i < currentBatch.length; i++) {
-        if (shouldPause && shouldPause()) {
-          break
-        }
-
-        const batchItemIdx = startRowIdx + i
-        const fileLineNumber = sliceStart + batchItemIdx + 1
-        const row = currentBatch[i]
-
         if (onProgress) {
           onProgress({
-            phase: 'applying',
-            current: batchItemIdx + 1,
+            phase: 'paused',
+            current: processedRowsCount,
             total,
-            percent: Math.round(((batchItemIdx + 1) / total) * 100),
-            statusMessage: `Sincronizando linha ${fileLineNumber} (${batchItemIdx + 1} de ${total})...`,
+            percent: Math.round((processedRowsCount / total) * 100),
+            statusMessage: `Sincronização pausada pelo usuário na linha ${sliceStart + processedRowsCount}.`,
             tutorsCreated,
             tutorsUpdated,
             tutorsSkipped,
@@ -695,282 +578,125 @@ export class IncrementalSyncService {
             auditsLogged,
           })
         }
-
-        const ctrl = sanitizeText(row.CTRL || row.ctrl)
-        const nomeTutor = sanitizeText(row.NOME || row.nome)
-        const animNome = sanitizeText(row.ANIM || row.anim)
-
-        if (!nomeTutor && !animNome && !ctrl) {
-          continue
-        }
-
-        try {
-          // -------------------------------------------------------------
-          // 1. TUTOR: Comparação e Atualização com "Vale o do arquivo" + Auditoria
-          // -------------------------------------------------------------
-          const cpfRaw = sanitizeText(row.CPF || row.cpf)
-          const dedupeKey = getTutorDedupeKey(nomeTutor || 'Tutor Não Informado', cpfRaw)
-          let tutorId = tutorIdCache.get(dedupeKey)
-
-          const fileTutorData = this.mapTutorFromRow(row, nomeTutor, cpfRaw)
-
-          if (!tutorId) {
-            // Criar novo tutor
-            const tutorRecord = await safeDbWrite(() =>
-              pb.collection('tutors').create(fileTutorData),
-            )
-            tutorId = tutorRecord.id
-            tutorIdCache.set(dedupeKey, tutorId)
-            tutorDataCache.set(tutorId, tutorRecord)
-            tutorsCreated++
-          } else {
-            // Tutor já existe: comparar campo a campo
-            const existingTutor = tutorDataCache.get(tutorId)
-            const diff = this.computeTutorDiff(existingTutor, row)
-
-            if (Object.keys(diff).length > 0) {
-              // Atualizar tutor com dados do arquivo
-              const updatedTutor = await safeDbWrite(() =>
-                pb.collection('tutors').update(tutorId!, fileTutorData),
-              )
-              tutorDataCache.set(tutorId, updatedTutor)
-              tutorsUpdated++
-
-              // Registrar na auditoria
-              await auditService.log({
-                action: 'update',
-                module: 'tutors',
-                recordId: tutorId,
-                recordLabel: nomeTutor || 'Tutor',
-                tutorName: nomeTutor,
-                changes: diff,
-                details: `Sincronização incremental: dados restaurados da base oficial ("vale o do arquivo").`,
-              })
-              auditsLogged++
-            } else {
-              tutorsSkipped++
-            }
-          }
-
-          // -------------------------------------------------------------
-          // 2. PACIENTE: Comparação e Atualização com "Vale o do arquivo" + Auditoria
-          // -------------------------------------------------------------
-          const animalName = animNome || 'Sem nome'
-          const espeRaw = row.ESPE || row.espe
-          const pelaRaw = sanitizeText(row.PELA || row.pela)
-          const nascRaw = row.NASC || row.nasc
-
-          const baseKey = getPatientCompositeBaseKey({
-            tutorDedupeKey: dedupeKey,
-            anim: animalName,
-            espe: espeRaw,
-            nasc: nascRaw,
-            pela: pelaRaw,
-          })
-          const currentCount = (runOccurrenceCounters.get(baseKey) || 0) + 1
-          runOccurrenceCounters.set(baseKey, currentCount)
-          const importKey = buildPatientImportKey(baseKey, currentCount)
-          const nume = sanitizeText(row.NUME || row.nume)
-
-          // Prioridade estrita de correspondência: NUME > CTRL (ignora '0') > import_key
-          let patientId =
-            (nume && patientIdByNumeCache.get(nume)) ||
-            (ctrl && ctrl !== '0' && patientIdByCtrlCache.get(ctrl)) ||
-            patientIdByImportKeyCache.get(importKey)
-
-          const existingPatient = patientId ? patientDataCache.get(patientId) : undefined
-          const filePatientData = this.mapPatientFromRow(
-            row,
-            animalName,
-            tutorId,
-            importKey,
-            ctrl,
-            existingPatient,
-          )
-
-          if (!patientId) {
-            // Criar novo paciente
-            const patientRecord = await safeDbWrite(() =>
-              pb.collection('patients').create(filePatientData),
-            )
-            patientId = patientRecord.id
-            patientIdByImportKeyCache.set(importKey, patientId)
-            if (ctrl && ctrl !== '0') patientIdByCtrlCache.set(ctrl, patientId)
-            if (nume) patientIdByNumeCache.set(nume, patientId)
-            patientDataCache.set(patientId, patientRecord)
-            patientsCreated++
-          } else {
-            // Paciente já existe: comparar campo a campo
-            const diff = this.computePatientDiff(existingPatient, row)
-
-            if (Object.keys(diff).length > 0) {
-              const updatedPatient = await safeDbWrite(() =>
-                pb.collection('patients').update(patientId!, filePatientData),
-              )
-              if (updatedPatient.nume && updatedPatient.nume.trim()) {
-                patientIdByNumeCache.set(updatedPatient.nume.trim(), patientId!)
-              }
-              patientDataCache.set(patientId, updatedPatient)
-              patientsUpdated++
-
-              // Registrar na auditoria
-              await auditService.log({
-                action: 'update',
-                module: 'patients',
-                recordId: patientId,
-                recordLabel: animalName,
-                patientName: animalName,
-                tutorName: nomeTutor,
-                changes: diff,
-                details: `Sincronização incremental: dados restaurados da base oficial ("vale o do arquivo").`,
-              })
-              auditsLogged++
-            } else {
-              patientsSkipped++
-            }
-          }
-
-          // -------------------------------------------------------------
-          // 3. FICHAS CLÍNICAS, VACINAS E RETORNOS (por hash)
-          // -------------------------------------------------------------
-          if (patientId && !processedPatientsThisRun.has(patientId)) {
-            processedPatientsThisRun.add(patientId)
-
-            // Ficha Clínica
-            const textoRaw = row.TEXTO || row.texto
-            const extraction = textoRaw
-              ? extractClinicalHistoryWithDiagnostics(textoRaw)
-              : { entries: [] }
-
-            for (const entry of extraction.entries) {
-              const hash = generateClinicalRecordHash(patientId, entry.text)
-              if (existingClinicalHashes.has(hash)) {
-                clinicalSkipped++
-              } else {
-                try {
-                  await safeDbWrite(() =>
-                    pb.collection('clinical_records').create({
-                      patient_id: patientId,
-                      description: entry.text,
-                      diagnosis: '',
-                      treatment: '',
-                      import_hash: hash,
-                    }),
-                  )
-                  existingClinicalHashes.add(hash)
-                  clinicalCreated++
-                } catch (recErr: any) {
-                  failures.push({
-                    linha: fileLineNumber,
-                    ctrl,
-                    tutor: nomeTutor,
-                    animal: animNome,
-                    tipo: 'clinical_entry',
-                    erro: recErr?.message || 'Falha ao gravar entrada clínica na sincronização',
-                    trecho: entry.text.slice(0, 200),
-                  })
-                }
-              }
-            }
-
-            // Vacinas
-            const vaccines = extractVaccinesFromRow(row)
-            const todayStart = new Date()
-            todayStart.setHours(0, 0, 0, 0)
-
-            for (const vac of vaccines) {
-              const hash = generateVaccineHash(patientId, vac.name, vac.date)
-              if (existingVaccineHashes.has(hash)) {
-                vaccinesSkipped++
-              } else {
-                try {
-                  let isCompleted = true
-                  if (vac.date) {
-                    const vacTime = new Date(vac.date).getTime()
-                    if (!isNaN(vacTime)) {
-                      isCompleted = vacTime < todayStart.getTime()
-                    }
-                  }
-
-                  await safeDbWrite(() =>
-                    pb.collection('vaccines').create({
-                      patient_id: patientId,
-                      name: vac.name,
-                      date: vac.date || '',
-                      notes: vac.notes || '',
-                      completed: isCompleted,
-                      import_hash: hash,
-                    }),
-                  )
-                  existingVaccineHashes.add(hash)
-                  vaccinesCreated++
-                } catch (vacErr: any) {
-                  failures.push({
-                    linha: fileLineNumber,
-                    ctrl,
-                    tutor: nomeTutor,
-                    animal: animNome,
-                    tipo: 'vaccine',
-                    erro: vacErr?.message || 'Falha ao gravar vacina na sincronização',
-                    trecho: `${vac.name} ${vac.date || ''}`.trim(),
-                  })
-                }
-              }
-            }
-
-            // Agendamentos / Retornos
-            const appointments = extractAppointmentsFromRow(row, extraction.entries)
-            for (const appItem of appointments) {
-              const hash = generateAppointmentHash(
-                patientId,
-                appItem.date,
-                appItem.type,
-                appItem.notes,
-              )
-              if (existingAppointmentHashes.has(hash)) {
-                appointmentsSkipped++
-              } else {
-                try {
-                  await safeDbWrite(() =>
-                    pb.collection('appointments').create({
-                      patient_id: patientId,
-                      date: appItem.date,
-                      type: appItem.type,
-                      status: appItem.status,
-                      notes: appItem.notes,
-                      source: appItem.source,
-                      import_hash: hash,
-                    }),
-                  )
-                  existingAppointmentHashes.add(hash)
-                  appointmentsCreated++
-                } catch (appErr: any) {
-                  failures.push({
-                    linha: fileLineNumber,
-                    ctrl,
-                    tutor: nomeTutor,
-                    animal: animNome,
-                    tipo: 'appointment',
-                    erro: appErr?.message || 'Falha ao gravar agendamento na sincronização',
-                    trecho: `${appItem.date} ${appItem.notes}`.slice(0, 200),
-                  })
-                }
-              }
-            }
-          }
-        } catch (err: any) {
-          failures.push({
-            linha: fileLineNumber,
-            ctrl,
-            tutor: nomeTutor,
-            animal: animNome,
-            tipo: 'geral',
-            erro: err?.message || 'Erro inesperado na sincronização da linha',
-          })
-        }
+        break
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 20))
+      const startRowIdx = batchIdx * batchSize
+      const currentBatch = rowsToProcess.slice(startRowIdx, startRowIdx + batchSize)
+      const currentBatchStartLine = sliceStart + startRowIdx + 1
+
+      if (onProgress) {
+        onProgress({
+          phase: 'applying',
+          current: processedRowsCount,
+          total,
+          percent: Math.round((processedRowsCount / total) * 100),
+          statusMessage: `Processando no servidor: linhas ${currentBatchStartLine} a ${currentBatchStartLine + currentBatch.length - 1} (${processedRowsCount} de ${total})...`,
+          tutorsCreated,
+          tutorsUpdated,
+          tutorsSkipped,
+          patientsCreated,
+          patientsUpdated,
+          patientsSkipped,
+          clinicalCreated,
+          clinicalSkipped,
+          vaccinesCreated,
+          vaccinesSkipped,
+          appointmentsCreated,
+          appointmentsSkipped,
+          failed: failures.length,
+          auditsLogged,
+        })
+      }
+
+      try {
+        const batchResponse = await pb.send<{
+          success: boolean
+          counts: {
+            tutorsCreated: number
+            tutorsUpdated: number
+            tutorsSkipped: number
+            patientsCreated: number
+            patientsUpdated: number
+            patientsSkipped: number
+            clinicalCreated: number
+            clinicalSkipped: number
+            vaccinesCreated: number
+            vaccinesSkipped: number
+            appointmentsCreated: number
+            appointmentsSkipped: number
+            auditsLogged: number
+            failed: number
+          }
+          failures: SyncFailureDetail[]
+          processedRows: number
+        }>('/backend/v1/sync/apply-batch', {
+          method: 'POST',
+          body: {
+            rows: currentBatch,
+            startLineNumber: currentBatchStartLine,
+          },
+        })
+
+        const counts = batchResponse.counts
+        tutorsCreated += counts.tutorsCreated || 0
+        tutorsUpdated += counts.tutorsUpdated || 0
+        tutorsSkipped += counts.tutorsSkipped || 0
+
+        patientsCreated += counts.patientsCreated || 0
+        patientsUpdated += counts.patientsUpdated || 0
+        patientsSkipped += counts.patientsSkipped || 0
+
+        clinicalCreated += counts.clinicalCreated || 0
+        clinicalSkipped += counts.clinicalSkipped || 0
+
+        vaccinesCreated += counts.vaccinesCreated || 0
+        vaccinesSkipped += counts.vaccinesSkipped || 0
+
+        appointmentsCreated += counts.appointmentsCreated || 0
+        appointmentsSkipped += counts.appointmentsSkipped || 0
+
+        auditsLogged += counts.auditsLogged || 0
+
+        if (batchResponse.failures && batchResponse.failures.length > 0) {
+          failures.push(...batchResponse.failures)
+        }
+
+        processedRowsCount += currentBatch.length
+      } catch (batchErr: any) {
+        console.error('Erro ao processar lote no backend:', batchErr)
+        failures.push({
+          linha: currentBatchStartLine,
+          tipo: 'batch_error',
+          erro: batchErr?.message || 'Erro na requisição ao backend para processamento do lote.',
+          trecho: `Linhas ${currentBatchStartLine} a ${currentBatchStartLine + currentBatch.length - 1}`,
+        })
+        processedRowsCount += currentBatch.length
+      }
+
+      if (onProgress) {
+        onProgress({
+          phase: 'applying',
+          current: processedRowsCount,
+          total,
+          percent: Math.round((processedRowsCount / total) * 100),
+          statusMessage: `Concluído lote de ${currentBatch.length} registros (${processedRowsCount} de ${total}).`,
+          tutorsCreated,
+          tutorsUpdated,
+          tutorsSkipped,
+          patientsCreated,
+          patientsUpdated,
+          patientsSkipped,
+          clinicalCreated,
+          clinicalSkipped,
+          vaccinesCreated,
+          vaccinesSkipped,
+          appointmentsCreated,
+          appointmentsSkipped,
+          failed: failures.length,
+          auditsLogged,
+        })
+      }
     }
 
     const durationSeconds = Math.round((Date.now() - startTime) / 1000)

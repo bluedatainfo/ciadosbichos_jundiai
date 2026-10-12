@@ -477,9 +477,7 @@ export default function Import() {
       const rep = await incrementalSyncService.applySync(parseResult.rows, syncBalance, {
         startIndex: effectiveStart,
         endIndex: effectiveEnd,
-        batchSize: 25,
-        itemDelayMs: 120,
-        maxRetries: 3,
+        batchSize: 200,
         onProgress: (p) => {
           setSyncProgress(p)
           // Salvar progresso contínuo
@@ -499,8 +497,10 @@ export default function Import() {
       setStep('report')
 
       toast({
-        title: rep.success ? 'Sincronização Finalizada!' : 'Sincronização Concluída com Avisos',
-        description: `${rep.applied.patientsUpdated} pacientes atualizados, ${rep.applied.patientsCreated} criados.`,
+        title: rep.success
+          ? 'Sincronização Finalizada com Sucesso!'
+          : 'Sincronização Concluída com Avisos',
+        description: `${rep.applied.patientsUpdated} pacientes atualizados, ${rep.applied.patientsCreated} criados diretamente no servidor em ${rep.durationSeconds}s.`,
       })
     } catch (err: any) {
       toast({
@@ -517,7 +517,8 @@ export default function Import() {
     setIsSyncPaused(true)
     toast({
       title: 'Sincronização Pausada',
-      description: 'O processo será pausado após a gravação da linha atual. O estado foi mantido.',
+      description:
+        'O processo será pausado ao concluir o lote atual no servidor. O progresso foi preservado e você pode retomar a qualquer momento.',
     })
   }
 
@@ -1501,14 +1502,14 @@ export default function Import() {
             <div className="text-center space-y-1">
               <p className="font-semibold text-lg text-slate-800">
                 {mode === 'incremental_sync'
-                  ? 'Aplicando Sincronização Incremental...'
+                  ? 'Aplicando Sincronização no Servidor (Alta Performance)...'
                   : mode === 'access_legacy'
                     ? 'Processando migração em lotes...'
                     : 'Processando importação...'}
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
                 {mode === 'incremental_sync'
-                  ? 'Comparando registro a registro, pulando idênticos e gravando atualizações no banco e na Auditoria ("vale o do arquivo").'
+                  ? 'Processamento em tempo real direto no banco de dados (pb_hooks): sem requisições HTTP individuais e sem sofrer rate limit. Regra "vale o do arquivo" com auditoria campo a campo.'
                   : mode === 'access_legacy'
                     ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
                     : 'Gravando registros no banco de dados.'}
