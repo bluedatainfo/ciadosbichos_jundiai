@@ -59,6 +59,16 @@ onRecordAfterDeleteSuccess((e) => {
   if (!patientId) return e.next()
 
   try {
+    let patient = null
+    try {
+      patient = $app.findRecordById('patients', patientId)
+    } catch (_) {
+      // Paciente já foi removido ou não existe mais — nada a recalcular
+      return e.next()
+    }
+
+    if (!patient) return e.next()
+
     const records = $app.findRecordsByFilter(
       'appointments',
       "patient_id = {:patientId} && status = 'completed'",
@@ -68,7 +78,6 @@ onRecordAfterDeleteSuccess((e) => {
       { patientId },
     )
 
-    const patient = $app.findRecordById('patients', patientId)
     const newDate = records && records.length > 0 ? records[0].getString('date') : ''
 
     if (patient.getString('last_visit') !== newDate) {
@@ -76,7 +85,7 @@ onRecordAfterDeleteSuccess((e) => {
       $app.saveNoValidate(patient)
     }
   } catch (err) {
-    console.log('Error recalculating last visit on delete', err.message)
+    // Silencioso se o paciente não existir
   }
 
   return e.next()
