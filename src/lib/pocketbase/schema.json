@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T17:32:26.307Z",
+  "generatedAt": "2026-10-12T21:02:22.138Z",
   "collections": [
     {
       "name": "users",
@@ -970,6 +970,46 @@
         "CREATE INDEX idx_audit_created ON audit_logs (created DESC)",
         "CREATE INDEX idx_audit_record_id ON audit_logs (record_id)"
       ]
+    },
+    {
+      "name": "_diag_results",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "category",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payload",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
     }
   ]
 }
