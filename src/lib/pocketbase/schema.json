@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-02T13:02:27.530Z",
+  "generatedAt": "2026-10-12T02:44:05.684Z",
   "collections": [
     {
       "name": "users",
@@ -355,9 +355,17 @@
           "type": "file",
           "required": false,
           "system": false
+        },
+        {
+          "name": "import_hash",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
-      "indexes": []
+      "indexes": [
+        "CREATE INDEX `idx_clinical_records_import_hash` ON `clinical_records` (import_hash)"
+      ]
     },
     {
       "name": "appointments",
@@ -423,13 +431,20 @@
           "required": false,
           "system": false,
           "selectValues": ["internal", "public"]
+        },
+        {
+          "name": "import_hash",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX `idx_appointments_date` ON `appointments` (date)",
         "CREATE INDEX `idx_appointments_status` ON `appointments` (status)",
         "CREATE INDEX `idx_appointments_type` ON `appointments` (type)",
-        "CREATE INDEX `idx_appointments_patient_id` ON `appointments` (patient_id)"
+        "CREATE INDEX `idx_appointments_patient_id` ON `appointments` (patient_id)",
+        "CREATE INDEX `idx_appointments_import_hash` ON `appointments` (import_hash)"
       ]
     },
     {
@@ -606,12 +621,19 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "import_hash",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_vaccines_patient_id ON vaccines (patient_id)",
         "CREATE INDEX idx_vaccines_date ON vaccines (date)",
-        "CREATE INDEX `idx_vaccines_completed` ON `vaccines` (completed)"
+        "CREATE INDEX `idx_vaccines_completed` ON `vaccines` (completed)",
+        "CREATE INDEX `idx_vaccines_import_hash` ON `vaccines` (import_hash)"
       ]
     },
     {

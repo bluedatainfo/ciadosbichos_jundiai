@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { parseFile, ParseResult } from '@/lib/csv-parser'
 import { EntityType, ENTITY_LABELS, FIELD_CONFIGS, validateRow } from '@/lib/import-config'
 import { processImport, ImportReport as ImportReportType } from '@/services/import'
@@ -7,10 +7,19 @@ import {
   AccessImportProgress,
   AccessImportReport as AccessImportReportType,
 } from '@/services/access-import'
+import {
+  incrementalSyncService,
+  SyncBalanceSummary,
+  SyncProgress,
+  SyncResultReport as SyncResultReportType,
+} from '@/services/incremental-sync'
+import { SyncBalanceReportView } from '@/components/import/SyncBalanceReportView'
+import { SyncResultReportView } from '@/components/import/SyncResultReportView'
 import { importProgressService, ImportProgressRecord } from '@/services/import-progress'
 import { runAccessDateParserTests } from '@/lib/__tests__/access-date-parser.test'
 import { runAccessRateLimitAsyncTests } from '@/lib/__tests__/access-rate-limit.test'
 import { runAccessRangeImportTests } from '@/lib/__tests__/access-range-import.test'
+import { runSyncHashUtilsTests } from '@/lib/__tests__/sync-hash-utils.test'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -46,12 +55,16 @@ import {
   HelpCircle,
   RefreshCw,
   Upload,
+  Scale,
+  GitCompare,
+  Pause,
+  ShieldCheck,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 
-type ImportMode = 'access_legacy' | 'standard'
-type Step = 'select' | 'upload' | 'map' | 'preview' | 'importing' | 'report'
+type ImportMode = 'access_legacy' | 'standard' | 'incremental_sync'
+type Step = 'select' | 'upload' | 'map' | 'preview' | 'sync_balance' | 'importing' | 'report'
 type AccessBatchSelection = 'range' | '50' | '200' | 'full'
 
 const ENTITY_ICONS = {
@@ -88,6 +101,21 @@ export default function Import() {
   // Opções do modo standard
   const [standardProgress, setStandardProgress] = useState(0)
   const [standardReport, setStandardReport] = useState<ImportReportType | null>(null)
+
+  // Estados específicos da Sincronização Incremental
+  const [syncBalance, setSyncBalance] = useState<SyncBalanceSummary | null>(null)
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null)
+  const [syncReport, setSyncReport] = useState<SyncResultReportType | null>(null)
+  const [isAnalyzingBalance, setIsAnalyzingBalance] = useState(false)
+  const [balanceAnalysisProgress, setBalanceAnalysisProgress] = useState<{
+    percent: number
+    message: string
+  }>({
+    percent: 0,
+    message: '',
+  })
+  const [isSyncPaused, setIsSyncPaused] = useState(false)
+  const pauseSyncRef = useRef(false)
 
   // Carregar contagem de falhas do banco
   const loadFailuresCount = useCallback(async () => {
@@ -169,12 +197,34 @@ export default function Import() {
             )
           }
         })
+        const syncHashCheck = runSyncHashUtilsTests()
+        if (!syncHashCheck.passed) {
+          console.warn(
+            'Alerta nos testes do gerador de hashes da sincronização:',
+            syncHashCheck.results.filter((r) => !r.ok),
+          )
+        }
       } catch (tErr) {
         console.warn('Erro ao verificar suite de testes:', tErr)
       }
 
       // Se estamos no modo Access legado OU se detectamos os cabeçalhos do Access
       const detectedAccess = isAccessHeader(result.headers)
+      if (
+        (mode as ImportMode) === 'incremental_sync' ||
+        (detectedAccess && (mode as ImportMode) === 'incremental_sync')
+      ) {
+        setMode('incremental_sync')
+        setStep('preview')
+        setRangeStart(1)
+        setRangeEnd(Math.min(result.rows.length, 1000))
+        toast({
+          title: 'Arquivo Carregado para Sincronização',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para comparação incremental.`,
+        })
+        return
+      }
+
       if (mode === 'access_legacy' || detectedAccess) {
         setMode('access_legacy')
         setStep('preview')
@@ -359,16 +409,129 @@ export default function Import() {
     })
   }
 
+  // Executar Análise de Balanceamento da Sincronização
+  const handleAnalyzeSyncBalance = async () => {
+    if (!parseResult) return
+
+    let effectiveStart = 1
+    let effectiveEnd = parseResult.rows.length
+    if (batchSelection === 'range') {
+      effectiveStart = Math.max(1, Math.min(rangeStart || 1, parseResult.rows.length))
+      effectiveEnd = Math.max(
+        effectiveStart,
+        Math.min(rangeEnd || effectiveStart, parseResult.rows.length),
+      )
+    } else if (batchSelection === '50') {
+      effectiveEnd = Math.min(50, parseResult.rows.length)
+    } else if (batchSelection === '200') {
+      effectiveEnd = Math.min(200, parseResult.rows.length)
+    }
+
+    setIsAnalyzingBalance(true)
+    setBalanceAnalysisProgress({ percent: 0, message: 'Iniciando análise incremental...' })
+
+    try {
+      const summary = await incrementalSyncService.analyzeBalance(parseResult.rows, {
+        startIndex: effectiveStart,
+        endIndex: effectiveEnd,
+        onProgress: (percent, message) => {
+          setBalanceAnalysisProgress({ percent, message })
+        },
+      })
+      setSyncBalance(summary)
+      setStep('sync_balance')
+    } catch (err: any) {
+      toast({
+        title: 'Erro na análise de balanceamento',
+        description: err.message || 'Falha ao comparar base oficial.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsAnalyzingBalance(false)
+    }
+  }
+
+  // Executar a Aplicação Real da Sincronização Incremental
+  const handleConfirmAndApplySync = async () => {
+    if (!parseResult || !syncBalance) return
+
+    let effectiveStart = 1
+    let effectiveEnd = parseResult.rows.length
+    if (batchSelection === 'range') {
+      effectiveStart = Math.max(1, Math.min(rangeStart || 1, parseResult.rows.length))
+      effectiveEnd = Math.max(
+        effectiveStart,
+        Math.min(rangeEnd || effectiveStart, parseResult.rows.length),
+      )
+    } else if (batchSelection === '50') {
+      effectiveEnd = Math.min(50, parseResult.rows.length)
+    } else if (batchSelection === '200') {
+      effectiveEnd = Math.min(200, parseResult.rows.length)
+    }
+
+    pauseSyncRef.current = false
+    setIsSyncPaused(false)
+    setStep('importing')
+
+    try {
+      const rep = await incrementalSyncService.applySync(parseResult.rows, syncBalance, {
+        startIndex: effectiveStart,
+        endIndex: effectiveEnd,
+        batchSize: 25,
+        itemDelayMs: 120,
+        maxRetries: 3,
+        onProgress: (p) => {
+          setSyncProgress(p)
+          // Salvar progresso contínuo
+          incrementalSyncService.savePersistedState({
+            fileName,
+            totalRows: parseResult.rows.length,
+            lastProcessedLine: effectiveStart + p.current - 1,
+            balance: syncBalance,
+            progress: p,
+            timestamp: new Date().toISOString(),
+          })
+        },
+        shouldPause: () => pauseSyncRef.current,
+      })
+
+      setSyncReport(rep)
+      setStep('report')
+
+      toast({
+        title: rep.success ? 'Sincronização Finalizada!' : 'Sincronização Concluída com Avisos',
+        description: `${rep.applied.patientsUpdated} pacientes atualizados, ${rep.applied.patientsCreated} criados.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro durante a sincronização',
+        description: err.message || 'Falha ao aplicar alterações.',
+        variant: 'destructive',
+      })
+      setStep('sync_balance')
+    }
+  }
+
+  const handlePauseSync = () => {
+    pauseSyncRef.current = true
+    setIsSyncPaused(true)
+    toast({
+      title: 'Sincronização Pausada',
+      description: 'O processo será pausado após a gravação da linha atual. O estado foi mantido.',
+    })
+  }
+
   const reset = () => {
     setStep('select')
     setEntityType(null)
-    // Manter parseResult e fileName se o usuário estiver trabalhando no arquivo,
-    // ou permitir novo arquivo se quiser
     setMapping({})
     setStandardProgress(0)
     setStandardReport(null)
     setAccessProgress(null)
     setAccessReport(null)
+    setSyncBalance(null)
+    setSyncProgress(null)
+    setSyncReport(null)
   }
 
   // Ao voltar do relatório de uma faixa para importar a próxima
@@ -434,46 +597,90 @@ export default function Import() {
 
       {step === 'select' && (
         <div className="space-y-6">
-          {/* Card Principal: Migração do Access 2.0 */}
+          {/* Card em Destaque 1: Sincronização Incremental (Novo - Produção) */}
+          <Card
+            onClick={() => {
+              setMode('incremental_sync')
+              setStep('upload')
+            }}
+            className="cursor-pointer border-2 border-emerald-500/50 hover:border-emerald-600 hover:shadow-lg transition-all bg-gradient-to-r from-emerald-500/10 via-white to-transparent p-2 group"
+          >
+            <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md">
+                  <GitCompare className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xl font-bold text-slate-900">
+                      Sincronização Incremental da Nova Base Oficial
+                    </h3>
+                    <Badge className="bg-emerald-600 text-white font-semibold">
+                      Recomendado para Produção
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
+                    Compara a nova cópia oficial do Access com os dados já existentes no sistema.{' '}
+                    <strong>Pula registros idênticos</strong>,{' '}
+                    <strong>
+                      atualiza dados divergentes restaurando o arquivo oficial com log na Auditoria
+                    </strong>{' '}
+                    (&ldquo;vale o do arquivo&rdquo;) e{' '}
+                    <strong>importa apenas os registros novos</strong>. Não duplica dados nem
+                    recarrega desnecessariamente a base inteira.
+                  </p>
+                  <p className="text-xs text-emerald-800 font-medium flex items-center gap-1.5 pt-1">
+                    <Scale className="w-3.5 h-3.5 text-emerald-600" />
+                    Exibe relatório de balanceamento (idênticos / a atualizar / novos) para
+                    confirmação antes de gravar.
+                  </p>
+                </div>
+              </div>
+              <Button className="shrink-0 gap-2 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white group-hover:translate-x-1 transition-transform">
+                Iniciar Sincronização <ArrowRight className="w-4 h-4" />
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Migração Completa Inicial do Access 2.0 */}
           <Card
             onClick={() => {
               setMode('access_legacy')
               setStep('upload')
             }}
-            className="cursor-pointer border-2 border-primary/40 hover:border-primary hover:shadow-lg transition-all bg-gradient-to-r from-primary/5 via-white to-transparent p-2 group"
+            className="cursor-pointer border border-slate-300 hover:border-primary hover:shadow-md transition-all bg-white p-2 group"
           >
             <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0 group-hover:bg-primary group-hover:text-white transition-colors shadow-sm">
                   <Database className="w-7 h-7" />
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-2">
                     <h3 className="text-xl font-bold text-slate-900">
-                      Migração do Sistema Legado (Access 2.0)
+                      Importação Completa do Sistema Legado (Access 2.0)
                     </h3>
-                    <Badge className="bg-primary/20 text-primary border-primary/30">
-                      Recomendado
+                    <Badge variant="outline" className="text-slate-600">
+                      Carga Inicial
                     </Badge>
                   </div>
                   <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
-                    Importa o arquivo delimitado com tabela única contendo colunas{' '}
-                    <code className="text-xs bg-slate-100 px-1 py-0.5 rounded font-mono text-primary font-semibold">
-                      NOME, ANIM, ESPE, NASC, PELA, TEXTO, VAC1-5...
-                    </code>
-                    . Cria cada paciente de forma individual por linha com chave composta única,
-                    desduplicação inteligente de tutores, extração cronológica do histórico clínico
-                    individualizado e vacinas.
+                    Importação sequencial de todas as linhas de um arquivo limpo do Access por
+                    faixas (ex: 1–1.000, 1.001–2.000). Cria todos os tutores, pacientes, fichas
+                    clínicas, vacinas e agendamentos.
                   </p>
                   <p className="text-xs text-muted-foreground flex items-center gap-1.5 pt-1">
                     <FlaskConical className="w-3.5 h-3.5 text-amber-500" />
                     <strong>Suporta teste com lote pequeno (~50 registros)</strong> antes da base
-                    completa de 21.000+.
+                    completa.
                   </p>
                 </div>
               </div>
-              <Button className="shrink-0 gap-2 shadow-sm group-hover:translate-x-1 transition-transform">
-                Iniciar Migração <ArrowRight className="w-4 h-4" />
+              <Button
+                variant="outline"
+                className="shrink-0 gap-2 shadow-sm group-hover:translate-x-1 transition-transform"
+              >
+                Carga Completa <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
           </Card>
@@ -568,6 +775,341 @@ export default function Import() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Passo PREVIEW (Modo Sincronização Incremental) */}
+      {step === 'preview' && mode === 'incremental_sync' && parseResult && (
+        <Card className="border-none shadow-sm space-y-6">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <GitCompare className="w-5 h-5 text-emerald-600" /> Sincronização Incremental:
+                  Configuração da Faixa
+                </CardTitle>
+                <CardDescription>
+                  Selecione as linhas do arquivo oficial para comparação registro a registro. Na
+                  próxima etapa você verá o balanço prévio antes de aplicar ao banco de dados.
+                </CardDescription>
+              </div>
+              <Badge
+                variant="outline"
+                className="w-fit text-xs bg-emerald-50 text-emerald-800 border-emerald-300 font-mono"
+              >
+                {fileName || 'Arquivo Oficial'}
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/60 flex items-start gap-3">
+              <ShieldCheck className="w-5 h-5 text-indigo-700 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                <p className="font-bold text-indigo-950">
+                  Regra do Usuário: &ldquo;Vale o do arquivo&rdquo;
+                </p>
+                <p className="text-indigo-800 leading-relaxed">
+                  Registros idênticos serão pulados; registros divergentes serão atualizados com os
+                  dados da base oficial (com registro na Auditoria); novos serão inseridos
+                  completos; registros existentes no sistema ausentes no arquivo serão mantidos
+                  intactos.
+                </p>
+              </div>
+            </div>
+
+            {/* Configuração de Faixa */}
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/70 space-y-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-emerald-600" /> Faixa de Linhas para
+                    Sincronização
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Você pode sincronizar faixas (ex: 1–1.000, 1.001–2.000) ou a base inteira.
+                  </p>
+                </div>
+                <Badge variant="secondary" className="font-mono text-xs">
+                  Total no CSV: {parseResult.rows.length.toLocaleString('pt-BR')} linhas
+                </Badge>
+              </div>
+
+              <RadioGroup
+                value={batchSelection}
+                onValueChange={(val) => setBatchSelection(val as AccessBatchSelection)}
+                className="grid gap-2.5 sm:grid-cols-4 pt-1"
+              >
+                <div
+                  className={cn(
+                    'flex flex-col justify-between p-3 rounded-lg border transition-all cursor-pointer',
+                    batchSelection === 'range'
+                      ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  )}
+                  onClick={() => setBatchSelection('range')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="range" id="sync-opt-range" />
+                    <Label
+                      htmlFor="sync-opt-range"
+                      className="text-xs font-bold cursor-pointer text-slate-900"
+                    >
+                      Por Faixa de Linhas
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 pl-6">
+                    Sessões controladas (ex: 1–1.000)
+                  </p>
+                  <Badge className="bg-emerald-600 text-white text-[10px] w-fit mt-2 ml-6">
+                    Recomendado
+                  </Badge>
+                </div>
+
+                <div
+                  className={cn(
+                    'flex flex-col justify-between p-3 rounded-lg border transition-all cursor-pointer',
+                    batchSelection === '50'
+                      ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  )}
+                  onClick={() => setBatchSelection('50')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="50" id="sync-opt-50" />
+                    <Label
+                      htmlFor="sync-opt-50"
+                      className="text-xs font-semibold cursor-pointer text-slate-900"
+                    >
+                      Teste Rápido (50 linhas)
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 pl-6">
+                    Conferência rápida do balanceamento
+                  </p>
+                </div>
+
+                <div
+                  className={cn(
+                    'flex flex-col justify-between p-3 rounded-lg border transition-all cursor-pointer',
+                    batchSelection === '200'
+                      ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  )}
+                  onClick={() => setBatchSelection('200')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="200" id="sync-opt-200" />
+                    <Label
+                      htmlFor="sync-opt-200"
+                      className="text-xs font-semibold cursor-pointer text-slate-900"
+                    >
+                      Intermediário (200 linhas)
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 pl-6">
+                    Amostra intermediária de teste
+                  </p>
+                </div>
+
+                <div
+                  className={cn(
+                    'flex flex-col justify-between p-3 rounded-lg border transition-all cursor-pointer',
+                    batchSelection === 'full'
+                      ? 'border-emerald-600 bg-emerald-50/50 ring-1 ring-emerald-600'
+                      : 'border-slate-200 bg-white hover:border-slate-300',
+                  )}
+                  onClick={() => setBatchSelection('full')}
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="full" id="sync-opt-full" />
+                    <Label
+                      htmlFor="sync-opt-full"
+                      className="text-xs font-semibold cursor-pointer text-slate-900"
+                    >
+                      Arquivo Todo ({parseResult.rows.length.toLocaleString()})
+                    </Label>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 pl-6">
+                    Compara e sincroniza todas as linhas
+                  </p>
+                </div>
+              </RadioGroup>
+
+              {batchSelection === 'range' && (
+                <div className="mt-3 p-3.5 bg-white rounded-lg border border-emerald-300/60 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <Label className="text-xs font-bold text-slate-800">
+                        Intervalo de Linhas a Sincronizar
+                      </Label>
+                      <p className="text-[11px] text-slate-500">
+                        Defina a faixa desejada para este ciclo de sincronização.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] text-slate-500 font-medium">Faixas comuns:</span>
+                      {[
+                        { label: '1–1.000', s: 1, e: 1000 },
+                        { label: '1.001–2.000', s: 1001, e: 2000 },
+                        { label: '2.001–3.000', s: 2001, e: 3000 },
+                        { label: '3.001–4.000', s: 3001, e: 4000 },
+                      ].map((preset) => (
+                        <Button
+                          key={preset.label}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 text-[10px] px-2"
+                          onClick={() => {
+                            setRangeStart(preset.s)
+                            setRangeEnd(Math.min(parseResult.rows.length, preset.e))
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="sync-range-start"
+                        className="text-xs font-medium text-slate-700"
+                      >
+                        Linha Inicial:
+                      </Label>
+                      <Input
+                        id="sync-range-start"
+                        type="number"
+                        min={1}
+                        max={parseResult.rows.length}
+                        value={rangeStart}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 1
+                          setRangeStart(val)
+                          if (rangeEnd < val) {
+                            setRangeEnd(Math.min(parseResult.rows.length, val + 999))
+                          }
+                        }}
+                        className="h-9 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label
+                        htmlFor="sync-range-end"
+                        className="text-xs font-medium text-slate-700"
+                      >
+                        Linha Final:
+                      </Label>
+                      <Input
+                        id="sync-range-end"
+                        type="number"
+                        min={rangeStart}
+                        max={parseResult.rows.length}
+                        value={rangeEnd}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || rangeStart
+                          setRangeEnd(Math.min(parseResult.rows.length, Math.max(val, rangeStart)))
+                        }}
+                        className="h-9 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Prévia dos Dados */}
+            <AccessDataPreview
+              rows={parseResult.rows}
+              limit={batchSelection === '50' ? 50 : batchSelection === '200' ? 200 : 50}
+              rangeStart={batchSelection === 'range' ? rangeStart : 1}
+              rangeEnd={
+                batchSelection === 'range'
+                  ? rangeEnd
+                  : batchSelection === '50'
+                    ? 50
+                    : batchSelection === '200'
+                      ? 200
+                      : parseResult.rows.length
+              }
+              isRangeMode={batchSelection === 'range'}
+            />
+
+            {/* Barra de Progresso durante Análise de Balanceamento */}
+            {isAnalyzingBalance && (
+              <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50/50 space-y-2 animate-in fade-in">
+                <div className="flex items-center justify-between text-xs font-bold text-emerald-950">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-700" />
+                    {balanceAnalysisProgress.message}
+                  </span>
+                  <span>{balanceAnalysisProgress.percent}%</span>
+                </div>
+                <Progress value={balanceAnalysisProgress.percent} className="h-2.5" />
+              </div>
+            )}
+
+            {/* Ações Inferiores */}
+            <div className="flex justify-between items-center pt-2 flex-wrap gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setStep('upload')}
+                disabled={isAnalyzingBalance}
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" /> Escolher Outro Arquivo
+              </Button>
+              <Button
+                onClick={handleAnalyzeSyncBalance}
+                disabled={isAnalyzingBalance}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 shadow-md font-bold px-6"
+              >
+                {isAnalyzingBalance ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Analisando Base...
+                  </>
+                ) : (
+                  <>
+                    <Scale className="w-4 h-4" />
+                    Gerar Relatório de Balanceamento (
+                    {batchSelection === 'range'
+                      ? `${rangeStart}–${rangeEnd}`
+                      : batchSelection === '50'
+                        ? '50 linhas'
+                        : batchSelection === '200'
+                          ? '200 linhas'
+                          : 'Todas as linhas'}
+                    )
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Passo NOVO: RELATÓRIO DE BALANCEAMENTO PRÉ-SINCRONIZAÇÃO */}
+      {step === 'sync_balance' && syncBalance && parseResult && (
+        <SyncBalanceReportView
+          balance={syncBalance}
+          fileName={fileName}
+          totalRows={parseResult.rows.length}
+          rangeStart={batchSelection === 'range' ? rangeStart : 1}
+          rangeEnd={
+            batchSelection === 'range'
+              ? rangeEnd
+              : batchSelection === '50'
+                ? 50
+                : batchSelection === '200'
+                  ? 200
+                  : parseResult.rows.length
+          }
+          onConfirmSync={handleConfirmAndApplySync}
+          onCancel={() => setStep('preview')}
+        />
       )}
 
       {/* Passo PREVIEW (Modo Access Legado) */}
@@ -958,35 +1500,96 @@ export default function Import() {
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
             <div className="text-center space-y-1">
               <p className="font-semibold text-lg text-slate-800">
-                {mode === 'access_legacy'
-                  ? 'Processando migração em lotes...'
-                  : 'Processando importação...'}
+                {mode === 'incremental_sync'
+                  ? 'Aplicando Sincronização Incremental...'
+                  : mode === 'access_legacy'
+                    ? 'Processando migração em lotes...'
+                    : 'Processando importação...'}
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
-                {mode === 'access_legacy'
-                  ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
-                  : 'Gravando registros no banco de dados.'}
+                {mode === 'incremental_sync'
+                  ? 'Comparando registro a registro, pulando idênticos e gravando atualizações no banco e na Auditoria ("vale o do arquivo").'
+                  : mode === 'access_legacy'
+                    ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
+                    : 'Gravando registros no banco de dados.'}
               </p>
             </div>
 
             <div className="w-full max-w-md space-y-2">
               <Progress
-                value={mode === 'access_legacy' ? accessProgress?.percent || 0 : standardProgress}
+                value={
+                  mode === 'incremental_sync'
+                    ? syncProgress?.percent || 0
+                    : mode === 'access_legacy'
+                      ? accessProgress?.percent || 0
+                      : standardProgress
+                }
                 className="w-full h-3"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {mode === 'access_legacy'
-                    ? accessProgress?.statusMessage || 'Iniciando...'
-                    : `${standardProgress}% concluído`}
+                  {mode === 'incremental_sync'
+                    ? syncProgress?.statusMessage || 'Iniciando sincronização...'
+                    : mode === 'access_legacy'
+                      ? accessProgress?.statusMessage || 'Iniciando...'
+                      : `${standardProgress}% concluído`}
                 </span>
                 <span className="font-semibold">
-                  {mode === 'access_legacy'
-                    ? `${accessProgress?.percent || 0}%`
-                    : `${standardProgress}%`}
+                  {mode === 'incremental_sync'
+                    ? `${syncProgress?.percent || 0}%`
+                    : mode === 'access_legacy'
+                      ? `${accessProgress?.percent || 0}%`
+                      : `${standardProgress}%`}
                 </span>
               </div>
             </div>
+
+            {/* Painel de Contadores de Sincronização */}
+            {mode === 'incremental_sync' && syncProgress && (
+              <div className="w-full max-w-xl space-y-4 pt-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border">
+                    <p className="font-bold text-blue-700">
+                      {syncProgress.tutorsUpdated} at. / {syncProgress.tutorsCreated} nov.
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      Tutores ({syncProgress.tutorsSkipped} pulados)
+                    </p>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-lg border">
+                    <p className="font-bold text-emerald-700">
+                      {syncProgress.patientsUpdated} at. / {syncProgress.patientsCreated} nov.
+                    </p>
+                    <p className="text-[10px] text-slate-500">
+                      Pacientes ({syncProgress.patientsSkipped} pulados)
+                    </p>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-lg border">
+                    <p className="font-bold text-purple-700">+{syncProgress.clinicalCreated}</p>
+                    <p className="text-[10px] text-slate-500">
+                      Fichas ({syncProgress.clinicalSkipped} puladas)
+                    </p>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-lg border">
+                    <p className="font-bold text-indigo-700">{syncProgress.auditsLogged}</p>
+                    <p className="text-[10px] text-slate-500">Logs de Auditoria</p>
+                  </div>
+                </div>
+
+                <div className="flex justify-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handlePauseSync}
+                    disabled={isSyncPaused}
+                    className="gap-1.5 text-xs text-amber-700 hover:text-amber-800"
+                  >
+                    <Pause className="w-3.5 h-3.5" />
+                    {isSyncPaused ? 'Pausando após registro atual...' : 'Pausar Sincronização'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {mode === 'access_legacy' && accessProgress && (
               <div className="grid grid-cols-5 gap-2 w-full max-w-xl mt-4 text-center">
@@ -1023,6 +1626,33 @@ export default function Import() {
       {/* Passo REPORT */}
       {step === 'report' && (
         <>
+          {mode === 'incremental_sync' && syncReport && (
+            <SyncResultReportView
+              report={syncReport}
+              onRestart={() => setStep('preview')}
+              onContinueNextRange={() => {
+                if (batchSelection === 'range') {
+                  const currentEnd = rangeEnd || 1000
+                  const newStart = currentEnd + 1
+                  const newEnd = Math.min(parseResult?.rows.length || 0, currentEnd + 1000)
+                  setRangeStart(newStart)
+                  setRangeEnd(newEnd)
+                  setStep('preview')
+                } else {
+                  setStep('preview')
+                }
+              }}
+              nextRangeSuggested={
+                batchSelection === 'range' && (rangeEnd || 0) < (parseResult?.rows.length || 0)
+                  ? {
+                      start: (rangeEnd || 0) + 1,
+                      end: Math.min(parseResult?.rows.length || 0, (rangeEnd || 0) + 1000),
+                    }
+                  : null
+              }
+            />
+          )}
+
           {mode === 'access_legacy' && accessReport && (
             <AccessImportReportView
               report={accessReport}

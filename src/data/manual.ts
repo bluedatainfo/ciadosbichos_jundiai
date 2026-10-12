@@ -508,14 +508,25 @@ export const MANUAL_MODULES: ManualModule[] = [
         'Mecanismo de retry automático com backoff exponencial contra limites de requisição da nuvem.',
         'Relatório analítico ao final de cada faixa com total de tutores criados, pacientes, evoluções clínicas, vacinas e eventuais pendências.',
         'Reprocessamento inteligente de falhas (Too Many Requests): grava pendências diretamente na base de dados (import_failures), permitindo reprocessar exclusivamente os registros faltantes com throttling (pausas de 200ms) e releitura do arquivo original sem duplicar pacientes ou tutores.',
+        'Novo Modo: Sincronização Incremental da Nova Base Oficial com relatório prévio de balanceamento (idênticos / a atualizar / novos / só no sistema), regra estrita "vale o do arquivo" com log automático na Auditoria e comparação rápida por hash sem baixar dados pesados.',
       ],
     },
     fields: [
       {
         name: 'Modo de Importação',
         description:
-          'Escolha entre "Migração do Sistema Legado (Access 2.0)" para a tabela unificada clássica ou "Importação CSV Padrão" para tabelas individuais.',
+          'Escolha entre "Sincronização Incremental da Nova Base Oficial" (recomendado para produção e atualização contínua), "Importação Completa do Sistema Legado (Access 2.0)" ou "Importação CSV Padrão".',
         required: true,
+      },
+      {
+        name: 'Sincronização Incremental ("Vale o do Arquivo")',
+        description:
+          'Compara a nova cópia oficial do arquivo com os dados já existentes no sistema. Registros idênticos são pulados, divergências são atualizadas para refletir o arquivo oficial (com registro no módulo de Auditoria), novos registros são inseridos e dados exclusivos do sistema são preservados.',
+      },
+      {
+        name: 'Relatório de Balanceamento Pré-Sincronização',
+        description:
+          'Painel exibido antes da gravação que lista os totais exatos de registros Idênticos, A Atualizar, Novos e Apenas no Sistema para cada coleção (Tutores, Pacientes, Fichas Clínicas, Vacinas e Retornos).',
       },
       {
         name: 'Faixa de Linhas (Range Start e Range End)',
@@ -542,6 +553,16 @@ export const MANUAL_MODULES: ManualModule[] = [
       },
     ],
     workflows: [
+      {
+        title: 'Passo a passo: Sincronização Incremental da Nova Base Oficial (Produção)',
+        description:
+          '1. Na tela de Importação (/importacao), clique no card em destaque "Sincronização Incremental da Nova Base Oficial".\n2. Envie o novo arquivo exportado da base oficial (arraste o CSV/TXT ou clique para selecionar).\n3. O sistema detectará automaticamente o formato e exibirá a pré-visualização.\n4. Selecione a faixa de linhas desejada (ex: Por Faixa de Linhas 1 a 1.000, ou o Arquivo Todo) e clique em "Gerar Relatório de Balanceamento".\n5. O sistema fará o download em segundo plano apenas dos índices leves de comparação e exibirá a tabela de balanceamento com o total de registros idênticos, a atualizar com auditoria e novos.\n6. Revise os números e clique em "Confirmar e Sincronizar".\n7. Acompanhe a gravação com proteção automática contra sobrecarga (throttling e retry em caso de Too Many Requests), contadores em tempo real e botão para pausar se necessário.\n8. Ao finalizar, confira o balanço consolidado e as alterações registradas no módulo de Auditoria.',
+      },
+      {
+        title: 'Como funciona a regra "Vale o do arquivo" e a Auditoria',
+        description:
+          'Durante a Sincronização Incremental, caso um tutor ou paciente já exista no sistema com dados divergentes da nova planilha oficial, os valores da nova cópia do arquivo prevalecem automaticamente. Cada alteração feita (ex: telefone antigo → telefone do arquivo, raça anterior → raça do arquivo) gera um registro imediato no módulo Auditoria com o usuário responsável, data/hora e o diferencial de cada campo.',
+      },
       {
         title: 'Passo a passo: Importação completa por faixas do Access 2.0',
         description:
@@ -570,6 +591,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       },
     ],
     tips: [
+      'Para atualizar uma base já migrada anteriormente, use sempre o modo "Sincronização Incremental" para evitar duplicidades e poupar tempo.',
       'Recomendamos faixas de 500 a 1.000 linhas por vez para melhor controle e acompanhamento visual.',
       'O recurso de Reprocessar Falhas NÃO recria tutores nem animais, garantindo integridade e evitando duplicidades.',
       'Você pode interromper a importação ao final de qualquer faixa e continuar mais tarde sem perder nenhum dado já gravado.',
