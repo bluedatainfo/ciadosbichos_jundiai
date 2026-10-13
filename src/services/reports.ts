@@ -269,6 +269,23 @@ export async function fetchReturnReportData(
     })
   }
 
+  // Ordenação por nome de tutor (case/accent insensitive em pt-BR),
+  // e secundariamente por animalName e data de retorno,
+  // para que o usuário visualize os retornos do mesmo tutor de animais diferentes juntos.
+  rows.sort((a, b) => {
+    const tutorComp = (a.tutorName || '').localeCompare(b.tutorName || '', 'pt-BR', {
+      sensitivity: 'base',
+    })
+    if (tutorComp !== 0) return tutorComp
+
+    const animalComp = (a.animalName || '').localeCompare(b.animalName || '', 'pt-BR', {
+      sensitivity: 'base',
+    })
+    if (animalComp !== 0) return animalComp
+
+    return (a.returnDate || '').localeCompare(b.returnDate || '')
+  })
+
   return rows
 }
 

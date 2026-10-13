@@ -62,11 +62,15 @@ export const api = {
     })
   },
   getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
-  getPatients: (search?: string) => {
-    const clean = search?.trim().replace(/"/g, '\\"') || ''
-    const filter = clean
-      ? `name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}"`
-      : ''
+  getPatients: async (search?: string) => {
+    let filter = ''
+    if (search?.trim()) {
+      const { buildMultiFieldSearchFilter } = await import('@/lib/search-utils')
+      filter = buildMultiFieldSearchFilter(
+        ['name', 'species', 'breed', 'nume', 'ctrl'],
+        search.trim(),
+      )
+    }
     return pb.collection('patients').getFullList<Patient>({
       filter,
       expand: 'tutor_id',
@@ -85,10 +89,16 @@ export const api = {
     const filterParts: string[] = []
 
     if (options?.search?.trim()) {
-      const clean = options.search.trim().replace(/"/g, '\\"')
-      filterParts.push(
-        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}")`,
+      const { buildMultiFieldSearchFilter } = await import('@/lib/search-utils')
+      // Busca de pacientes: apenas pelo animal (nome, espécie, raça, nume, ctrl)
+      // Conforme especificado pelo usuário: a busca não deve casar com nome de tutor e deve ignorar acentuação
+      const patientFilter = buildMultiFieldSearchFilter(
+        ['name', 'species', 'breed', 'nume', 'ctrl'],
+        options.search.trim(),
       )
+      if (patientFilter) {
+        filterParts.push(patientFilter)
+      }
     }
 
     if (options?.species?.trim() && options.species !== 'all') {
@@ -108,10 +118,14 @@ export const api = {
   getPatientsCount: async (search?: string, species?: string) => {
     const filterParts: string[] = []
     if (search?.trim()) {
-      const clean = search.trim().replace(/"/g, '\\"')
-      filterParts.push(
-        `(name ~ "${clean}" || breed ~ "${clean}" || species ~ "${clean}" || tutor_id.name ~ "${clean}" || nume ~ "${clean}" || ctrl ~ "${clean}")`,
+      const { buildMultiFieldSearchFilter } = await import('@/lib/search-utils')
+      const patientFilter = buildMultiFieldSearchFilter(
+        ['name', 'species', 'breed', 'nume', 'ctrl'],
+        search.trim(),
       )
+      if (patientFilter) {
+        filterParts.push(patientFilter)
+      }
     }
     if (species?.trim() && species !== 'all') {
       const cleanSpecies = species.trim().replace(/"/g, '\\"')
@@ -176,8 +190,18 @@ export const api = {
     let filter = ''
 
     if (options?.search?.trim()) {
-      const clean = options.search.trim().replace(/"/g, '\\"')
-      filter = `name ~ "${clean}" || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
+      const { buildMultiFieldSearchFilter, escapePbFilter } = await import('@/lib/search-utils')
+      // Busca na Lista de Tutores:
+      // "a busca deve ser válida somente pelo nome do tutor, e não pelo nome do animal, espécie etc."
+      // e deve ignorar acentuação (ex: 'Adao' casa com 'Adão' e vice-versa).
+      // Permite também CPF e telefone caso o usuário digite números.
+      const term = options.search.trim()
+      const nameFilter = buildMultiFieldSearchFilter(['name'], term)
+      const clean = escapePbFilter(term)
+      // Se for número/dígito ou e-mail, inclui cpf/phone/email
+      filter = nameFilter
+        ? `(${nameFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
+        : `cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
     }
 
     const sort = options?.sort || '-created'
@@ -190,8 +214,13 @@ export const api = {
   getTutorsCount: async (search?: string) => {
     let filter = ''
     if (search?.trim()) {
-      const clean = search.trim().replace(/"/g, '\\"')
-      filter = `name ~ "${clean}" || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
+      const { buildMultiFieldSearchFilter, escapePbFilter } = await import('@/lib/search-utils')
+      const term = search.trim()
+      const nameFilter = buildMultiFieldSearchFilter(['name'], term)
+      const clean = escapePbFilter(term)
+      filter = nameFilter
+        ? `(${nameFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
+        : `cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
     }
     const res = await pb.collection('tutors').getList(1, 1, {
       filter,

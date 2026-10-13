@@ -531,14 +531,14 @@ export default function ReturnReportPage() {
               <Table>
                 <TableHeader className="bg-slate-100/90 sticky top-0 z-10 border-b shadow-2xs">
                   <TableRow className="border-b border-slate-200">
+                    <TableHead className="w-[60px] text-center font-bold text-slate-800">
+                      Ação
+                    </TableHead>
                     <TableHead className="font-bold text-slate-800">Tutor</TableHead>
                     <TableHead className="font-bold text-slate-800">Animal</TableHead>
                     <TableHead className="font-bold text-slate-800">Nº Oficial</TableHead>
                     <TableHead className="font-bold text-slate-800">Data Retorno</TableHead>
                     <TableHead className="font-bold text-slate-800">Telefone / WhatsApp</TableHead>
-                    <TableHead className="w-[60px] text-right font-bold text-slate-800">
-                      Ação
-                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
@@ -563,6 +563,21 @@ export default function ReturnReportPage() {
                           key={row.id}
                           className="hover:bg-slate-50/80 transition-colors border-b border-slate-100"
                         >
+                          {/* Ação: Ver Prontuário na 1ª posição à esquerda */}
+                          <TableCell className="text-center">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-slate-500 hover:text-primary"
+                              asChild
+                              title="Abrir prontuário do paciente"
+                            >
+                              <Link to={`/pacientes/${row.patientId}`}>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </Link>
+                            </Button>
+                          </TableCell>
+
                           {/* Tutor */}
                           <TableCell className="font-medium text-slate-900 text-xs sm:text-sm">
                             <span className="uppercase">{row.tutorName}</span>
@@ -636,21 +651,6 @@ export default function ReturnReportPage() {
                                 Não cadastrado
                               </span>
                             )}
-                          </TableCell>
-
-                          {/* Ação: Ver Prontuário */}
-                          <TableCell className="text-right">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0 text-slate-500 hover:text-primary"
-                              asChild
-                              title="Abrir prontuário do paciente"
-                            >
-                              <Link to={`/pacientes/${row.patientId}`}>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </Link>
-                            </Button>
                           </TableCell>
                         </TableRow>
                       )

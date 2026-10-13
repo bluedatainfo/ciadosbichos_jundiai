@@ -637,7 +637,7 @@ export default function Patients() {
                   <div className="relative w-full max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar por paciente, nº oficial, espécie, raça ou tutor..."
+                      placeholder="Buscar por nome do paciente, nº oficial, espécie ou raça..."
                       value={patientSearch}
                       onChange={(e) => setPatientSearch(e.target.value)}
                       className="pl-9 bg-slate-50 border-slate-200 w-full"
