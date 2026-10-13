@@ -285,6 +285,20 @@ export default function Patients() {
   useEffect(() => {
     if (isSheetOpen) {
       loadSelectableTutors(selectableTutorSearch)
+      // Carregar automaticamente o próximo NUME oficial disponível para dar continuidade à numeração
+      api
+        .getNextPatientNume()
+        .then((nextNume) => {
+          if (nextNume) {
+            setFormData((prev) => ({
+              ...prev,
+              nume: prev.nume && prev.nume !== '0' ? prev.nume : nextNume,
+            }))
+          }
+        })
+        .catch((e) => {
+          console.warn('Erro ao carregar próximo NUME:', e)
+        })
     }
   }, [isSheetOpen, selectableTutorSearch])
 
@@ -756,8 +770,9 @@ export default function Patients() {
                     <Input
                       placeholder="Nº Oficial (NUME)"
                       value={formData.nume}
-                      onChange={(e) => setFormData({ ...formData, nume: e.target.value })}
-                      title="Número Oficial do Paciente / Registro Oficial"
+                      readOnly
+                      className="bg-slate-50 font-mono font-bold text-blue-900 border-blue-200 cursor-not-allowed"
+                      title="Número Oficial do Paciente (Gerado automaticamente em sequência contínua)"
                     />
                   </div>
                 </div>

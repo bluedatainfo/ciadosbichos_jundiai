@@ -61,6 +61,31 @@ export const api = {
       body: data,
     })
   },
+  getNextPatientNume: async (): Promise<string> => {
+    try {
+      const res = await pb.send<{ nextNume: string }>('/backend/v1/patients/next-nume', {
+        method: 'GET',
+      })
+      if (res && res.nextNume) return res.nextNume
+    } catch (e) {
+      console.warn('Erro ao consultar /backend/v1/patients/next-nume:', e)
+    }
+    // Fallback caso a rota falhe: buscar o maior numericamenente via list
+    try {
+      const records = await pb.collection('patients').getList<Patient>(1, 1, {
+        sort: '-created',
+        filter: "nume != ''",
+        fields: 'nume',
+      })
+      const n = records.items[0]?.nume
+      if (n && !isNaN(Number(n))) {
+        return String(Number(n) + 1)
+      }
+    } catch {
+      /* intentionally ignored */
+    }
+    return ''
+  },
   getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
   getPatientsByTutor: (tutorId: string) =>
     pb.collection('patients').getFullList<Patient>({
@@ -152,7 +177,25 @@ export const api = {
     }
     return pb.collection('patients').update(id, formData)
   },
-  createPatient: (data: any) => pb.collection('patients').create(data),
+  createPatient: async (data: any) => {
+    // Garantir que NUME seja sempre preenchido (nunca vazio nem 0)
+    const payload = { ...data }
+    let cleanNume = payload.nume ? String(payload.nume).trim() : ''
+    if (!cleanNume || cleanNume === '0') {
+      try {
+        const nextNume = await api.getNextPatientNume()
+        if (nextNume) {
+          cleanNume = nextNume
+        }
+      } catch (e) {
+        console.warn('Erro ao obter próximo NUME no createPatient:', e)
+      }
+    }
+    if (cleanNume && cleanNume !== '0') {
+      payload.nume = cleanNume
+    }
+    return pb.collection('patients').create<Patient>(payload)
+  },
   deletePatient: async (id: string) => {
     // Buscar antes de excluir para salvar detalhes na auditoria
     let patientData: any = null

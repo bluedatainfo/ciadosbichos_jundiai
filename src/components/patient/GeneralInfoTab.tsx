@@ -366,9 +366,10 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Label>Nº Oficial (NUME)</Label>
                 <Input
                   value={patientData.nume}
-                  onChange={(e) => setPatientData({ ...patientData, nume: e.target.value })}
-                  className="bg-white font-mono font-semibold text-blue-900 border-blue-200"
+                  readOnly
+                  className="bg-slate-50 font-mono font-bold text-blue-900 border-blue-200 cursor-not-allowed"
                   placeholder="Ex: 21202"
+                  title="Identificador oficial único e prioritário do paciente (não editável)"
                 />
               </div>
             </div>
