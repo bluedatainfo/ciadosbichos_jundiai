@@ -62,6 +62,12 @@ export const api = {
     })
   },
   getPatient: (id: string) => pb.collection('patients').getOne<Patient>(id, { expand: 'tutor_id' }),
+  getPatientsByTutor: (tutorId: string) =>
+    pb.collection('patients').getFullList<Patient>({
+      filter: `tutor_id = "${tutorId}"`,
+      sort: 'name',
+      expand: 'tutor_id',
+    }),
   getPatients: async (search?: string) => {
     let filter = ''
     if (search?.trim()) {
