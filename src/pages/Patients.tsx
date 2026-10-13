@@ -47,7 +47,15 @@ import {
   AlertTriangle,
   Clock,
   Filter,
+  PawPrint,
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
@@ -93,6 +101,13 @@ export default function Patients() {
     newTutorPhone: '',
     newTutorEmail: '',
     newTutorCpf: '',
+    newTutorCep: '',
+    newTutorAddress: '',
+    newTutorNumber: '',
+    newTutorComplement: '',
+    newTutorNeighborhood: '',
+    newTutorCity: '',
+    newTutorState: '',
     name: '',
     species: 'Cão',
     breed: '',
@@ -126,6 +141,64 @@ export default function Patients() {
   const [tutorEditLoading, setTutorEditLoading] = useState(false)
   const [tutorEditErrors, setTutorEditErrors] = useState<Record<string, string>>({})
   const [tutorCepLoading, setTutorCepLoading] = useState(false)
+  const [newTutorCepLoading, setNewTutorCepLoading] = useState(false)
+
+  // Estado para Modal de Pacientes do Tutor
+  const [isTutorPatientsDialogOpen, setIsTutorPatientsDialogOpen] = useState(false)
+  const [selectedTutorForPatients, setSelectedTutorForPatients] = useState<Tutor | null>(null)
+  const [tutorPatientsList, setTutorPatientsList] = useState<Patient[]>([])
+  const [tutorPatientsLoading, setTutorPatientsLoading] = useState(false)
+
+  const handleOpenTutorPatients = async (tutor: Tutor, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    setSelectedTutorForPatients(tutor)
+    setIsTutorPatientsDialogOpen(true)
+    setTutorPatientsLoading(true)
+    try {
+      const list = await api.getPatientsByTutor(tutor.id)
+      setTutorPatientsList(list)
+    } catch (err) {
+      console.error('Erro ao buscar pacientes do tutor:', err)
+      toast({
+        title: 'Erro ao buscar animais',
+        description: 'Não foi possível carregar os pacientes vinculados a este tutor.',
+        variant: 'destructive',
+      })
+      setTutorPatientsList([])
+    } finally {
+      setTutorPatientsLoading(false)
+    }
+  }
+
+  const handleNewTutorCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.replace(/\D/g, '')
+    setFormData((prev) => ({ ...prev, newTutorCep: val }))
+    if (val.length === 8) {
+      setNewTutorCepLoading(true)
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${val}/json/`)
+        const data = await res.json()
+        if (!data.erro) {
+          setFormData((prev) => ({
+            ...prev,
+            newTutorAddress: data.logradouro || prev.newTutorAddress,
+            newTutorNeighborhood: data.bairro || prev.newTutorNeighborhood,
+            newTutorCity: data.localidade || prev.newTutorCity,
+            newTutorState: data.uf || prev.newTutorState,
+          }))
+          toast({ title: 'CEP Encontrado', description: 'Campos preenchidos automaticamente.' })
+        } else {
+          toast({ title: 'CEP não encontrado', variant: 'destructive' })
+        }
+      } catch {
+        toast({ title: 'Erro ao buscar CEP', variant: 'destructive' })
+      } finally {
+        setNewTutorCepLoading(false)
+      }
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -246,12 +319,31 @@ export default function Patients() {
       let finalTutorId = formData.tutorId
       let createdTutorName = ''
       if (tutorMode === 'new') {
-        if (!formData.newTutorName) throw new Error('Nome do tutor é obrigatório')
+        if (!formData.newTutorName.trim()) throw new Error('Nome do tutor é obrigatório')
+
+        // Monta o logradouro completo com número e complemento se informados
+        let formattedAddress = formData.newTutorAddress.trim()
+        if (formData.newTutorNumber.trim()) {
+          formattedAddress = formattedAddress
+            ? `${formattedAddress}, ${formData.newTutorNumber.trim()}`
+            : formData.newTutorNumber.trim()
+        }
+        if (formData.newTutorComplement.trim()) {
+          formattedAddress = formattedAddress
+            ? `${formattedAddress} - ${formData.newTutorComplement.trim()}`
+            : formData.newTutorComplement.trim()
+        }
+
         const newTutor = await api.createTutor({
-          name: formData.newTutorName,
-          phone: formData.newTutorPhone,
-          email: formData.newTutorEmail,
-          cpf: formData.newTutorCpf,
+          name: formData.newTutorName.trim(),
+          phone: formData.newTutorPhone.trim(),
+          email: formData.newTutorEmail.trim(),
+          cpf: formData.newTutorCpf.trim(),
+          cep: formData.newTutorCep.trim(),
+          address: formattedAddress,
+          neighborhood: formData.newTutorNeighborhood.trim(),
+          city: formData.newTutorCity.trim(),
+          state: formData.newTutorState.trim().toUpperCase(),
         })
         finalTutorId = newTutor.id
         createdTutorName = newTutor.name
@@ -268,6 +360,11 @@ export default function Patients() {
             phone: { label: 'Telefone', oldValue: null, newValue: newTutor.phone },
             email: { label: 'E-mail', oldValue: null, newValue: newTutor.email },
             cpf: { label: 'CPF', oldValue: null, newValue: newTutor.cpf },
+            cep: { label: 'CEP', oldValue: null, newValue: newTutor.cep },
+            address: { label: 'Endereço', oldValue: null, newValue: newTutor.address },
+            neighborhood: { label: 'Bairro', oldValue: null, newValue: newTutor.neighborhood },
+            city: { label: 'Cidade', oldValue: null, newValue: newTutor.city },
+            state: { label: 'UF', oldValue: null, newValue: newTutor.state },
           },
           details: `Novo tutor cadastrado: ${newTutor.name}`,
         })
@@ -314,6 +411,13 @@ export default function Patients() {
         newTutorPhone: '',
         newTutorEmail: '',
         newTutorCpf: '',
+        newTutorCep: '',
+        newTutorAddress: '',
+        newTutorNumber: '',
+        newTutorComplement: '',
+        newTutorNeighborhood: '',
+        newTutorCity: '',
+        newTutorState: '',
         name: '',
         species: 'Cão',
         breed: '',
@@ -533,6 +637,107 @@ export default function Patients() {
                     value={formData.newTutorCpf}
                     onChange={(e) => setFormData({ ...formData, newTutorCpf: e.target.value })}
                   />
+
+                  {/* Endereço Completo do Novo Tutor */}
+                  <div className="pt-2 border-t space-y-3">
+                    <h5 className="font-semibold text-xs text-slate-700 uppercase tracking-wider">
+                      Endereço Completo
+                    </h5>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1 relative">
+                        <Label className="text-xs">CEP</Label>
+                        <div className="relative">
+                          <Input
+                            value={formData.newTutorCep}
+                            onChange={handleNewTutorCepChange}
+                            placeholder="00000-000"
+                            maxLength={9}
+                            className="text-xs pr-7"
+                          />
+                          {newTutorCepLoading && (
+                            <Loader2 className="absolute right-2 top-2.5 w-3.5 h-3.5 animate-spin text-slate-400" />
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Rua / Logradouro</Label>
+                        <Input
+                          value={formData.newTutorAddress}
+                          onChange={(e) =>
+                            setFormData({ ...formData, newTutorAddress: e.target.value })
+                          }
+                          placeholder="Rua, Avenida..."
+                          className="text-xs"
+                          disabled={newTutorCepLoading}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Número</Label>
+                        <Input
+                          value={formData.newTutorNumber}
+                          onChange={(e) =>
+                            setFormData({ ...formData, newTutorNumber: e.target.value })
+                          }
+                          placeholder="Ex: 123, S/N"
+                          className="text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Complemento</Label>
+                        <Input
+                          value={formData.newTutorComplement}
+                          onChange={(e) =>
+                            setFormData({ ...formData, newTutorComplement: e.target.value })
+                          }
+                          placeholder="Apto, Bloco..."
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Bairro</Label>
+                        <Input
+                          value={formData.newTutorNeighborhood}
+                          onChange={(e) =>
+                            setFormData({ ...formData, newTutorNeighborhood: e.target.value })
+                          }
+                          placeholder="Bairro"
+                          className="text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Cidade</Label>
+                        <Input
+                          value={formData.newTutorCity}
+                          onChange={(e) =>
+                            setFormData({ ...formData, newTutorCity: e.target.value })
+                          }
+                          placeholder="Cidade"
+                          className="text-xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">UF</Label>
+                        <Input
+                          value={formData.newTutorState}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              newTutorState: e.target.value.toUpperCase(),
+                            })
+                          }
+                          placeholder="SP"
+                          maxLength={2}
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -932,6 +1137,7 @@ export default function Patients() {
                 <Table className="min-w-[800px]">
                   <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
+                      <TableHead className="w-[110px] text-center">Pacientes</TableHead>
                       <TableHead className="min-w-[180px]">Nome</TableHead>
                       <TableHead className="min-w-[140px]">CPF / RG</TableHead>
                       <TableHead className="min-w-[160px]">Telefone</TableHead>
@@ -943,14 +1149,14 @@ export default function Patients() {
                   <TableBody>
                     {tutorsLoading && tutors.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
                           Carregando tutores...
                         </TableCell>
                       </TableRow>
                     ) : tutors.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                           Nenhum tutor encontrado.
                         </TableCell>
                       </TableRow>
@@ -958,9 +1164,23 @@ export default function Patients() {
                       tutors.map((tutor) => (
                         <TableRow
                           key={tutor.id}
-                          className="hover:bg-slate-50 transition-colors group"
+                          onClick={() => handleOpenEditTutor(tutor)}
+                          className="hover:bg-slate-50 cursor-pointer transition-colors group"
                         >
-                          <TableCell className="font-medium text-slate-900">
+                          <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => handleOpenTutorPatients(tutor, e)}
+                              className="h-8 px-2 gap-1 text-xs border-primary/30 text-primary hover:bg-primary hover:text-white"
+                              title="Ver pacientes deste tutor"
+                            >
+                              <PawPrint className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Animais</span>
+                            </Button>
+                          </TableCell>
+                          <TableCell className="font-medium text-slate-900 group-hover:text-primary transition-colors">
                             <div>{tutor.name}</div>
                             {tutor.indication && (
                               <div className="text-[11px] text-muted-foreground">
@@ -1018,7 +1238,10 @@ export default function Patients() {
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleOpenEditTutor(tutor)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenEditTutor(tutor)
+                              }}
                               className="gap-1.5 text-xs h-8 hover:bg-primary hover:text-white transition-colors"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -1327,6 +1550,103 @@ export default function Patients() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Modal de Pacientes do Tutor */}
+      <Dialog open={isTutorPatientsDialogOpen} onOpenChange={setIsTutorPatientsDialogOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <PawPrint className="w-5 h-5 text-primary" />
+              Pacientes vinculados
+            </DialogTitle>
+            <DialogDescription>
+              {selectedTutorForPatients ? (
+                <span>
+                  Tutor: <strong>{selectedTutorForPatients.name}</strong>
+                  {selectedTutorForPatients.phone && ` (${selectedTutorForPatients.phone})`}
+                </span>
+              ) : (
+                'Lista de animais deste tutor'
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="mt-2 space-y-3">
+            {tutorPatientsLoading ? (
+              <div className="py-10 text-center text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
+                Carregando animais do tutor...
+              </div>
+            ) : tutorPatientsList.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground text-sm border rounded-lg bg-slate-50/50">
+                Nenhum animal cadastrado para este tutor.
+              </div>
+            ) : (
+              <div className="divide-y rounded-lg border bg-white overflow-hidden">
+                {tutorPatientsList.map((patient) => (
+                  <Link
+                    key={patient.id}
+                    to={`/pacientes/${patient.id}`}
+                    onClick={() => setIsTutorPatientsDialogOpen(false)}
+                    className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors group cursor-pointer"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-slate-900 group-hover:text-primary transition-colors">
+                          {patient.name}
+                        </span>
+                        {patient.nume ? (
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[11px] bg-blue-50 text-blue-800 border-blue-200 font-bold"
+                            title="Número Oficial do Paciente"
+                          >
+                            {patient.nume}
+                          </Badge>
+                        ) : patient.ctrl && patient.ctrl !== '0' ? (
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[10px] bg-slate-50 text-slate-600 border-slate-200"
+                            title="Código Legado CTRL"
+                          >
+                            CTRL: {patient.ctrl}
+                          </Badge>
+                        ) : null}
+                        {patient.deceased && (
+                          <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                            Óbito
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            patient.species?.toLowerCase() === 'cão' ||
+                            patient.species?.toLowerCase() === 'cachorro'
+                              ? 'bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0'
+                              : 'bg-purple-50 text-purple-700 text-[10px] px-1.5 py-0'
+                          }
+                        >
+                          {patient.species}
+                        </Badge>
+                        <span>{patient.breed || 'SRD'}</span>
+                        {patient.gender && <span>• {patient.gender}</span>}
+                        {patient.weight ? <span>• {patient.weight} kg</span> : null}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-xs font-medium text-primary group-hover:translate-x-0.5 transition-transform">
+                      <span>Ver ficha</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

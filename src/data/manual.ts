@@ -238,7 +238,12 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         title: 'Como atualizar o endereço ou telefone de um tutor',
         description:
-          '1. Clique na aba "Lista de Tutores".\n2. Localize o cliente pela barra de busca.\n3. Clique no botão "Editar".\n4. Digite o CEP para autopreenchimento de rua e bairro, adicione telefone secundário ou notas.\n5. Clique em "Salvar Alterações".',
+          '1. Clique na aba "Lista de Tutores".\n2. Localize o cliente pela barra de busca.\n3. Clique diretamente na linha do tutor ou no botão "Editar" para abrir o formulário de edição.\n4. Digite o CEP para autopreenchimento de rua e bairro, adicione telefone secundário ou notas.\n5. Clique em "Salvar Tutor".',
+      },
+      {
+        title: 'Como visualizar os pacientes de um tutor pesquisado',
+        description:
+          '1. Na "Lista de Tutores", localize o tutor desejado.\n2. No canto esquerdo da linha, clique no botão "Animais" (ícone de pata).\n3. O sistema abre a lista de animais vinculados àquele tutor.\n4. Clique sobre qualquer animal da lista para abrir imediatamente a ficha clínica e prontuário dele.',
       },
       {
         title: 'Como enviar mensagem pelo WhatsApp',
@@ -248,6 +253,7 @@ export const MANUAL_MODULES: ManualModule[] = [
     ],
     tips: [
       'Clique em qualquer linha da Lista de Pacientes para abrir diretamente o prontuário completo daquele animal.',
+      'Na Lista de Tutores, você pode clicar diretamente sobre a linha para abrir a edição cadastral do tutor, ou clicar no botão "Animais" à esquerda para ver os pacientes dele.',
       'Tutores sem CPF podem ser cadastrados sem impedimento, mas o telefone é essencial para os contatos e confirmações de agenda.',
     ],
   },
