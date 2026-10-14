@@ -81,6 +81,19 @@ export type ClinicalRecord = {
   created: string
 }
 
+export type RecentClinicalRecordItem = {
+  id: string
+  patient_id: string
+  patient_name: string
+  tutor_id: string
+  tutor_name: string
+  date: string
+  description: string
+  diagnosis: string
+  treatment: string
+  veterinarian?: string
+}
+
 export type Appointment = {
   id: string
   patient_id: string

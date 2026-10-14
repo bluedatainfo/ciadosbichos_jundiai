@@ -411,6 +411,8 @@ export const api = {
     lowStockCount: number
     returnAlertsCount?: number
     recentAppointments?: Appointment[]
+    recentClinicalRecords?: import('@/lib/types').RecentClinicalRecordItem[]
+    upcomingAppointments?: Appointment[]
   }> => {
     // 1. Tenta buscar pelo endpoint otimizado de agregação no servidor (pb_hooks)
     try {
@@ -421,6 +423,8 @@ export const api = {
         lowStockCount: number
         returnAlertsCount: number
         recentAppointments: Appointment[]
+        recentClinicalRecords: import('@/lib/types').RecentClinicalRecordItem[]
+        upcomingAppointments: Appointment[]
       }>('/backend/v1/dashboard/stats', {
         method: 'GET',
       })
@@ -437,11 +441,15 @@ export const api = {
     const startOfDay = `${dateStr} 00:00:00.000Z`
     const endOfDay = `${dateStr} 23:59:59.999Z`
 
-    const [tutorsRes, patientsRes, appointmentsRes, inventoryRes] = await Promise.all([
+    const [tutorsRes, patientsRes, appointmentsRes, clinicalRes, inventoryRes] = await Promise.all([
       pb.collection('tutors').getList(1, 1, { fields: 'id' }),
       pb.collection('patients').getList(1, 1, { fields: 'id' }),
       pb.collection('appointments').getList(1, 1, {
         filter: `date >= "${startOfDay}" && date <= "${endOfDay}"`,
+        fields: 'id',
+      }),
+      pb.collection('clinical_records').getList(1, 1, {
+        filter: `created >= "${startOfDay}" && created <= "${endOfDay}"`,
         fields: 'id',
       }),
       pb.collection('inventory').getList(1, 1, { filter: `quantity < min_stock`, fields: 'id' }),
@@ -450,7 +458,7 @@ export const api = {
     return {
       totalPatients: patientsRes.totalItems,
       totalTutors: tutorsRes.totalItems,
-      appointmentsToday: appointmentsRes.totalItems,
+      appointmentsToday: appointmentsRes.totalItems + clinicalRes.totalItems,
       lowStockCount: inventoryRes.totalItems,
     }
   },
@@ -466,5 +474,54 @@ export const api = {
       expand: 'patient_id.tutor_id',
     })
     return res.items as unknown as Appointment[]
+  },
+
+  getUpcomingAppointments: async (): Promise<Appointment[]> => {
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const endOfDay = `${dateStr} 23:59:59.999Z`
+    const twoYearsLater = new Date(now.getTime() + 2 * 365.25 * 24 * 60 * 60 * 1000)
+    const maxDateStr = `${twoYearsLater.toISOString().split('T')[0]} 23:59:59.999Z`
+
+    const res = await pb.collection('appointments').getList(1, 6, {
+      filter: `date != "" && date > "${endOfDay}" && date <= "${maxDateStr}"`,
+      sort: 'date,created',
+      expand: 'patient_id.tutor_id',
+    })
+    return res.items as unknown as Appointment[]
+  },
+
+  getRecentClinicalRecords: async (): Promise<import('@/lib/types').RecentClinicalRecordItem[]> => {
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const endOfDay = `${dateStr} 23:59:59.999Z`
+
+    const res = await pb.collection('clinical_records').getList(1, 6, {
+      filter: `created <= "${endOfDay}"`,
+      sort: '-created',
+      expand: 'patient_id.tutor_id',
+    })
+
+    return res.items.map((item: any) => {
+      let vet = ''
+      if (item.description) {
+        const descUpper = String(item.description).toUpperCase()
+        if (descUpper.includes('PAOLA')) vet = 'Dra. Paola'
+        else if (descUpper.includes('HENRIQUE') || descUpper.includes('KIKE')) vet = 'Dr. Henrique'
+      }
+
+      return {
+        id: item.id,
+        patient_id: item.patient_id,
+        patient_name: item.expand?.patient_id?.name || 'Desconhecido',
+        tutor_id: item.expand?.patient_id?.tutor_id || '',
+        tutor_name: item.expand?.patient_id?.expand?.tutor_id?.name || '-',
+        date: item.created,
+        description: item.description || '',
+        diagnosis: item.diagnosis || '',
+        treatment: item.treatment || '',
+        veterinarian: vet,
+      }
+    })
   },
 }

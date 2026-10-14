@@ -17,11 +17,13 @@ import {
   PlusCircle,
   FileText,
   BellRing,
+  Stethoscope,
+  Clock,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/services/api'
-import { Appointment } from '@/lib/types'
+import { Appointment, RecentClinicalRecordItem } from '@/lib/types'
 import { useRealtime } from '@/hooks/use-realtime'
 import { format } from 'date-fns'
 import { ReturnAlertsSection } from '@/components/dashboard/ReturnAlertsSection'
@@ -35,22 +37,40 @@ interface DashboardStatsState {
   returnAlertsCount: number
 }
 
-const DASHBOARD_CACHE_KEY = 'clinica_dashboard_stats_cache_v1'
+interface CachedDashboardData {
+  stats: DashboardStatsState
+  upcomingAppointments: Appointment[]
+  recentClinicalRecords: RecentClinicalRecordItem[]
+}
 
-function getInitialCachedStats(): { stats: DashboardStatsState; isCached: boolean } {
+const DASHBOARD_CACHE_KEY = 'clinica_dashboard_stats_cache_v2'
+
+function getInitialCachedStats(): {
+  stats: DashboardStatsState
+  upcoming: Appointment[]
+  recentClinical: RecentClinicalRecordItem[]
+  isCached: boolean
+} {
   try {
     const raw = localStorage.getItem(DASHBOARD_CACHE_KEY)
     if (raw) {
-      const parsed = JSON.parse(raw)
-      if (typeof parsed?.totalPatients === 'number' && typeof parsed?.totalTutors === 'number') {
+      const parsed = JSON.parse(raw) as CachedDashboardData
+      if (
+        typeof parsed?.stats?.totalPatients === 'number' &&
+        typeof parsed?.stats?.totalTutors === 'number'
+      ) {
         return {
           stats: {
-            totalPatients: parsed.totalPatients,
-            totalTutors: parsed.totalTutors,
-            appointmentsToday: parsed.appointmentsToday ?? 0,
-            lowStockCount: parsed.lowStockCount ?? 0,
-            returnAlertsCount: parsed.returnAlertsCount ?? 0,
+            totalPatients: parsed.stats.totalPatients,
+            totalTutors: parsed.stats.totalTutors,
+            appointmentsToday: parsed.stats.appointmentsToday ?? 0,
+            lowStockCount: parsed.stats.lowStockCount ?? 0,
+            returnAlertsCount: parsed.stats.returnAlertsCount ?? 0,
           },
+          upcoming: Array.isArray(parsed.upcomingAppointments) ? parsed.upcomingAppointments : [],
+          recentClinical: Array.isArray(parsed.recentClinicalRecords)
+            ? parsed.recentClinicalRecords
+            : [],
           isCached: true,
         }
       }
@@ -66,6 +86,8 @@ function getInitialCachedStats(): { stats: DashboardStatsState; isCached: boolea
       lowStockCount: 0,
       returnAlertsCount: 0,
     },
+    upcoming: [],
+    recentClinical: [],
     isCached: false,
   }
 }
@@ -74,15 +96,19 @@ export default function Index() {
   const initial = getInitialCachedStats()
   const [stats, setStats] = useState<DashboardStatsState>(initial.stats)
   const [hasLoaded, setHasLoaded] = useState<boolean>(initial.isCached)
-  const [recent, setRecent] = useState<Appointment[]>([])
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>(initial.upcoming)
+  const [recentClinicalRecords, setRecentClinicalRecords] = useState<RecentClinicalRecordItem[]>(
+    initial.recentClinical,
+  )
 
   const loadData = async () => {
     try {
       // 1. Dispara a busca otimizada das estatísticas e retornos
-      const [s, alertsData, r] = await Promise.all([
+      const [s, alertsData, fallbackUpcoming, fallbackClinical] = await Promise.all([
         api.getDashboardStats(),
         getReturnAlerts().catch(() => ({ alerts: [], overdueCount: 0, dueSoonCount: 0 })),
-        api.getRecentAppointments().catch(() => []),
+        api.getUpcomingAppointments().catch(() => []),
+        api.getRecentClinicalRecords().catch(() => []),
       ])
 
       const finalReturnAlertsCount =
@@ -101,18 +127,30 @@ export default function Index() {
       setStats(newStats)
       setHasLoaded(true)
 
+      // Próximos agendamentos (futuros)
+      const nextUpcoming =
+        s.upcomingAppointments && s.upcomingAppointments.length > 0
+          ? s.upcomingAppointments
+          : fallbackUpcoming
+      setUpcomingAppointments(nextUpcoming)
+
+      // Atendimentos recentes (fichas clínicas realizadas até hoje)
+      const nextClinical =
+        s.recentClinicalRecords && s.recentClinicalRecords.length > 0
+          ? s.recentClinicalRecords
+          : fallbackClinical
+      setRecentClinicalRecords(nextClinical)
+
       // Atualiza o cache do localStorage para visitas instantâneas posteriores
       try {
-        localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(newStats))
+        const cachePayload: CachedDashboardData = {
+          stats: newStats,
+          upcomingAppointments: nextUpcoming,
+          recentClinicalRecords: nextClinical,
+        }
+        localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(cachePayload))
       } catch {
         /* ignorar */
-      }
-
-      // Se o endpoint otimizado já trouxe recentAppointments, usa ele; senão usa r
-      if (s.recentAppointments && s.recentAppointments.length > 0) {
-        setRecent(s.recentAppointments)
-      } else if (r && r.length > 0) {
-        setRecent(r)
       }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
@@ -126,6 +164,7 @@ export default function Index() {
   useRealtime('patients', () => loadData())
   useRealtime('tutors', () => loadData())
   useRealtime('appointments', () => loadData())
+  useRealtime('clinical_records', () => loadData())
   useRealtime('vaccines', () => loadData())
 
   const getTypeLabel = (type: string) => {
@@ -136,6 +175,17 @@ export default function Index() {
       consultation: 'Consulta',
     }
     return labels[type] || type
+  }
+
+  const formatSafeDate = (dateVal: string | undefined | null) => {
+    if (!dateVal) return '-'
+    try {
+      const d = new Date(dateVal)
+      if (isNaN(d.getTime())) return dateVal
+      return format(d, 'dd/MM/yyyy HH:mm')
+    } catch {
+      return dateVal
+    }
   }
 
   return (
@@ -230,16 +280,28 @@ export default function Index() {
       {/* Painel Visível de Alertas de Retorno */}
       <ReturnAlertsSection />
 
+      {/* Painéis Principais: Próximos Agendamentos (Futuro) e Atendimentos Recentes (Realizados) */}
       <div className="grid gap-6 md:grid-cols-7">
+        {/* Painel 1: Próximos Agendamentos (Recepção) */}
         <Card className="md:col-span-5 border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Atendimentos Recentes</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="w-5 h-5 text-indigo-500" /> Próximos Agendamentos
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Consultas e retornos marcados para datas futuras — visão da recepção.
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+              <Link to="/agenda">Ver Agenda Completa</Link>
+            </Button>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead>Data</TableHead>
+                  <TableHead>Data Prevista</TableHead>
                   <TableHead>Paciente</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead>Status</TableHead>
@@ -247,17 +309,17 @@ export default function Index() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recent.length === 0 && (
+                {upcomingAppointments.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                      Nenhum agendamento recente.
+                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                      Nenhum agendamento futuro encontrado.
                     </TableCell>
                   </TableRow>
                 )}
-                {recent.map((app) => (
+                {upcomingAppointments.map((app) => (
                   <TableRow key={app.id} className="hover:bg-slate-50 transition-colors">
                     <TableCell className="font-medium text-sm">
-                      {format(new Date(app.date), 'dd/MM/yyyy HH:mm')}
+                      {formatSafeDate(app.date)}
                     </TableCell>
                     <TableCell>
                       <div className="font-medium text-slate-900">
@@ -315,6 +377,7 @@ export default function Index() {
           </CardContent>
         </Card>
 
+        {/* Card Lateral de Ações Rápidas */}
         <Card className="md:col-span-2 border-none shadow-sm bg-primary text-primary-foreground">
           <CardHeader>
             <CardTitle className="text-lg">Ações Rápidas</CardTitle>
@@ -341,6 +404,92 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Painel 2: Atendimentos Recentes (Realizados nas Fichas Clínicas) */}
+      <Card className="border-none shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Stethoscope className="w-5 h-5 text-emerald-600" /> Atendimentos Recentes
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Consultas e evoluções clínicas realizadas (fonte: fichas clínicas) ordenadas pela data
+              mais recente.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+            <Link to="/pacientes">Ver Pacientes</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Data do Atendimento</TableHead>
+                <TableHead>Paciente</TableHead>
+                <TableHead>Tutor</TableHead>
+                <TableHead>Veterinário</TableHead>
+                <TableHead>Diagnóstico / Queixa</TableHead>
+                <TableHead className="text-right">Ação</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {recentClinicalRecords.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    Nenhum atendimento clínico recente registrado.
+                  </TableCell>
+                </TableRow>
+              )}
+              {recentClinicalRecords.map((item) => (
+                <TableRow key={item.id} className="hover:bg-slate-50 transition-colors">
+                  <TableCell className="font-medium text-sm">{formatSafeDate(item.date)}</TableCell>
+                  <TableCell>
+                    <div className="font-medium text-slate-900">{item.patient_name}</div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm text-slate-700">{item.tutor_name}</div>
+                  </TableCell>
+                  <TableCell>
+                    {item.veterinarian ? (
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-50 text-emerald-700 border-emerald-200"
+                      >
+                        {item.veterinarian}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </TableCell>
+                  <TableCell
+                    className="max-w-[260px] truncate text-xs text-slate-600"
+                    title={item.diagnosis || item.description}
+                  >
+                    {item.diagnosis ? (
+                      <span className="font-medium text-slate-800">{item.diagnosis}</span>
+                    ) : (
+                      item.description || '-'
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {item.patient_id && (
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="sm"
+                        className="text-primary hover:text-primary/80"
+                      >
+                        <Link to={`/pacientes/${item.patient_id}`}>Ficha</Link>
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   )
 }
