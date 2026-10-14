@@ -66,7 +66,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     const returnAlertsCount = rowAlerts ? Number(rowAlerts.total || 0) : 0
 
     // 3. Atendimentos recentes (últimos 5)
-    // Buscamos os 5 mais recentes com JOIN em patients e tutors para trazer nomes instantaneamente
+    // Filtramos apenas agendamentos com data até hoje (inclusive), descartando datas futuras corrompidas da importação,
+    // e ordenamos pela data do atendimento (mais recente primeiro) e depois por id/created DESC.
     const recentRows = $app
       .db()
       .newQuery(
@@ -85,9 +86,13 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
          FROM appointments a
          LEFT JOIN patients p ON a.patient_id = p.id
          LEFT JOIN tutors t ON p.tutor_id = t.id
-         ORDER BY a.created DESC
+         WHERE a.date IS NOT NULL 
+           AND TRIM(a.date) != ''
+           AND a.date <= {:maxDate}
+         ORDER BY a.date DESC, a.created DESC
          LIMIT 5`,
       )
+      .bind({ maxDate: endOfDay })
       .all()
 
     const recentAppointments = []

@@ -440,12 +440,10 @@ export const api = {
     const [tutorsRes, patientsRes, appointmentsRes, inventoryRes] = await Promise.all([
       pb.collection('tutors').getList(1, 1, { fields: 'id' }),
       pb.collection('patients').getList(1, 1, { fields: 'id' }),
-      pb
-        .collection('appointments')
-        .getList(1, 1, {
-          filter: `date >= "${startOfDay}" && date <= "${endOfDay}"`,
-          fields: 'id',
-        }),
+      pb.collection('appointments').getList(1, 1, {
+        filter: `date >= "${startOfDay}" && date <= "${endOfDay}"`,
+        fields: 'id',
+      }),
       pb.collection('inventory').getList(1, 1, { filter: `quantity < min_stock`, fields: 'id' }),
     ])
 
@@ -458,9 +456,15 @@ export const api = {
   },
 
   getRecentAppointments: async (): Promise<Appointment[]> => {
-    const res = await pb
-      .collection('appointments')
-      .getList(1, 5, { sort: '-created', expand: 'patient_id.tutor_id' })
+    const now = new Date()
+    const dateStr = now.toISOString().split('T')[0]
+    const endOfDay = `${dateStr} 23:59:59.999Z`
+
+    const res = await pb.collection('appointments').getList(1, 5, {
+      filter: `date != "" && date <= "${endOfDay}"`,
+      sort: '-date,-created',
+      expand: 'patient_id.tutor_id',
+    })
     return res.items as unknown as Appointment[]
   },
 }
