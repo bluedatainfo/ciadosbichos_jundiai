@@ -82,9 +82,15 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
         if (!data.erro) {
           setTutorData((prev) => ({
             ...prev,
-            address: `${data.logradouro}, ${data.bairro}, ${data.localidade} - ${data.uf}`,
+            address: data.logradouro || prev.address,
+            neighborhood: data.bairro || prev.neighborhood,
+            city: data.localidade || prev.city,
+            state: data.uf || prev.state,
           }))
-          toast({ title: 'CEP Encontrado', description: 'Endereço preenchido automaticamente.' })
+          toast({
+            title: 'CEP Encontrado',
+            description: 'Endereço, bairro, cidade e estado preenchidos automaticamente.',
+          })
         } else {
           toast({ title: 'CEP não encontrado', variant: 'destructive' })
         }
@@ -181,15 +187,27 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           <CardTitle className="text-lg text-slate-800">Seção Tutor</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 pt-6">
+          {/* Nome do Tutor em posição de destaque natural com fundo amarelo claro */}
+          <div className="space-y-1.5 p-3 rounded-lg bg-amber-50/80 border border-amber-200/70">
+            <Label
+              htmlFor="tutor-name"
+              className="text-amber-950 font-semibold flex items-center gap-1.5"
+            >
+              <span>Nome do Tutor</span>
+              <span className="text-xs font-normal text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                Destaque
+              </span>
+            </Label>
+            <Input
+              id="tutor-name"
+              value={tutorData.name}
+              onChange={(e) => setTutorData({ ...tutorData, name: e.target.value })}
+              className="bg-amber-50/60 border-amber-300 focus-visible:ring-amber-400 text-slate-900 font-medium"
+              placeholder="Nome completo do tutor"
+            />
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label>Nome do Tutor</Label>
-              <Input
-                value={tutorData.name}
-                onChange={(e) => setTutorData({ ...tutorData, name: e.target.value })}
-                className="bg-white"
-              />
-            </div>
             <div className="space-y-1">
               <Label>CPF</Label>
               <Input
@@ -198,7 +216,16 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 className="bg-white"
               />
             </div>
+            <div className="space-y-1">
+              <Label>RG</Label>
+              <Input
+                value={tutorData.rg}
+                onChange={(e) => setTutorData({ ...tutorData, rg: e.target.value })}
+                className="bg-white"
+              />
+            </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label className="flex items-center gap-2">
@@ -208,6 +235,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                     type="button"
                     onClick={() => openWhatsApp(tutorData.phone)}
                     className="text-green-600 hover:text-green-700"
+                    title="Abrir WhatsApp"
                   >
                     <MessageCircle className="w-4 h-4" />
                   </button>
@@ -227,6 +255,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                     type="button"
                     onClick={() => openWhatsApp(tutorData.phone_secondary)}
                     className="text-green-600 hover:text-green-700"
+                    title="Abrir WhatsApp"
                   >
                     <MessageCircle className="w-4 h-4" />
                   </button>
@@ -239,6 +268,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <Label>Email</Label>
@@ -246,24 +276,6 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 type="email"
                 value={tutorData.email}
                 onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
-                className="bg-white"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>RG</Label>
-              <Input
-                value={tutorData.rg}
-                onChange={(e) => setTutorData({ ...tutorData, rg: e.target.value })}
-                className="bg-white"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label>Bairro</Label>
-              <Input
-                value={tutorData.neighborhood}
-                onChange={(e) => setTutorData({ ...tutorData, neighborhood: e.target.value })}
                 className="bg-white"
               />
             </div>
@@ -276,33 +288,74 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1 relative">
-              <Label>CEP</Label>
-              <div className="relative">
+
+          <div className="pt-2 border-t space-y-3">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Endereço do Tutor
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1 relative">
+                <Label>CEP</Label>
+                <div className="relative">
+                  <Input
+                    value={tutorData.cep}
+                    onChange={handleCepChange}
+                    className="bg-white pr-8"
+                    maxLength={9}
+                    placeholder="00000000"
+                  />
+                  {cepLoading && (
+                    <Loader2 className="absolute right-2 top-2.5 w-4 h-4 animate-spin text-slate-400" />
+                  )}
+                </div>
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label>Endereço / Logradouro</Label>
                 <Input
-                  value={tutorData.cep}
-                  onChange={handleCepChange}
-                  className="bg-white pr-8"
-                  maxLength={9}
-                  placeholder="00000000"
+                  value={tutorData.address}
+                  onChange={(e) => setTutorData({ ...tutorData, address: e.target.value })}
+                  className="bg-white"
+                  placeholder="Rua, Av, Número, Complemento"
+                  disabled={cepLoading}
                 />
-                {cepLoading && (
-                  <Loader2 className="absolute right-2 top-2.5 w-4 h-4 animate-spin text-slate-400" />
-                )}
               </div>
             </div>
-            <div className="space-y-1 col-span-2">
-              <Label>Endereço</Label>
-              <Input
-                value={tutorData.address}
-                onChange={(e) => setTutorData({ ...tutorData, address: e.target.value })}
-                className="bg-white"
-                disabled={cepLoading}
-              />
+
+            <div className="grid grid-cols-5 gap-3">
+              <div className="space-y-1 col-span-2">
+                <Label>Bairro</Label>
+                <Input
+                  value={tutorData.neighborhood}
+                  onChange={(e) => setTutorData({ ...tutorData, neighborhood: e.target.value })}
+                  className="bg-white"
+                  placeholder="Bairro"
+                />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label>Cidade</Label>
+                <Input
+                  value={tutorData.city}
+                  onChange={(e) => setTutorData({ ...tutorData, city: e.target.value })}
+                  className="bg-white"
+                  placeholder="Cidade"
+                />
+              </div>
+              <div className="space-y-1 col-span-1">
+                <Label>Estado (UF)</Label>
+                <Input
+                  value={tutorData.state}
+                  onChange={(e) =>
+                    setTutorData({ ...tutorData, state: e.target.value.toUpperCase() })
+                  }
+                  className="bg-white"
+                  placeholder="SP"
+                  maxLength={2}
+                />
+              </div>
             </div>
           </div>
-          <div className="space-y-1">
+
+          <div className="space-y-1 pt-2 border-t">
             <Label>Informações Adicionais</Label>
             <Textarea
               value={tutorData.additional_info}
@@ -319,6 +372,54 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
             <CardTitle className="text-lg text-slate-800">Seção Animal</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4 pt-6">
+            {/* Nome do Animal em posição de destaque natural com fundo amarelo claro */}
+            <div className="space-y-1.5 p-3 rounded-lg bg-amber-50/80 border border-amber-200/70">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="patient-name"
+                  className="text-amber-950 font-semibold flex items-center gap-1.5"
+                >
+                  <span>Nome do Animal</span>
+                  <span className="text-xs font-normal text-amber-700 bg-amber-100/80 px-1.5 py-0.5 rounded">
+                    Destaque
+                  </span>
+                </Label>
+                {patientData.nume && (
+                  <span
+                    className="font-mono text-xs font-bold text-blue-900 bg-blue-100 px-2 py-0.5 rounded border border-blue-200"
+                    title="Nº Oficial (NUME) do Paciente"
+                  >
+                    NUME: {patientData.nume}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <Input
+                    id="patient-name"
+                    value={patientData.name}
+                    onChange={(e) => setPatientData({ ...patientData, name: e.target.value })}
+                    className="bg-amber-50/60 border-amber-300 focus-visible:ring-amber-400 text-slate-900 font-medium"
+                    placeholder="Nome do animal"
+                  />
+                </div>
+                <div>
+                  <Input
+                    value={
+                      patientData.nume
+                        ? `NUME: ${patientData.nume}`
+                        : patientData.ctrl
+                          ? `CTRL: ${patientData.ctrl}`
+                          : '-'
+                    }
+                    readOnly
+                    className="bg-white/80 font-mono text-xs text-slate-700 border-amber-200 cursor-not-allowed"
+                    title="Identificador oficial do paciente (não editável)"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1 col-span-2">
                 <Label>Foto do Paciente</Label>
@@ -353,26 +454,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1 col-span-2">
-                <Label>Nome do Animal</Label>
-                <Input
-                  value={patientData.name}
-                  onChange={(e) => setPatientData({ ...patientData, name: e.target.value })}
-                  className="bg-white"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Nº Oficial (NUME)</Label>
-                <Input
-                  value={patientData.nume}
-                  readOnly
-                  className="bg-slate-50 font-mono font-bold text-blue-900 border-blue-200 cursor-not-allowed"
-                  placeholder="Ex: 21202"
-                  title="Identificador oficial único e prioritário do paciente (não editável)"
-                />
-              </div>
-            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label>Nascimento</Label>
