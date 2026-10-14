@@ -241,15 +241,14 @@ export const api = {
     if (options?.search?.trim()) {
       const { buildMultiFieldSearchFilter, escapePbFilter } = await import('@/lib/search-utils')
       // Busca na Lista de Tutores:
-      // "a busca deve ser válida somente pelo nome do tutor, e não pelo nome do animal, espécie etc."
-      // e deve ignorar acentuação (ex: 'Adao' casa com 'Adão' e vice-versa).
-      // Permite também CPF e telefone caso o usuário digite números.
+      // A busca casa apenas por dados do tutor (nome, cidade, CPF, telefone, e-mail) - nunca pelo animal.
+      // Ignora acentuação para nome e cidade (ex: 'Sao Paulo' encontra 'São Paulo', 'Adao' encontra 'Adão').
       const term = options.search.trim()
-      const nameFilter = buildMultiFieldSearchFilter(['name'], term)
+      const nameOrCityFilter = buildMultiFieldSearchFilter(['name', 'city'], term)
       const clean = escapePbFilter(term)
       // Se for número/dígito ou e-mail, inclui cpf/phone/email
-      filter = nameFilter
-        ? `(${nameFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
+      filter = nameOrCityFilter
+        ? `(${nameOrCityFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
         : `cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
     }
 
@@ -265,10 +264,10 @@ export const api = {
     if (search?.trim()) {
       const { buildMultiFieldSearchFilter, escapePbFilter } = await import('@/lib/search-utils')
       const term = search.trim()
-      const nameFilter = buildMultiFieldSearchFilter(['name'], term)
+      const nameOrCityFilter = buildMultiFieldSearchFilter(['name', 'city'], term)
       const clean = escapePbFilter(term)
-      filter = nameFilter
-        ? `(${nameFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
+      filter = nameOrCityFilter
+        ? `(${nameOrCityFilter} || cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}")`
         : `cpf ~ "${clean}" || phone ~ "${clean}" || email ~ "${clean}"`
     }
     const res = await pb.collection('tutors').getList(1, 1, {

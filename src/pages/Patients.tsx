@@ -48,7 +48,11 @@ import {
   Clock,
   Filter,
   PawPrint,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
+import { removeAccents } from '@/lib/search-utils'
 import {
   Dialog,
   DialogContent,
@@ -77,12 +81,16 @@ export default function Patients() {
   const [patientSearch, setPatientSearch] = useState('')
   const [debouncedPatientSearch, setDebouncedPatientSearch] = useState('')
   const [patientSpeciesFilter, setPatientSpeciesFilter] = useState('all')
+  const [patientSortField, setPatientSortField] = useState<'name' | 'tutor' | null>(null)
+  const [patientSortDirection, setPatientSortDirection] = useState<'asc' | 'desc'>('asc')
   const [patientPage, setPatientPage] = useState(1)
   const [totalPatients, setTotalPatients] = useState(0)
   const [patientsLoading, setPatientsLoading] = useState(false)
 
   const [tutorSearch, setTutorSearch] = useState('')
   const [debouncedTutorSearch, setDebouncedTutorSearch] = useState('')
+  const [tutorSortField, setTutorSortField] = useState<'name' | null>(null)
+  const [tutorSortDirection, setTutorSortDirection] = useState<'asc' | 'desc'>('asc')
   const [tutorPage, setTutorPage] = useState(1)
   const [totalTutors, setTotalTutors] = useState(0)
   const [tutorsLoading, setTutorsLoading] = useState(false)
@@ -216,14 +224,43 @@ export default function Patients() {
     return () => clearTimeout(t)
   }, [tutorSearch])
 
+  const handleTogglePatientSort = (field: 'name' | 'tutor') => {
+    if (patientSortField === field) {
+      setPatientSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setPatientSortField(field)
+      setPatientSortDirection('asc')
+    }
+  }
+
+  const handleToggleTutorSort = (field: 'name') => {
+    if (tutorSortField === field) {
+      setTutorSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setTutorSortField(field)
+      setTutorSortDirection('asc')
+    }
+  }
+
   const loadPatients = async () => {
     setPatientsLoading(true)
     try {
+      // Quando ordenado por tutor no backend: tutor_id.name
+      // Quando ordenado por paciente no backend: name
+      // Ordem padrão: -created
+      let pbSort = '-created'
+      if (patientSortField === 'name') {
+        pbSort = patientSortDirection === 'asc' ? 'name' : '-name'
+      } else if (patientSortField === 'tutor') {
+        pbSort = patientSortDirection === 'asc' ? 'tutor_id.name' : '-tutor_id.name'
+      }
+
       const res = await api.getPatientsPaged({
         page: patientPage,
         perPage: PAGE_SIZE,
         search: debouncedPatientSearch,
         species: patientSpeciesFilter,
+        sort: pbSort,
       })
       setPatients(res.items)
       setTotalPatients(res.totalItems)
@@ -251,10 +288,16 @@ export default function Patients() {
   const loadTutors = async () => {
     setTutorsLoading(true)
     try {
+      let pbSort = '-created'
+      if (tutorSortField === 'name') {
+        pbSort = tutorSortDirection === 'asc' ? 'name' : '-name'
+      }
+
       const res = await api.getTutorsPaged({
         page: tutorPage,
         perPage: PAGE_SIZE,
         search: debouncedTutorSearch,
+        sort: pbSort,
       })
       setTutors(res.items)
       setTotalTutors(res.totalItems)
@@ -276,11 +319,17 @@ export default function Patients() {
 
   useEffect(() => {
     loadPatients()
-  }, [patientPage, debouncedPatientSearch, patientSpeciesFilter])
+  }, [
+    patientPage,
+    debouncedPatientSearch,
+    patientSpeciesFilter,
+    patientSortField,
+    patientSortDirection,
+  ])
 
   useEffect(() => {
     loadTutors()
-  }, [tutorPage, debouncedTutorSearch])
+  }, [tutorPage, debouncedTutorSearch, tutorSortField, tutorSortDirection])
 
   useEffect(() => {
     if (isSheetOpen) {
@@ -496,6 +545,47 @@ export default function Patients() {
       }
     }
   }
+
+  // Normalização alfabética ignorando acentuação e maiúsculas/minúsculas
+  // para que ex.: "Ábobo" e "Abobo" fiquem juntos na ordem alfabética na listagem exibida.
+  const sortedPatients = [...patients].sort((a, b) => {
+    if (!patientSortField) return 0
+    let valA = ''
+    let valB = ''
+    if (patientSortField === 'name') {
+      valA = removeAccents(a.name || '')
+        .trim()
+        .toLowerCase()
+      valB = removeAccents(b.name || '')
+        .trim()
+        .toLowerCase()
+    } else if (patientSortField === 'tutor') {
+      valA = removeAccents(a.expand?.tutor_id?.name || '')
+        .trim()
+        .toLowerCase()
+      valB = removeAccents(b.expand?.tutor_id?.name || '')
+        .trim()
+        .toLowerCase()
+    }
+    const cmp = valA.localeCompare(valB, 'pt-BR')
+    return patientSortDirection === 'asc' ? cmp : -cmp
+  })
+
+  const sortedTutors = [...tutors].sort((a, b) => {
+    if (!tutorSortField) return 0
+    let valA = ''
+    let valB = ''
+    if (tutorSortField === 'name') {
+      valA = removeAccents(a.name || '')
+        .trim()
+        .toLowerCase()
+      valB = removeAccents(b.name || '')
+        .trim()
+        .toLowerCase()
+    }
+    const cmp = valA.localeCompare(valB, 'pt-BR')
+    return tutorSortDirection === 'asc' ? cmp : -cmp
+  })
 
   const handleSaveTutor = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -905,10 +995,46 @@ export default function Patients() {
                 <Table className="min-w-[700px]">
                   <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
-                      <TableHead className="min-w-[180px]">Paciente</TableHead>
+                      <TableHead className="min-w-[180px]">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePatientSort('name')}
+                          className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-primary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 -mx-1"
+                          title="Clique para ordenar por nome do paciente"
+                        >
+                          <span>Paciente</span>
+                          {patientSortField === 'name' ? (
+                            patientSortDirection === 'asc' ? (
+                              <ArrowUp className="w-4 h-4 text-primary" />
+                            ) : (
+                              <ArrowDown className="w-4 h-4 text-primary" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+                      </TableHead>
                       <TableHead className="min-w-[130px]">Nº Oficial</TableHead>
                       <TableHead className="min-w-[180px]">Espécie/Raça</TableHead>
-                      <TableHead className="min-w-[180px]">Tutor</TableHead>
+                      <TableHead className="min-w-[180px]">
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePatientSort('tutor')}
+                          className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-primary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 -mx-1"
+                          title="Clique para ordenar por nome do tutor"
+                        >
+                          <span>Tutor</span>
+                          {patientSortField === 'tutor' ? (
+                            patientSortDirection === 'asc' ? (
+                              <ArrowUp className="w-4 h-4 text-primary" />
+                            ) : (
+                              <ArrowDown className="w-4 h-4 text-primary" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+                      </TableHead>
                       <TableHead className="min-w-[150px]">Telefone</TableHead>
                       <TableHead className="text-right min-w-[80px]">Ações</TableHead>
                     </TableRow>
@@ -928,7 +1054,7 @@ export default function Patients() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      patients.map((patient) => (
+                      sortedPatients.map((patient) => (
                         <TableRow
                           key={patient.id}
                           className="group hover:bg-slate-50 cursor-pointer transition-colors"
@@ -1128,7 +1254,7 @@ export default function Patients() {
                 <div className="relative w-full max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar tutor por nome, CPF ou telefone..."
+                    placeholder="Buscar tutor por nome, cidade, CPF ou telefone..."
                     value={tutorSearch}
                     onChange={(e) => setTutorSearch(e.target.value)}
                     className="pl-9 bg-slate-50 border-slate-200 w-full"
@@ -1153,7 +1279,25 @@ export default function Patients() {
                   <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
                       <TableHead className="w-[110px] text-center">Pacientes</TableHead>
-                      <TableHead className="min-w-[180px]">Nome</TableHead>
+                      <TableHead className="min-w-[180px]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTutorSort('name')}
+                          className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-primary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 -mx-1"
+                          title="Clique para ordenar por nome do tutor"
+                        >
+                          <span>Nome</span>
+                          {tutorSortField === 'name' ? (
+                            tutorSortDirection === 'asc' ? (
+                              <ArrowUp className="w-4 h-4 text-primary" />
+                            ) : (
+                              <ArrowDown className="w-4 h-4 text-primary" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600" />
+                          )}
+                        </button>
+                      </TableHead>
                       <TableHead className="min-w-[140px]">CPF / RG</TableHead>
                       <TableHead className="min-w-[160px]">Telefone</TableHead>
                       <TableHead className="min-w-[140px]">Cidade / Estado</TableHead>
@@ -1176,7 +1320,7 @@ export default function Patients() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      tutors.map((tutor) => (
+                      sortedTutors.map((tutor) => (
                         <TableRow
                           key={tutor.id}
                           onClick={() => handleOpenEditTutor(tutor)}
