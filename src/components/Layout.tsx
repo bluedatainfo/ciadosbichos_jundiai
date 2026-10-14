@@ -31,8 +31,6 @@ import {
   Users,
   CalendarDays,
   Settings,
-  Search,
-  Plus,
   UserCircle,
   LogOut,
   Package,
@@ -44,7 +42,6 @@ import {
   ChevronDown,
   ShieldCheck,
 } from 'lucide-react'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useManual } from '@/hooks/use-manual'
@@ -226,31 +223,11 @@ export default function Layout() {
 
         <SidebarInset className="flex-1 flex flex-col min-w-0 bg-transparent">
           <header className="min-h-16 py-2 border-b bg-white flex items-center justify-between px-3 sm:px-4 md:px-6 sticky top-0 z-10 gap-2 sm:gap-4">
-            {/* Lado Esquerdo: Trigger + Campo de Busca Global */}
-            <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            {/* Lado Esquerdo: Trigger */}
+            <div className="flex items-center gap-2 sm:gap-3">
               <SidebarTrigger className="-ml-1 shrink-0 text-slate-600 hover:text-slate-900" />
-
-              {/* Campo de Busca Global */}
-              <div className="relative hidden sm:block w-full max-w-md">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                  type="search"
-                  placeholder="Buscar animal ou ID..."
-                  className="w-full h-9 bg-slate-50 pl-9 pr-2.5 text-xs sm:text-sm border-slate-200 focus-visible:ring-1 focus-visible:bg-white"
-                />
-              </div>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <Button
-                size="sm"
-                className="hidden md:flex gap-2 bg-primary hover:bg-primary/90 text-white"
-                asChild
-              >
-                <Link to="/pacientes">
-                  <Plus className="w-4 h-4" /> Novo Paciente
-                </Link>
-              </Button>
-
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button

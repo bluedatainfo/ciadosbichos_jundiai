@@ -50,7 +50,7 @@ export const MANUAL_MODULES: ManualModule[] = [
         'Seção exclusiva de "Alertas de Retorno dos Pacientes" com filtros rápidos (Todos, Vencidos, Próximos 30 dias) e filtro personalizado por intervalo de datas (Data Inicial e Data Final), considerando estritamente retornos NÃO realizados.',
         'Destaque visual em amarelo estilo "marca-texto" nos alertas vencidos e próximos com botões para Editar data/histórico e "Marcar como realizado" diretamente pelo painel.',
         'Botão para contato rápido via WhatsApp diretamente nos alertas de retorno do tutor.',
-        'Acesso rápido com botão "+ Novo Paciente" no cabeçalho ou nas Ações Rápidas.',
+        'Acesso rápido para cadastro de novos pacientes nas Ações Rápidas da tela de Pacientes.',
         'Atualização instantânea em tela (tempo real) de novos pacientes, retornos, alterações de agenda e estoque.',
         'Tabela de atendimentos recentes com link direto para o prontuário do paciente.',
         'Compatibilidade com atalhos de teclado: pressione F1 em qualquer tela para abrir a ajuda correspondente.',
@@ -104,7 +104,7 @@ export const MANUAL_MODULES: ManualModule[] = [
       {
         title: '3. Localização Rápida de Pacientes',
         description:
-          'No cabeçalho superior existe um campo de busca rápida. Digite o nome do animal ou seu código para localizá-lo de imediato.',
+          'Na tela de Pacientes & Tutores, utilize o campo de busca com filtros integrados para localizar animais por nome, espécie, raça ou tutor de imediato.',
       },
       {
         title: '4. Encerrar Sessão',
