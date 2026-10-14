@@ -404,19 +404,49 @@ export const api = {
     pb.collection('vaccines').update<import('@/lib/types').Vaccine>(id, data),
   deleteVaccine: (id: string) => pb.collection('vaccines').delete(id),
 
-  getDashboardStats: async () => {
+  getDashboardStats: async (): Promise<{
+    totalPatients: number
+    totalTutors: number
+    appointmentsToday: number
+    lowStockCount: number
+    returnAlertsCount?: number
+    recentAppointments?: Appointment[]
+  }> => {
+    // 1. Tenta buscar pelo endpoint otimizado de agregação no servidor (pb_hooks)
+    try {
+      const serverStats = await pb.send<{
+        totalPatients: number
+        totalTutors: number
+        appointmentsToday: number
+        lowStockCount: number
+        returnAlertsCount: number
+        recentAppointments: Appointment[]
+      }>('/backend/v1/dashboard/stats', {
+        method: 'GET',
+      })
+      if (serverStats && typeof serverStats.totalPatients === 'number') {
+        return serverStats
+      }
+    } catch (e) {
+      console.warn('Endpoint /backend/v1/dashboard/stats indisponível, usando fallback:', e)
+    }
+
+    // 2. Fallback caso a rota customizada falhe
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0]
     const startOfDay = `${dateStr} 00:00:00.000Z`
     const endOfDay = `${dateStr} 23:59:59.999Z`
 
     const [tutorsRes, patientsRes, appointmentsRes, inventoryRes] = await Promise.all([
-      pb.collection('tutors').getList(1, 1),
-      pb.collection('patients').getList(1, 1),
+      pb.collection('tutors').getList(1, 1, { fields: 'id' }),
+      pb.collection('patients').getList(1, 1, { fields: 'id' }),
       pb
         .collection('appointments')
-        .getList(1, 1, { filter: `date >= "${startOfDay}" && date <= "${endOfDay}"` }),
-      pb.collection('inventory').getList(1, 1, { filter: `quantity < min_stock` }),
+        .getList(1, 1, {
+          filter: `date >= "${startOfDay}" && date <= "${endOfDay}"`,
+          fields: 'id',
+        }),
+      pb.collection('inventory').getList(1, 1, { filter: `quantity < min_stock`, fields: 'id' }),
     ])
 
     return {

@@ -27,30 +27,96 @@ import { format } from 'date-fns'
 import { ReturnAlertsSection } from '@/components/dashboard/ReturnAlertsSection'
 import { getReturnAlerts } from '@/services/return-alerts'
 
+interface DashboardStatsState {
+  totalPatients: number
+  totalTutors: number
+  appointmentsToday: number
+  lowStockCount: number
+  returnAlertsCount: number
+}
+
+const DASHBOARD_CACHE_KEY = 'clinica_dashboard_stats_cache_v1'
+
+function getInitialCachedStats(): { stats: DashboardStatsState; isCached: boolean } {
+  try {
+    const raw = localStorage.getItem(DASHBOARD_CACHE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (typeof parsed?.totalPatients === 'number' && typeof parsed?.totalTutors === 'number') {
+        return {
+          stats: {
+            totalPatients: parsed.totalPatients,
+            totalTutors: parsed.totalTutors,
+            appointmentsToday: parsed.appointmentsToday ?? 0,
+            lowStockCount: parsed.lowStockCount ?? 0,
+            returnAlertsCount: parsed.returnAlertsCount ?? 0,
+          },
+          isCached: true,
+        }
+      }
+    }
+  } catch {
+    // ignorar erros de parse do localStorage
+  }
+  return {
+    stats: {
+      totalPatients: 0,
+      totalTutors: 0,
+      appointmentsToday: 0,
+      lowStockCount: 0,
+      returnAlertsCount: 0,
+    },
+    isCached: false,
+  }
+}
+
 export default function Index() {
-  const [stats, setStats] = useState({
-    totalPatients: 0,
-    totalTutors: 0,
-    appointmentsToday: 0,
-    lowStockCount: 0,
-    returnAlertsCount: 0,
-  })
+  const initial = getInitialCachedStats()
+  const [stats, setStats] = useState<DashboardStatsState>(initial.stats)
+  const [hasLoaded, setHasLoaded] = useState<boolean>(initial.isCached)
   const [recent, setRecent] = useState<Appointment[]>([])
 
   const loadData = async () => {
     try {
-      const [s, r, alertsData] = await Promise.all([
+      // 1. Dispara a busca otimizada das estatísticas e retornos
+      const [s, alertsData, r] = await Promise.all([
         api.getDashboardStats(),
-        api.getRecentAppointments(),
         getReturnAlerts().catch(() => ({ alerts: [], overdueCount: 0, dueSoonCount: 0 })),
+        api.getRecentAppointments().catch(() => []),
       ])
-      setStats({
-        ...s,
-        returnAlertsCount: alertsData.alerts.length,
-      })
-      setRecent(r)
+
+      const finalReturnAlertsCount =
+        typeof alertsData?.alerts?.length === 'number'
+          ? alertsData.alerts.length
+          : (s.returnAlertsCount ?? 0)
+
+      const newStats: DashboardStatsState = {
+        totalPatients: s.totalPatients,
+        totalTutors: s.totalTutors,
+        appointmentsToday: s.appointmentsToday,
+        lowStockCount: s.lowStockCount,
+        returnAlertsCount: finalReturnAlertsCount,
+      }
+
+      setStats(newStats)
+      setHasLoaded(true)
+
+      // Atualiza o cache do localStorage para visitas instantâneas posteriores
+      try {
+        localStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify(newStats))
+      } catch {
+        /* ignorar */
+      }
+
+      // Se o endpoint otimizado já trouxe recentAppointments, usa ele; senão usa r
+      if (s.recentAppointments && s.recentAppointments.length > 0) {
+        setRecent(s.recentAppointments)
+      } else if (r && r.length > 0) {
+        setRecent(r)
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err)
+      setHasLoaded(true)
     }
   }
 
@@ -88,7 +154,11 @@ export default function Index() {
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{stats.totalPatients}</div>
+            {!hasLoaded ? (
+              <div className="h-9 w-24 bg-slate-100 animate-pulse rounded-md" />
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.totalPatients}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -100,7 +170,11 @@ export default function Index() {
             <UserSquare className="h-4 w-4 text-indigo-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{stats.totalTutors}</div>
+            {!hasLoaded ? (
+              <div className="h-9 w-24 bg-slate-100 animate-pulse rounded-md" />
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.totalTutors}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -112,7 +186,11 @@ export default function Index() {
             <Calendar className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-slate-900">{stats.appointmentsToday}</div>
+            {!hasLoaded ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded-md" />
+            ) : (
+              <div className="text-3xl font-bold text-slate-900">{stats.appointmentsToday}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -124,7 +202,11 @@ export default function Index() {
             <BellRing className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-amber-600">{stats.returnAlertsCount}</div>
+            {!hasLoaded ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded-md" />
+            ) : (
+              <div className="text-3xl font-bold text-amber-600">{stats.returnAlertsCount}</div>
+            )}
           </CardContent>
         </Card>
 
@@ -136,7 +218,11 @@ export default function Index() {
             <AlertCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-red-600">{stats.lowStockCount}</div>
+            {!hasLoaded ? (
+              <div className="h-9 w-16 bg-slate-100 animate-pulse rounded-md" />
+            ) : (
+              <div className="text-3xl font-bold text-red-600">{stats.lowStockCount}</div>
+            )}
           </CardContent>
         </Card>
       </div>
