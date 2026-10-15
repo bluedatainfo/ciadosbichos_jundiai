@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T19:16:17.223Z",
+  "generatedAt": "2026-10-15T19:09:08.364Z",
   "collections": [
     {
       "name": "users",
@@ -29,21 +29,30 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "role",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["admin", "veterinarian", "attendant"]
+          "selectValues": [
+            "admin",
+            "veterinarian",
+            "attendant"
+          ]
         },
         {
           "name": "phone",
@@ -103,14 +112,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "phone_secondary",
@@ -207,7 +221,10 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Macho", "Fêmea"]
+          "selectValues": [
+            "Macho",
+            "Fêmea"
+          ]
         },
         {
           "name": "weight",
@@ -227,14 +244,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "pelagem",
@@ -348,14 +370,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "files",
@@ -403,14 +430,23 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["return", "vaccine", "surgery", "consultation"]
+          "selectValues": [
+            "return",
+            "vaccine",
+            "surgery",
+            "consultation"
+          ]
         },
         {
           "name": "status",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["scheduled", "completed", "cancelled"]
+          "selectValues": [
+            "scheduled",
+            "completed",
+            "cancelled"
+          ]
         },
         {
           "name": "notes",
@@ -423,21 +459,29 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "source",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["internal", "public"]
+          "selectValues": [
+            "internal",
+            "public"
+          ]
         },
         {
           "name": "import_hash",
@@ -500,14 +544,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -561,17 +610,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE UNIQUE INDEX idx_business_hours_day ON business_hours (day_of_week)"]
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_business_hours_day ON business_hours (day_of_week)"
+      ]
     },
     {
       "name": "vaccines",
@@ -614,14 +670,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "completed",
@@ -701,17 +762,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_import_progress_file ON import_progress (file_name)"]
+      "indexes": [
+        "CREATE INDEX idx_import_progress_file ON import_progress (file_name)"
+      ]
     },
     {
       "name": "clinic_settings",
@@ -759,14 +827,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -839,21 +912,30 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["pending", "resolved", "ignored"]
+          "selectValues": [
+            "pending",
+            "resolved",
+            "ignored"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -903,14 +985,25 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["create", "update", "delete", "mark_completed", "reopen"]
+          "selectValues": [
+            "create",
+            "update",
+            "delete",
+            "mark_completed",
+            "reopen"
+          ]
         },
         {
           "name": "module",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["patients", "tutors", "clinical_records", "returns"]
+          "selectValues": [
+            "patients",
+            "tutors",
+            "clinical_records",
+            "returns"
+          ]
         },
         {
           "name": "record_id",
@@ -953,14 +1046,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
