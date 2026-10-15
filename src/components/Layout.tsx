@@ -114,7 +114,7 @@ export default function Layout() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-slate-100/70">
+      <div className="flex min-h-screen w-full bg-background">
         <Sidebar className="border-r border-emerald-950/40">
           <SidebarHeader className="p-4 border-b border-emerald-900/60 bg-[#0f1f1d]">
             <div className="flex items-center gap-2.5 min-w-0">

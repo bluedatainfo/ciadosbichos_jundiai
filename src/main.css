@@ -4,8 +4,8 @@
 
 @layer base {
   :root {
-    /* Fundo geral das telas em off-white / cinza suave (não branco puro, menos cansativo) */
-    --background: 210 20% 96.5%;
+    /* Fundo geral das telas em cinza-esverdeado suave e descansado (família verde-grafite do menu lateral) */
+    --background: 165 14% 91.5%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
