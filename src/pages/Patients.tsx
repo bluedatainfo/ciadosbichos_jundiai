@@ -171,7 +171,7 @@ export default function Patients() {
       console.error('Erro ao buscar pacientes do tutor:', err)
       toast({
         title: 'Erro ao buscar animais',
-        description: 'Não foi possível carregar os pacientes vinculados a este tutor.',
+        description: 'Não foi possível carregar os animais vinculados a este tutor.',
         variant: 'destructive',
       })
       setTutorPatientsList([])
@@ -656,7 +656,7 @@ export default function Patients() {
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Pacientes & Tutores</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Animais & Tutores</h1>
           <p className="text-muted-foreground mt-1">
             Gerencie os cadastros de animais e seus responsáveis.
           </p>
@@ -664,14 +664,14 @@ export default function Patients() {
 
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
           <SheetTrigger asChild>
-            <Button className="bg-primary hover:bg-primary/90 gap-2">
-              <Plus className="w-4 h-4" /> Novo Cadastro
+            <Button className="bg-primary hover:bg-primary/90 gap-2 text-white">
+              <Plus className="w-4 h-4" /> Novo Animal
             </Button>
           </SheetTrigger>
           <SheetContent className="overflow-y-auto sm:max-w-md">
             <SheetHeader>
-              <SheetTitle>Novo Paciente</SheetTitle>
-              <SheetDescription>Cadastre um novo paciente e associe a um tutor.</SheetDescription>
+              <SheetTitle>Novo Animal</SheetTitle>
+              <SheetDescription>Cadastre um novo animal e associe a um tutor.</SheetDescription>
             </SheetHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-6">
               {errors.form && (
@@ -862,7 +862,7 @@ export default function Patients() {
                       value={formData.nume}
                       readOnly
                       className="bg-slate-50 font-mono font-bold text-blue-900 border-blue-200 cursor-not-allowed"
-                      title="Número Oficial do Paciente (Gerado automaticamente em sequência contínua)"
+                      title="Número Oficial do Animal (Gerado automaticamente em sequência contínua)"
                     />
                   </div>
                 </div>
@@ -920,19 +920,31 @@ export default function Patients() {
       </div>
 
       <Tabs defaultValue="patients" className="w-full">
-        <TabsList className="mb-4 bg-slate-100">
-          <TabsTrigger value="patients">
-            Lista de Pacientes
+        <TabsList className="mb-4 bg-slate-200/70 p-1 border border-slate-300/80">
+          <TabsTrigger
+            value="patients"
+            className="data-[state=active]:bg-white data-[state=active]:text-primary font-medium"
+          >
+            Lista de Animais
             {totalPatients > 0 && (
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+              <Badge
+                variant="secondary"
+                className="ml-2 px-1.5 py-0 text-xs bg-slate-100 text-slate-700"
+              >
                 {totalPatients.toLocaleString('pt-BR')}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="tutors">
+          <TabsTrigger
+            value="tutors"
+            className="data-[state=active]:bg-white data-[state=active]:text-primary font-medium"
+          >
             Lista de Tutores
             {totalTutors > 0 && (
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-xs">
+              <Badge
+                variant="secondary"
+                className="ml-2 px-1.5 py-0 text-xs bg-slate-100 text-slate-700"
+              >
                 {totalTutors.toLocaleString('pt-BR')}
               </Badge>
             )}
@@ -947,10 +959,10 @@ export default function Patients() {
                   <div className="relative w-full max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar por nome do paciente, nº oficial, espécie ou raça..."
+                      placeholder="Buscar por nome do animal, nº oficial, espécie ou raça..."
                       value={patientSearch}
                       onChange={(e) => setPatientSearch(e.target.value)}
-                      className="pl-9 bg-slate-50 border-slate-200 w-full"
+                      className="pl-9 bg-white border-slate-300 w-full"
                     />
                   </div>
 
@@ -985,7 +997,7 @@ export default function Patients() {
                     </span>
                   ) : (
                     <span>
-                      Total: <strong>{totalPatients.toLocaleString('pt-BR')}</strong> pacientes
+                      Total: <strong>{totalPatients.toLocaleString('pt-BR')}</strong> animais
                     </span>
                   )}
                 </div>
@@ -1000,9 +1012,9 @@ export default function Patients() {
                           type="button"
                           onClick={() => handleTogglePatientSort('name')}
                           className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-primary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded px-1 -mx-1"
-                          title="Clique para ordenar por nome do paciente"
+                          title="Clique para ordenar por nome do animal"
                         >
-                          <span>Paciente</span>
+                          <span>Animal</span>
                           {patientSortField === 'name' ? (
                             patientSortDirection === 'asc' ? (
                               <ArrowUp className="w-4 h-4 text-primary" />
@@ -1044,13 +1056,13 @@ export default function Patients() {
                       <TableRow>
                         <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
-                          Carregando pacientes...
+                          Carregando animais...
                         </TableCell>
                       </TableRow>
                     ) : patients.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                          Nenhum paciente encontrado.
+                          Nenhum animal encontrado.
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -1100,7 +1112,7 @@ export default function Patients() {
                                 <Badge
                                   variant="outline"
                                   className="font-mono text-xs bg-blue-50 text-blue-800 border-blue-200 font-bold"
-                                  title="Número Oficial do Paciente"
+                                  title="Número Oficial do Animal"
                                 >
                                   {patient.nume}
                                 </Badge>
@@ -1278,7 +1290,7 @@ export default function Patients() {
                 <Table className="min-w-[800px]">
                   <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
                     <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
-                      <TableHead className="w-[110px] text-center">Pacientes</TableHead>
+                      <TableHead className="w-[110px] text-center">Animais</TableHead>
                       <TableHead className="min-w-[180px]">
                         <button
                           type="button"
@@ -1333,7 +1345,7 @@ export default function Patients() {
                               size="sm"
                               onClick={(e) => handleOpenTutorPatients(tutor, e)}
                               className="h-8 px-2 gap-1 text-xs border-primary/30 text-primary hover:bg-primary hover:text-white"
-                              title="Ver pacientes deste tutor"
+                              title="Ver animais deste tutor"
                             >
                               <PawPrint className="w-3.5 h-3.5" />
                               <span className="hidden sm:inline">Animais</span>
@@ -1716,7 +1728,7 @@ export default function Patients() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <PawPrint className="w-5 h-5 text-primary" />
-              Pacientes vinculados
+              Animais vinculados
             </DialogTitle>
             <DialogDescription>
               {selectedTutorForPatients ? (

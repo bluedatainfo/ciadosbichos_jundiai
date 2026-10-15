@@ -22,12 +22,14 @@ export default function PatientProfile() {
   const [loading, setLoading] = useState(true)
   const [patientAlert, setPatientAlert] = useState<ReturnAlert | null>(null)
 
-  const loadData = async () => {
+  const loadData = async (isBackgroundRefresh = false) => {
     if (!id) return
     try {
       const data = await api.getPatient(id)
+      if (data) {
+        setPatient(data)
+      }
       const recs = await api.getClinicalRecords(id)
-      setPatient(data)
       setRecords(recs)
 
       try {
@@ -37,20 +39,44 @@ export default function PatientProfile() {
       } catch {
         setPatientAlert(null)
       }
-    } catch {
-      setPatient(null)
+    } catch (err) {
+      console.warn('Erro ao carregar dados do paciente:', err)
+      // REGRA CRÍTICA: Se já temos o paciente carregado em tela, NÃO zerar para null.
+      // Zerar causava a tela de "Paciente não encontrado" após salvar dados ou em pequenos soluços de rede.
+      if (!isBackgroundRefresh && !patient) {
+        setPatient(null)
+      }
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData(false)
   }, [id])
-  useRealtime('patients', () => loadData())
-  useRealtime('tutors', () => loadData())
-  useRealtime('clinical_records', () => loadData())
-  useRealtime('vaccines', () => loadData())
+
+  // Filtragem estrita dos eventos Realtime:
+  // Apenas reagir se o evento pertencer ao animal da página atual (e.record?.id === id)
+  useRealtime('patients', (e) => {
+    if (!e?.record || e.record.id === id) {
+      loadData(true)
+    }
+  })
+  useRealtime('tutors', (e) => {
+    if (!e?.record || !patient?.tutor_id || e.record.id === patient.tutor_id) {
+      loadData(true)
+    }
+  })
+  useRealtime('clinical_records', (e) => {
+    if (!e?.record || e.record.patient_id === id) {
+      loadData(true)
+    }
+  })
+  useRealtime('vaccines', (e) => {
+    if (!e?.record || e.record.patient_id === id) {
+      loadData(true)
+    }
+  })
 
   if (loading)
     return <div className="p-8 text-center text-muted-foreground">Carregando ficha...</div>
@@ -58,8 +84,8 @@ export default function PatientProfile() {
   if (!patient) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[60vh]">
-        <h2 className="text-2xl font-bold mb-4">Paciente não encontrado</h2>
-        <Button onClick={() => navigate('/pacientes')}>Voltar para a lista</Button>
+        <h2 className="text-2xl font-bold mb-4 text-slate-800">Animal não encontrado</h2>
+        <Button onClick={() => navigate('/pacientes')}>Voltar para a lista de Animais</Button>
       </div>
     )
   }

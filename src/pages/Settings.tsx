@@ -37,6 +37,12 @@ import {
   Phone,
   Mail,
   MapPin,
+  Database,
+  Download,
+  FileSpreadsheet,
+  CheckCircle,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react'
 
 export default function Settings() {
@@ -60,7 +66,48 @@ export default function Settings() {
   const [removeExistingLogo, setRemoveExistingLogo] = useState(false)
   const [savingClinic, setSavingClinic] = useState(false)
 
+  // Módulo de Backup Diário Automático
+  const [backups, setBackups] = useState<Array<{ name: string; size: number; updated: string }>>([])
+  const [loadingBackups, setLoadingBackups] = useState(false)
+  const [runningBackup, setRunningBackup] = useState(false)
+
   const publicBookingUrl = `${window.location.origin}/agendamento`
+
+  const loadBackups = async () => {
+    try {
+      setLoadingBackups(true)
+      const data = await api.getBackupsList()
+      setBackups(data.files || [])
+    } catch (err: any) {
+      console.warn('Erro ao carregar backups:', err)
+    } finally {
+      setLoadingBackups(false)
+    }
+  }
+
+  const handleRunBackupNow = async () => {
+    try {
+      setRunningBackup(true)
+      const res = await api.runBackupNow()
+      toast({
+        title: 'Backup concluído com sucesso!',
+        description: `${res.result?.files?.length || 5} arquivos CSV gerados em pb_data/backups_csv.`,
+      })
+      await loadBackups()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao gerar backup',
+        description: getErrorMessage(err) || 'Falha ao executar backup.',
+        variant: 'destructive',
+      })
+    } finally {
+      setRunningBackup(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBackups()
+  }, [])
 
   const loadBusinessHours = async () => {
     try {
@@ -765,7 +812,164 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Seção 4: Perfil de Usuário Logado */}
+      {/* Seção 4: Módulo de Backup Diário Automático */}
+      <Card
+        className="border border-slate-200/80 shadow-sm overflow-hidden bg-white"
+        id="modulo-backup"
+      >
+        <CardHeader className="bg-slate-50/50 border-b pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-primary" />
+                <CardTitle className="text-xl text-slate-900">Backup Diário Automático</CardTitle>
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs"
+                >
+                  Modo Somente Leitura
+                </Badge>
+              </div>
+              <CardDescription>
+                Exportação diária automática às <strong>03:00</strong> das coleções{' '}
+                <em>Animais, Tutores, Fichas Clínicas, Vacinas e Agendamentos</em> para arquivos
+                .csv formatados com UTF-8 BOM (compatível com Excel). Retenção de 7 dias com limpeza
+                automática.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadBackups}
+                disabled={loadingBackups || runningBackup}
+                className="gap-1.5 h-9"
+                title="Recarregar lista"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingBackups ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+              <Button
+                onClick={handleRunBackupNow}
+                disabled={runningBackup}
+                className="gap-2 h-9 bg-primary hover:bg-primary/90 text-white"
+              >
+                {runningBackup ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Gerando Backup...
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4" />
+                    Backup Agora
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-5 space-y-4">
+          <div className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>
+              <strong>Garantia de Integridade:</strong> A rotina executa exclusivamente operações de{' '}
+              <code>SELECT</code> (leitura). É tecnicamente impossível gravar, modificar ou excluir
+              qualquer registro do banco de dados em produção através deste módulo.
+            </span>
+          </div>
+
+          {loadingBackups ? (
+            <div className="py-8 text-center text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              Carregando lista de backups...
+            </div>
+          ) : backups.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground bg-slate-50/50 rounded-lg border border-dashed">
+              <FileSpreadsheet className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="font-medium text-slate-700">Nenhum arquivo de backup gerado ainda.</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Clique em &quot;Backup Agora&quot; acima para gerar a primeira exportação ou aguarde
+                a execução automática das 03:00.
+              </p>
+            </div>
+          ) : (
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="max-h-[360px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-700 text-xs uppercase border-b sticky top-0">
+                    <tr>
+                      <th className="py-2.5 px-4 text-left font-semibold">Arquivo .CSV</th>
+                      <th className="py-2.5 px-4 text-left font-semibold">Tamanho</th>
+                      <th className="py-2.5 px-4 text-left font-semibold">Modificação</th>
+                      <th className="py-2.5 px-4 text-right font-semibold">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {backups.map((bkp) => {
+                      const sizeKb = (bkp.size / 1024).toFixed(1)
+                      const isPatient = bkp.name.includes('patients')
+                      const isTutor = bkp.name.includes('tutors')
+                      const isClinical = bkp.name.includes('clinical_records')
+                      const isVaccine = bkp.name.includes('vaccines')
+                      const isAppt = bkp.name.includes('appointments')
+
+                      let label = 'Tabela'
+                      if (isPatient) label = 'Animais'
+                      else if (isTutor) label = 'Tutores'
+                      else if (isClinical) label = 'Fichas Clínicas'
+                      else if (isVaccine) label = 'Vacinas'
+                      else if (isAppt) label = 'Agendamentos'
+
+                      return (
+                        <tr key={bkp.name} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4 font-mono text-xs text-slate-800">
+                            <div className="flex items-center gap-2">
+                              <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="font-medium">{bkp.name}</span>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-600 border-slate-200"
+                              >
+                                {label}
+                              </Badge>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-600">
+                            {Number(sizeKb) > 1024
+                              ? `${(Number(sizeKb) / 1024).toFixed(2)} MB`
+                              : `${sizeKb} KB`}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500">{bkp.updated || '-'}</td>
+                          <td className="py-3 px-4 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs border-slate-300 hover:bg-primary hover:text-white hover:border-primary transition-colors"
+                              asChild
+                            >
+                              <a
+                                href={api.getBackupDownloadUrl(bkp.name)}
+                                download={bkp.name}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Download className="w-3.5 h-3.5" /> Download
+                              </a>
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Seção 5: Perfil de Usuário Logado */}
       <Card className="border-none shadow-sm max-w-xl">
         <CardHeader>
           <div className="flex items-center gap-2">

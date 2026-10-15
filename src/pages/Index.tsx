@@ -199,7 +199,7 @@ export default function Index() {
         <Card className="border-none shadow-sm bg-white">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pacientes Cadastrados
+              Animais Cadastrados
             </CardTitle>
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
@@ -302,7 +302,7 @@ export default function Index() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead>Data Prevista</TableHead>
-                  <TableHead>Paciente</TableHead>
+                  <TableHead>Animal</TableHead>
                   <TableHead>Motivo</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ação</TableHead>
@@ -418,7 +418,7 @@ export default function Index() {
             </p>
           </div>
           <Button asChild variant="outline" size="sm" className="h-8 text-xs">
-            <Link to="/pacientes">Ver Pacientes</Link>
+            <Link to="/pacientes">Ver Animais</Link>
           </Button>
         </CardHeader>
         <CardContent>

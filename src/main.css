@@ -4,7 +4,8 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
+    /* Fundo geral das telas em off-white / cinza suave (não branco puro, menos cansativo) */
+    --background: 210 20% 96.5%;
     --foreground: 222.2 84% 4.9%;
 
     --card: 0 0% 100%;
@@ -17,20 +18,21 @@
     --primary: 175 84% 32%;
     --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 40% 96.1%;
+    --secondary: 210 25% 93%;
     --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 210 20% 93%;
+    --muted-foreground: 215.4 16.3% 42%;
 
-    --accent: 210 40% 96.1%;
+    --accent: 210 25% 93%;
     --accent-foreground: 222.2 47.4% 11.2%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
+    /* Bordas e inputs mais visíveis com contraste aprimorado */
+    --border: 215 25% 82%;
+    --input: 215 25% 78%;
     --ring: 175 84% 32%;
 
     --radius: 0.75rem;

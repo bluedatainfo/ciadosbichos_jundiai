@@ -14,6 +14,7 @@ import {
   SidebarMenuSubItem,
   SidebarMenuSubButton,
   SidebarHeader,
+  SidebarFooter,
   SidebarInset,
   SidebarTrigger,
 } from '@/components/ui/sidebar'
@@ -54,7 +55,7 @@ const menuItems = [
     roles: ['admin', 'veterinarian', 'attendant'],
   },
   {
-    title: 'Pacientes & Tutores',
+    title: 'Animais & Tutores',
     path: '/pacientes',
     icon: Users,
     roles: ['admin', 'veterinarian', 'attendant'],
@@ -113,12 +114,12 @@ export default function Layout() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-slate-50">
-        <Sidebar>
-          <SidebarHeader className="p-4 border-b">
+      <div className="flex min-h-screen w-full bg-slate-100/70">
+        <Sidebar className="border-r border-emerald-950/40">
+          <SidebarHeader className="p-4 border-b border-emerald-900/60 bg-[#0f1f1d]">
             <div className="flex items-center gap-2.5 min-w-0">
               {clinicLogoUrl ? (
-                <div className="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-white/10 border border-emerald-700/40 flex items-center justify-center overflow-hidden shrink-0 shadow-2xs">
                   <img
                     src={clinicLogoUrl}
                     alt={clinicName}
@@ -126,21 +127,21 @@ export default function Layout() {
                   />
                 </div>
               ) : (
-                <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-2xs">
+                <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0 shadow-2xs">
                   <span className="text-white font-bold text-lg">
                     {clinicName.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )}
               <h2
-                className="text-base font-bold text-primary tracking-tight leading-snug break-words whitespace-normal"
+                className="text-base font-bold text-emerald-100 tracking-tight leading-snug break-words whitespace-normal"
                 title={clinicName}
               >
                 {clinicName}
               </h2>
             </div>
           </SidebarHeader>
-          <SidebarContent>
+          <SidebarContent className="bg-[#112220] text-slate-200">
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
@@ -165,17 +166,17 @@ export default function Layout() {
                                 <SidebarMenuButton
                                   tooltip={item.title}
                                   isActive={isSubActive}
-                                  className="w-full justify-between"
+                                  className="w-full justify-between text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
                                 >
                                   <div className="flex items-center gap-3">
-                                    <item.icon className="w-5 h-5" />
+                                    <item.icon className="w-5 h-5 text-emerald-400/90" />
                                     <span className="font-medium">{item.title}</span>
                                   </div>
-                                  <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 text-muted-foreground" />
+                                  <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 text-slate-400" />
                                 </SidebarMenuButton>
                               </CollapsibleTrigger>
                               <CollapsibleContent>
-                                <SidebarMenuSub>
+                                <SidebarMenuSub className="border-l-emerald-850/60">
                                   {item.subItems
                                     .filter((sub) => sub.roles.includes(user?.role || 'attendant'))
                                     .map((sub) => (
@@ -183,6 +184,7 @@ export default function Layout() {
                                         <SidebarMenuSubButton
                                           asChild
                                           isActive={location.pathname === sub.path}
+                                          className="text-slate-300 hover:text-white hover:bg-emerald-900/50 data-[active=true]:bg-emerald-700/50 data-[active=true]:text-white font-medium"
                                         >
                                           <Link to={sub.path}>
                                             <span>{sub.title}</span>
@@ -197,18 +199,20 @@ export default function Layout() {
                         )
                       }
 
+                      const isActive =
+                        location.pathname === item.path ||
+                        (item.path !== '/' && location.pathname.startsWith(item.path))
+
                       return (
                         <SidebarMenuItem key={item.title}>
                           <SidebarMenuButton
                             asChild
-                            isActive={
-                              location.pathname === item.path ||
-                              (item.path !== '/' && location.pathname.startsWith(item.path))
-                            }
+                            isActive={isActive}
                             tooltip={item.title}
+                            className="text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
                           >
                             <Link to={item.path} className="flex items-center gap-3">
-                              <item.icon className="w-5 h-5" />
+                              <item.icon className="w-5 h-5 text-emerald-400/90" />
                               <span className="font-medium">{item.title}</span>
                             </Link>
                           </SidebarMenuButton>
@@ -219,6 +223,34 @@ export default function Layout() {
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter className="p-4 border-t border-emerald-900/60 bg-[#0f1f1d]">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-8 w-8 rounded-full bg-emerald-800/80 border border-emerald-600/40 flex items-center justify-center shrink-0">
+                  <span className="text-emerald-200 font-semibold text-xs">
+                    {user?.name ? user.name.slice(0, 2).toUpperCase() : 'US'}
+                  </span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-semibold leading-none text-slate-100 truncate">
+                    {user?.name || 'Usuário'}
+                  </span>
+                  <span className="text-[10px] text-emerald-400 capitalize mt-1">
+                    {user?.role || 'Acesso'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full justify-start h-8 text-xs bg-emerald-950/50 border-emerald-800/70 text-slate-300 hover:text-white hover:bg-emerald-900/60 transition-colors"
+              onClick={signOut}
+            >
+              <LogOut className="w-3.5 h-3.5 mr-2 text-rose-400" />
+              Sair
+            </Button>
+          </SidebarFooter>
         </Sidebar>
 
         <SidebarInset className="flex-1 flex flex-col min-w-0 bg-transparent">

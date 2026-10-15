@@ -491,6 +491,37 @@ export const api = {
     return res.items as unknown as Appointment[]
   },
 
+  // Backups CSV
+  getBackupsList: async (): Promise<{
+    backupDir: string
+    retentionDays: number
+    totalFiles: number
+    files: Array<{ name: string; size: number; updated: string }>
+  }> => {
+    return pb.send('/backend/v1/backups/list', { method: 'GET' })
+  },
+  runBackupNow: async (): Promise<{
+    message: string
+    result: {
+      date: string
+      timestamp: string
+      files: Array<{
+        collection: string
+        fileName: string
+        totalRows?: number
+        sizeBytes?: number
+        error?: string
+        status: string
+      }>
+    }
+  }> => {
+    return pb.send('/backend/v1/backups/run', { method: 'POST' })
+  },
+  getBackupDownloadUrl: (fileName: string): string => {
+    const baseUrl = pb.baseUrl || ''
+    return `${baseUrl}/backend/v1/backups/download?file=${encodeURIComponent(fileName)}`
+  },
+
   getRecentClinicalRecords: async (): Promise<import('@/lib/types').RecentClinicalRecordItem[]> => {
     const now = new Date()
     const dateStr = now.toISOString().split('T')[0]

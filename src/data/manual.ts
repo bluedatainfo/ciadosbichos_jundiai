@@ -134,19 +134,19 @@ export const MANUAL_MODULES: ManualModule[] = [
   },
   {
     id: 'pacientes',
-    title: 'Pacientes & Tutores',
+    title: 'Animais & Tutores',
     shortDescription:
       'Cadastro de responsáveis e animais, busca por CPF/nome, contatos via WhatsApp e ficha clínica.',
     routePatterns: ['/pacientes'],
     iconName: 'Users',
     overview: {
       purpose:
-        'Módulo central para cadastramento e manutenção dos registros de animais atendidos e seus respectivos tutores. Oferece visualização em duas abas dedicadas (Lista de Pacientes e Lista de Tutores), com paginação otimizada no servidor (50 registros por página), contadores diretos de totais, busca no servidor e atalho de conversa via WhatsApp com um clique.',
+        'Módulo central para cadastramento e manutenção dos registros de animais atendidos e seus respectivos tutores. Oferece visualização em duas abas dedicadas (Lista de Animais e Lista de Tutores), com paginação otimizada no servidor (50 registros por página), contadores diretos de totais, busca no servidor e atalho de conversa via WhatsApp com um clique.',
       targetUsers: 'Atendentes, Recepcionistas e Médicos Veterinários.',
       keyFeatures: [
-        'Abas separadas para visão por Paciente e visão por Tutor.',
+        'Abas separadas para visão por Animal e visão por Tutor.',
         'Paginação de alta performance no servidor (50 registros por página) preparada para bases com mais de 21.000 cadastros.',
-        'Busca e filtros direto no banco de dados por nome do paciente, raça, espécie e tutor com índices dedicados.',
+        'Busca no servidor por nome do animal, raça, espécie e número oficial (NUME), sem acentos e sem misturar com dados de tutor.',
         'Contadores rápidos com totalização direta do banco de dados no cabeçalho das abas e no rodapé das tabelas.',
         'Badges de alerta para retornos vencidos ou próximos (destaque amarelo) atualizados em tempo real.',
         'Abertura de conversa direta no WhatsApp através do ícone verde ao lado do telefone.',
@@ -252,14 +252,14 @@ export const MANUAL_MODULES: ManualModule[] = [
       },
     ],
     tips: [
-      'Clique em qualquer linha da Lista de Pacientes para abrir diretamente o prontuário completo daquele animal.',
-      'Na Lista de Tutores, você pode clicar diretamente sobre a linha para abrir a edição cadastral do tutor, ou clicar no botão "Animais" à esquerda para ver os pacientes dele.',
+      'Clique em qualquer linha da Lista de Animais para abrir diretamente o prontuário completo daquele animal.',
+      'Na Lista de Tutores, você pode clicar diretamente sobre a linha para abrir a edição cadastral do tutor, ou clicar no botão "Animais" à esquerda para ver os animais dele.',
       'Tutores sem CPF podem ser cadastrados sem impedimento, mas o telefone é essencial para os contatos e confirmações de agenda.',
     ],
   },
   {
     id: 'ficha-clinica',
-    title: 'Ficha Clínica & Prontuário',
+    title: 'Ficha Clínica & Prontuário do Animal',
     shortDescription:
       'Histórico médico, evoluções clínicas, prescrições, vacinas, retornos e impressão de prontuário.',
     routePatterns: ['/pacientes/'],
