@@ -276,10 +276,14 @@ export const api = {
     })
     return res.totalItems
   },
-  searchTutorsForSelect: (search?: string) => {
-    const clean = search?.trim().replace(/"/g, '\\"') || ''
-    const filter = clean ? `name ~ "${clean}" || phone ~ "${clean}"` : ''
-    return pb.collection('tutors').getList<Tutor>(1, 50, {
+  searchTutorsForSelect: async (search?: string, limit: number = 100) => {
+    const term = search?.trim() || ''
+    let filter = ''
+    if (term) {
+      const { buildFieldVariantsFilter } = await import('@/lib/search-utils')
+      filter = buildFieldVariantsFilter('name', term)
+    }
+    return pb.collection('tutors').getList<Tutor>(1, limit, {
       filter,
       sort: 'name',
     })
