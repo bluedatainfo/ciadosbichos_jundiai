@@ -393,31 +393,13 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   </span>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <Input
-                    id="patient-name"
-                    value={patientData.name}
-                    onChange={(e) => setPatientData({ ...patientData, name: e.target.value })}
-                    className="bg-amber-50/60 border-amber-300 focus-visible:ring-amber-400 text-slate-900 font-medium"
-                    placeholder="Nome do animal"
-                  />
-                </div>
-                <div>
-                  <Input
-                    value={
-                      patientData.nume
-                        ? `NUME: ${patientData.nume}`
-                        : patientData.ctrl
-                          ? `CTRL: ${patientData.ctrl}`
-                          : '-'
-                    }
-                    readOnly
-                    className="bg-white/80 font-mono text-xs text-slate-700 border-amber-200 cursor-not-allowed"
-                    title="Identificador oficial do paciente (não editável)"
-                  />
-                </div>
-              </div>
+              <Input
+                id="patient-name"
+                value={patientData.name}
+                onChange={(e) => setPatientData({ ...patientData, name: e.target.value })}
+                className="bg-amber-50/60 border-amber-300 focus-visible:ring-amber-400 text-slate-900 font-medium w-full"
+                placeholder="Nome do animal"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
