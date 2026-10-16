@@ -51,6 +51,9 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  UserCheck,
+  Check,
+  X,
 } from 'lucide-react'
 import { removeAccents } from '@/lib/search-utils'
 import {
@@ -99,6 +102,11 @@ export default function Patients() {
   const [tutors, setTutors] = useState<Tutor[]>([])
   const [selectableTutors, setSelectableTutors] = useState<Tutor[]>([])
   const [selectableTutorSearch, setSelectableTutorSearch] = useState('')
+  const [isSelectTutorDialogOpen, setIsSelectTutorDialogOpen] = useState(false)
+  const [tutorSelectQuery, setTutorSelectQuery] = useState('')
+  const [tutorSelectResults, setTutorSelectResults] = useState<Tutor[]>([])
+  const [tutorSelectLoading, setTutorSelectLoading] = useState(false)
+  const [selectedTutorObj, setSelectedTutorObj] = useState<Tutor | null>(null)
   const [patientAlertsMap, setPatientAlertsMap] = useState<Record<string, ReturnAlert>>({})
 
   const [isSheetOpen, setIsSheetOpen] = useState(false)
@@ -317,6 +325,34 @@ export default function Patients() {
     }
   }
 
+  const handleSearchTutorsForDialog = async (term: string) => {
+    setTutorSelectLoading(true)
+    try {
+      const res = await api.searchTutorsForSelect(term, 100)
+      setTutorSelectResults(res.items)
+    } catch (err) {
+      console.error('Erro ao buscar tutores:', err)
+      setTutorSelectResults([])
+    } finally {
+      setTutorSelectLoading(false)
+    }
+  }
+
+  // Debounce da busca no diálogo de seleção de tutor (300ms)
+  useEffect(() => {
+    if (!isSelectTutorDialogOpen) return
+    const timer = setTimeout(() => {
+      handleSearchTutorsForDialog(tutorSelectQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [tutorSelectQuery, isSelectTutorDialogOpen])
+
+  const handleOpenSelectTutorDialog = () => {
+    setTutorSelectQuery('')
+    setIsSelectTutorDialogOpen(true)
+    handleSearchTutorsForDialog('')
+  }
+
   useEffect(() => {
     loadPatients()
   }, [
@@ -432,7 +468,10 @@ export default function Patients() {
           details: `Novo tutor cadastrado: ${newTutor.name}`,
         })
       } else {
-        const found = selectableTutors.find((t) => t.id === finalTutorId)
+        const found =
+          (selectedTutorObj && selectedTutorObj.id === finalTutorId ? selectedTutorObj : null) ||
+          selectableTutors.find((t) => t.id === finalTutorId) ||
+          tutorSelectResults.find((t) => t.id === finalTutorId)
         createdTutorName = found?.name || ''
       }
       if (!finalTutorId) throw new Error('Selecione um tutor')
@@ -468,6 +507,7 @@ export default function Patients() {
       })
 
       setIsSheetOpen(false)
+      setSelectedTutorObj(null)
       setFormData({
         tutorId: '',
         newTutorName: '',
@@ -695,24 +735,60 @@ export default function Patients() {
 
               {tutorMode === 'existing' ? (
                 <div className="space-y-2">
-                  <Label>Selecione o Tutor</Label>
-                  <Select
-                    value={formData.tutorId}
-                    onValueChange={(v) => setFormData({ ...formData, tutorId: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectableTutors.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.name} ({t.phone || 'Sem tel.'})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Selecione o Tutor *</Label>
+                  {selectedTutorObj ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-md border border-primary/40 bg-primary/5 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-slate-900 truncate">
+                          {selectedTutorObj.name}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {selectedTutorObj.phone
+                            ? `Tel: ${selectedTutorObj.phone}`
+                            : 'Sem telefone'}
+                          {selectedTutorObj.city && ` • ${selectedTutorObj.city}`}
+                          {selectedTutorObj.state && `/${selectedTutorObj.state}`}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs text-primary hover:text-primary hover:bg-primary/10"
+                          onClick={handleOpenSelectTutorDialog}
+                        >
+                          Trocar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                          onClick={() => {
+                            setSelectedTutorObj(null)
+                            setFormData((prev) => ({ ...prev, tutorId: '' }))
+                          }}
+                          title="Remover seleção"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleOpenSelectTutorDialog}
+                      className="w-full justify-start text-left font-normal text-muted-foreground hover:text-slate-900 border-dashed"
+                    >
+                      <Search className="w-4 h-4 mr-2 shrink-0 text-slate-400" />
+                      Clique para buscar e selecionar o tutor...
+                    </Button>
+                  )}
                   <p className="text-[11px] text-muted-foreground">
-                    Exibindo tutores recentes. Se não encontrar, cadastre como Novo Tutor.
+                    Busque por nome entre todos os tutores cadastrados. Se não encontrar, mude para
+                    &quot;Novo Tutor&quot;.
                   </p>
                 </div>
               ) : (
@@ -1721,6 +1797,161 @@ export default function Patients() {
           </form>
         </SheetContent>
       </Sheet>
+
+      {/* Diálogo de Seleção de Tutor com Busca */}
+      <Dialog open={isSelectTutorDialogOpen} onOpenChange={setIsSelectTutorDialogOpen}>
+        <DialogContent className="sm:max-w-xl max-h-[85vh] flex flex-col p-6">
+          <DialogHeader className="shrink-0 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <UserCheck className="w-5 h-5 text-primary" />
+              Selecionar Tutor
+            </DialogTitle>
+            <DialogDescription>
+              Busque pelo nome do tutor para associar ao novo animal.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Campo de Busca no Topo */}
+          <div className="relative shrink-0 my-2">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              autoFocus
+              placeholder="Digite o nome do tutor (ex: Adao, Silva, Maria)..."
+              value={tutorSelectQuery}
+              onChange={(e) => setTutorSelectQuery(e.target.value)}
+              className="pl-9 pr-9 bg-white border-slate-300 w-full"
+            />
+            {tutorSelectQuery && (
+              <button
+                type="button"
+                onClick={() => setTutorSelectQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-900 p-0.5"
+                title="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Contador / Status */}
+          <div className="shrink-0 flex items-center justify-between text-xs text-muted-foreground px-1 pb-1">
+            <span>
+              {tutorSelectLoading ? (
+                <span className="flex items-center gap-1.5 text-primary">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando...
+                </span>
+              ) : (
+                <span>
+                  Exibindo <strong>{tutorSelectResults.length}</strong> tutor(es)
+                  {tutorSelectResults.length >= 100 && ' (limite de 100)'}
+                </span>
+              )}
+            </span>
+            {tutorSelectQuery.trim() && (
+              <span>Filtro por nome: &quot;{tutorSelectQuery.trim()}&quot;</span>
+            )}
+          </div>
+
+          {/* Lista de Resultados com rolagem */}
+          <div className="flex-1 overflow-y-auto min-h-[260px] max-h-[50vh] border rounded-md divide-y bg-white">
+            {tutorSelectLoading && tutorSelectResults.length === 0 ? (
+              <div className="py-12 text-center text-muted-foreground">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
+                Buscando tutores...
+              </div>
+            ) : tutorSelectResults.length === 0 ? (
+              <div className="py-12 px-4 text-center text-muted-foreground text-sm">
+                <p className="font-medium text-slate-700 mb-1">
+                  {tutorSelectQuery.trim()
+                    ? `Nenhum tutor encontrado para "${tutorSelectQuery.trim()}".`
+                    : 'Nenhum tutor encontrado.'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Tente verificar a grafia ou cadastrar como &quot;Novo Tutor&quot; no formulário.
+                </p>
+              </div>
+            ) : (
+              tutorSelectResults.map((tutor) => {
+                const isSelected = formData.tutorId === tutor.id
+                return (
+                  <div
+                    key={tutor.id}
+                    onClick={() => {
+                      setSelectedTutorObj(tutor)
+                      setFormData((prev) => ({ ...prev, tutorId: tutor.id }))
+                      setIsSelectTutorDialogOpen(false)
+                    }}
+                    className={`p-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-900 truncate">{tutor.name}</span>
+                        {isSelected && (
+                          <Badge
+                            variant="outline"
+                            className="bg-primary/15 text-primary border-primary/30 text-[10px] px-1.5 py-0 shrink-0"
+                          >
+                            Selecionado
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-600 flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                        <span>
+                          <strong className="font-normal text-slate-400">Tel:</strong>{' '}
+                          {tutor.phone || 'Sem telefone'}
+                        </span>
+                        <span>
+                          <strong className="font-normal text-slate-400">Cidade:</strong>{' '}
+                          {tutor.city || '-'}
+                          {tutor.state ? `/${tutor.state}` : ''}
+                        </span>
+                        {tutor.cpf && (
+                          <span className="text-slate-400 text-[11px]">CPF: {tutor.cpf}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="shrink-0 flex items-center">
+                      {isSelected ? (
+                        <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center">
+                          <Check className="w-4 h-4" />
+                        </div>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs text-primary hover:bg-primary/10"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedTutorObj(tutor)
+                            setFormData((prev) => ({ ...prev, tutorId: tutor.id }))
+                            setIsSelectTutorDialogOpen(false)
+                          }}
+                        >
+                          Selecionar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <div className="shrink-0 pt-3 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSelectTutorDialogOpen(false)}
+            >
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Pacientes do Tutor */}
       <Dialog open={isTutorPatientsDialogOpen} onOpenChange={setIsTutorPatientsDialogOpen}>
