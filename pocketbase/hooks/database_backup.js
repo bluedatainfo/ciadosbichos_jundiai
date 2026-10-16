@@ -60,6 +60,45 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
 
   var collections = [
     {
+      name: 'tutors',
+      headers: [
+        'ID',
+        'NOME_TUTOR',
+        'TELEFONE_PRINCIPAL',
+        'TELEFONE_SECUNDARIO',
+        'EMAIL',
+        'CPF',
+        'RG',
+        'CEP',
+        'ENDERECO',
+        'BAIRRO',
+        'CIDADE',
+        'ESTADO',
+        'INDICACAO',
+        'INFORMACOES_ADICIONAIS',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'name',
+        'phone',
+        'phone_secondary',
+        'email',
+        'cpf',
+        'rg',
+        'cep',
+        'address',
+        'neighborhood',
+        'city',
+        'state',
+        'indication',
+        'additional_info',
+        'created',
+        'updated',
+      ],
+    },
+    {
       name: 'patients',
       headers: [
         'ID',
@@ -100,45 +139,6 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'registration_date',
         'import_key',
         'tutor_id',
-        'created',
-        'updated',
-      ],
-    },
-    {
-      name: 'tutors',
-      headers: [
-        'ID',
-        'NOME_TUTOR',
-        'TELEFONE_PRINCIPAL',
-        'TELEFONE_SECUNDARIO',
-        'EMAIL',
-        'CPF',
-        'RG',
-        'CEP',
-        'ENDERECO',
-        'BAIRRO',
-        'CIDADE',
-        'ESTADO',
-        'INDICACAO',
-        'INFORMACOES_ADICIONAIS',
-        'CRIADO_EM',
-        'ATUALIZADO_EM',
-      ],
-      fields: [
-        'id',
-        'name',
-        'phone',
-        'phone_secondary',
-        'email',
-        'cpf',
-        'rg',
-        'cep',
-        'address',
-        'neighborhood',
-        'city',
-        'state',
-        'indication',
-        'additional_info',
         'created',
         'updated',
       ],
@@ -219,7 +219,6 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
       ],
     },
   ]
-
   for (var i = 0; i < collections.length; i++) {
     var item = collections[i]
     var fileName = 'backup_' + item.name + '_' + dateStr + '.csv'
@@ -235,11 +234,12 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
       csvContent += headerCols.join(';') + '\r\n'
 
       var pageSize = 1000
-      var offset = 0
+      var lastId = ''
       while (true) {
+        var filter = lastId ? 'id > "' + lastId + '"' : ''
         var records = appInstance
-          ? appInstance.findRecordsByFilter(item.name, '', 'id', pageSize, offset)
-          : $app.findRecordsByFilter(item.name, '', 'id', pageSize, offset)
+          ? appInstance.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
+          : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
         if (!records || records.length === 0) break
 
         totalRows += records.length
@@ -264,7 +264,7 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         }
 
         if (records.length < pageSize) break
-        offset += pageSize
+        lastId = records[records.length - 1].id
       }
 
       $os.writeFile(filePath, csvContent, 420) // 0644
@@ -303,82 +303,6 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
   }
 })
 
-// Endpoint GET de trigger direto para executar a rotina do /run sem sub-requisição HTTP
-// Endpoint GET de trigger por coleção única com medição de tempo e paginação de id > lastId
-routerAdd('GET', '/backend/v1/backups/test-single-collection', function (e) {
-  try {
-    var colName = (e.requestInfo().query || {}).col || 'tutors'
-    var appInstance = e && e.app ? e.app : typeof $app !== 'undefined' ? $app : null
-    var resolvedDir = ''
-    try {
-      if (e && e.app && typeof e.app.dataDir === 'function') {
-        resolvedDir = e.app.dataDir()
-      }
-    } catch (_) {}
-    if (!resolvedDir) {
-      try {
-        if (typeof $app !== 'undefined' && $app && typeof $app.dataDir === 'function') {
-          resolvedDir = $app.dataDir()
-        }
-      } catch (_) {}
-    }
-    var BACKUP_DIR = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
-    $os.mkdirAll(BACKUP_DIR, 493)
-
-    function escapeCsvValue(val) {
-      if (val === null || val === undefined) return '""'
-      var str = String(val)
-      str = str.replace(/"/g, '""')
-      return '"' + str + '"'
-    }
-
-    var now = new Date()
-    var yyyy = now.getFullYear()
-    var m = now.getMonth() + 1
-    var d = now.getDate()
-    var dateStr = yyyy + '-' + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d)
-
-    var t0 = new Date().getTime()
-    var totalRows = 0
-    var csvContent = '\uFEFF'
-    var pageSize = 2000
-    var lastId = ''
-
-    while (true) {
-      var filter = lastId ? 'id > "' + lastId + '"' : ''
-      var recs = appInstance
-        ? appInstance.findRecordsByFilter(colName, filter, 'id', pageSize, 0)
-        : $app.findRecordsByFilter(colName, filter, 'id', pageSize, 0)
-      if (!recs || recs.length === 0) break
-
-      totalRows += recs.length
-      for (var r = 0; r < recs.length; r++) {
-        var rec = recs[r]
-        csvContent +=
-          escapeCsvValue(rec.id) + ';' + escapeCsvValue(rec.getString('created')) + '\r\n'
-      }
-
-      if (recs.length < pageSize) break
-      lastId = recs[recs.length - 1].id
-    }
-
-    var t1 = new Date().getTime()
-    var fileName = 'backup_test_' + colName + '_' + dateStr + '.csv'
-    var filePath = BACKUP_DIR + '/' + fileName
-    $os.writeFile(filePath, csvContent, 420)
-
-    return e.json(200, {
-      col: colName,
-      totalRows: totalRows,
-      timeMs: t1 - t0,
-      sizeBytes: csvContent.length,
-      fileName: fileName,
-    })
-  } catch (errCol) {
-    return e.json(500, { error: errCol ? errCol.message || String(errCol) : 'Erro' })
-  }
-})
-
 // 2. ENDPOINT POST: Disparar Backup Agora (Sob Demanda)
 routerAdd('POST', '/backend/v1/backups/run', function (e) {
   function escapeCsvValue(val) {
@@ -405,6 +329,45 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
   var BACKUP_DIR = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
 
   var collectionsToExport = [
+    {
+      name: 'tutors',
+      headers: [
+        'ID',
+        'NOME_TUTOR',
+        'TELEFONE_PRINCIPAL',
+        'TELEFONE_SECUNDARIO',
+        'EMAIL',
+        'CPF',
+        'RG',
+        'CEP',
+        'ENDERECO',
+        'BAIRRO',
+        'CIDADE',
+        'ESTADO',
+        'INDICACAO',
+        'INFORMACOES_ADICIONAIS',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'name',
+        'phone',
+        'phone_secondary',
+        'email',
+        'cpf',
+        'rg',
+        'cep',
+        'address',
+        'neighborhood',
+        'city',
+        'state',
+        'indication',
+        'additional_info',
+        'created',
+        'updated',
+      ],
+    },
     {
       name: 'patients',
       headers: [
@@ -446,45 +409,6 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
         'registration_date',
         'import_key',
         'tutor_id',
-        'created',
-        'updated',
-      ],
-    },
-    {
-      name: 'tutors',
-      headers: [
-        'ID',
-        'NOME_TUTOR',
-        'TELEFONE_PRINCIPAL',
-        'TELEFONE_SECUNDARIO',
-        'EMAIL',
-        'CPF',
-        'RG',
-        'CEP',
-        'ENDERECO',
-        'BAIRRO',
-        'CIDADE',
-        'ESTADO',
-        'INDICACAO',
-        'INFORMACOES_ADICIONAIS',
-        'CRIADO_EM',
-        'ATUALIZADO_EM',
-      ],
-      fields: [
-        'id',
-        'name',
-        'phone',
-        'phone_secondary',
-        'email',
-        'cpf',
-        'rg',
-        'cep',
-        'address',
-        'neighborhood',
-        'city',
-        'state',
-        'indication',
-        'additional_info',
         'created',
         'updated',
       ],
@@ -643,12 +567,13 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
         csvContent += headerCols.join(';') + '\r\n'
 
         var pageSize = 1000
-        var offset = 0
+        var lastId = ''
         while (true) {
-          // Busca paginada estritamente somente leitura via SDK nativo
+          // Busca paginada estritamente somente leitura via SDK nativo com id > lastId
+          var filter = lastId ? 'id > "' + lastId + '"' : ''
           var records = appInstance
-            ? appInstance.findRecordsByFilter(item.name, '', 'id', pageSize, offset)
-            : $app.findRecordsByFilter(item.name, '', 'id', pageSize, offset)
+            ? appInstance.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
+            : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
           if (!records || records.length === 0) break
 
           totalRows += records.length
@@ -673,7 +598,7 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
           }
 
           if (records.length < pageSize) break
-          offset += pageSize
+          lastId = records[records.length - 1].id
         }
 
         $os.writeFile(filePath, csvContent, 420) // 0644
@@ -759,10 +684,13 @@ routerAdd('GET', '/backend/v1/backups/list', function (e) {
     try {
       entries = $os.readDir(BACKUP_DIR)
     } catch (readErr) {
-      console.log(
-        '[Backup] Aviso ao ler diretório ' + BACKUP_DIR + ':',
-        readErr ? readErr.message : String(readErr),
-      )
+      // Se a pasta não existe ainda, retorna lista vazia normalmente
+      return e.json(200, {
+        backupDir: BACKUP_DIR,
+        retentionDays: 7,
+        totalFiles: 0,
+        files: [],
+      })
     }
     var files = []
 
