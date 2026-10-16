@@ -17,38 +17,48 @@
  * REGRA ABSOLUTA: O sistema está em produção com dados reais. Este script executa estritamente
  * leitura via findRecordsByFilter, jamais gravando, alterando ou destruindo qualquer registro de tabela.
  *
- * RESOLUÇÃO DO CAMINHO DE DADOS:
- * O PocketBase armazena os dados em e.app.dataDir() (ou $app.dataDir()).
- * O diretório backups_csv é criado dentro de dataDir: dataDir + '/backups_csv'.
+ * ATENÇÃO AO AMBIENTE GOJA / POCKETBASE:
+ * Cada callback registrado (cronAdd / routerAdd) executa em seu próprio contexto / pool de VM Goja.
+ * Portanto, NENHUMA função ou variável do escopo raiz pode ser compartilhada ou referenciada dentro
+ * dos callbacks. Toda a lógica, helpers de escape e tabelas de configuração devem ser declarados
+ * inteiramente DENTRO do corpo de cada callback.
  */
 
-// Helper puro de escape CSV
-function escapeCsvValue(val) {
-  if (val === null || val === undefined) return '""'
-  var str = String(val)
-  str = str.replace(/"/g, '""')
-  return '"' + str + '"'
-}
+// 1. REGISTRO DO CRON DIÁRIO ÀS 03:00
+cronAdd('daily_backup_csv', '0 3 * * *', function () {
+  console.log('[Backup Cron] Disparando rotina diária automática de backup (03:00)...')
 
-// Resolução segura do diretório de backup
-function resolveBackupDir(appInstance) {
-  var dir = ''
+  function escapeCsvValue(val) {
+    if (val === null || val === undefined) return '""'
+    var str = String(val)
+    str = str.replace(/"/g, '""')
+    return '"' + str + '"'
+  }
+
+  var appInstance = typeof $app !== 'undefined' ? $app : null
+  var resolvedDir = ''
   try {
     if (appInstance && typeof appInstance.dataDir === 'function') {
-      dir = appInstance.dataDir()
-    } else if (typeof $app !== 'undefined' && $app && typeof $app.dataDir === 'function') {
-      dir = $app.dataDir()
+      resolvedDir = appInstance.dataDir()
     }
   } catch (_) {}
-  if (!dir) {
-    dir = 'pb_data'
-  }
-  return dir + '/backups_csv'
-}
+  var backupDir = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
 
-// Definição das 5 coleções a exportar
-function getCollectionsConfig() {
-  return [
+  try {
+    $os.mkdirAll(backupDir, 493) // 0755
+  } catch (errDir) {
+    console.log('[Backup Cron] Erro ao criar diretório ' + backupDir + ':', errDir)
+  }
+
+  var now = new Date()
+  var yyyy = now.getFullYear()
+  var m = now.getMonth() + 1
+  var d = now.getDate()
+  var mm = m < 10 ? '0' + m : String(m)
+  var dd = d < 10 ? '0' + d : String(d)
+  var dateStr = yyyy + '-' + mm + '-' + dd
+
+  var collections = [
     {
       name: 'patients',
       headers: [
@@ -209,29 +219,7 @@ function getCollectionsConfig() {
       ],
     },
   ]
-}
 
-// 1. REGISTRO DO CRON DIÁRIO ÀS 03:00
-cronAdd('daily_backup_csv', '0 3 * * *', function () {
-  console.log('[Backup Cron] Disparando rotina diária automática de backup (03:00)...')
-  var appInstance = typeof $app !== 'undefined' ? $app : null
-  var backupDir = resolveBackupDir(appInstance)
-
-  try {
-    $os.mkdirAll(backupDir, 493) // 0755
-  } catch (errDir) {
-    console.log('[Backup Cron] Erro ao criar diretório ' + backupDir + ':', errDir)
-  }
-
-  var now = new Date()
-  var yyyy = now.getFullYear()
-  var m = now.getMonth() + 1
-  var d = now.getDate()
-  var mm = m < 10 ? '0' + m : String(m)
-  var dd = d < 10 ? '0' + d : String(d)
-  var dateStr = yyyy + '-' + mm + '-' + dd
-
-  var collections = getCollectionsConfig()
   for (var i = 0; i < collections.length; i++) {
     var item = collections[i]
     var fileName = 'backup_' + item.name + '_' + dateStr + '.csv'
@@ -315,8 +303,91 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
   }
 })
 
+// Endpoint GET de trigger direto para executar a rotina do /run sem sub-requisição HTTP
+// Endpoint GET de trigger por coleção única com medição de tempo e paginação de id > lastId
+routerAdd('GET', '/backend/v1/backups/test-single-collection', function (e) {
+  try {
+    var colName = (e.requestInfo().query || {}).col || 'tutors'
+    var appInstance = e && e.app ? e.app : typeof $app !== 'undefined' ? $app : null
+    var resolvedDir = ''
+    try {
+      if (e && e.app && typeof e.app.dataDir === 'function') {
+        resolvedDir = e.app.dataDir()
+      }
+    } catch (_) {}
+    if (!resolvedDir) {
+      try {
+        if (typeof $app !== 'undefined' && $app && typeof $app.dataDir === 'function') {
+          resolvedDir = $app.dataDir()
+        }
+      } catch (_) {}
+    }
+    var BACKUP_DIR = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
+    $os.mkdirAll(BACKUP_DIR, 493)
+
+    function escapeCsvValue(val) {
+      if (val === null || val === undefined) return '""'
+      var str = String(val)
+      str = str.replace(/"/g, '""')
+      return '"' + str + '"'
+    }
+
+    var now = new Date()
+    var yyyy = now.getFullYear()
+    var m = now.getMonth() + 1
+    var d = now.getDate()
+    var dateStr = yyyy + '-' + (m < 10 ? '0' + m : m) + '-' + (d < 10 ? '0' + d : d)
+
+    var t0 = new Date().getTime()
+    var totalRows = 0
+    var csvContent = '\uFEFF'
+    var pageSize = 2000
+    var lastId = ''
+
+    while (true) {
+      var filter = lastId ? 'id > "' + lastId + '"' : ''
+      var recs = appInstance
+        ? appInstance.findRecordsByFilter(colName, filter, 'id', pageSize, 0)
+        : $app.findRecordsByFilter(colName, filter, 'id', pageSize, 0)
+      if (!recs || recs.length === 0) break
+
+      totalRows += recs.length
+      for (var r = 0; r < recs.length; r++) {
+        var rec = recs[r]
+        csvContent +=
+          escapeCsvValue(rec.id) + ';' + escapeCsvValue(rec.getString('created')) + '\r\n'
+      }
+
+      if (recs.length < pageSize) break
+      lastId = recs[recs.length - 1].id
+    }
+
+    var t1 = new Date().getTime()
+    var fileName = 'backup_test_' + colName + '_' + dateStr + '.csv'
+    var filePath = BACKUP_DIR + '/' + fileName
+    $os.writeFile(filePath, csvContent, 420)
+
+    return e.json(200, {
+      col: colName,
+      totalRows: totalRows,
+      timeMs: t1 - t0,
+      sizeBytes: csvContent.length,
+      fileName: fileName,
+    })
+  } catch (errCol) {
+    return e.json(500, { error: errCol ? errCol.message || String(errCol) : 'Erro' })
+  }
+})
+
 // 2. ENDPOINT POST: Disparar Backup Agora (Sob Demanda)
 routerAdd('POST', '/backend/v1/backups/run', function (e) {
+  function escapeCsvValue(val) {
+    if (val === null || val === undefined) return '""'
+    var str = String(val)
+    str = str.replace(/"/g, '""')
+    return '"' + str + '"'
+  }
+
   var appInstance = e && e.app ? e.app : typeof $app !== 'undefined' ? $app : null
   var resolvedDir = ''
   try {
@@ -332,6 +403,168 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
     } catch (_) {}
   }
   var BACKUP_DIR = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
+
+  var collectionsToExport = [
+    {
+      name: 'patients',
+      headers: [
+        'ID',
+        'NUME_OFICIAL',
+        'CTRL_LEGADO',
+        'NOME_ANIMAL',
+        'ESPECIE',
+        'RACA',
+        'DATA_NASCIMENTO',
+        'SEXO',
+        'PESO_KG',
+        'PELAGEM',
+        'ULTIMA_VISITA',
+        'MICROCHIP',
+        'OBITO',
+        'OBS_OBITO',
+        'DATA_CADASTRO',
+        'CHAVE_IMPORTACAO',
+        'ID_TUTOR',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'nume',
+        'ctrl',
+        'name',
+        'species',
+        'breed',
+        'birth_date',
+        'gender',
+        'weight',
+        'pelagem',
+        'last_visit',
+        'microchip',
+        'deceased',
+        'status_notes',
+        'registration_date',
+        'import_key',
+        'tutor_id',
+        'created',
+        'updated',
+      ],
+    },
+    {
+      name: 'tutors',
+      headers: [
+        'ID',
+        'NOME_TUTOR',
+        'TELEFONE_PRINCIPAL',
+        'TELEFONE_SECUNDARIO',
+        'EMAIL',
+        'CPF',
+        'RG',
+        'CEP',
+        'ENDERECO',
+        'BAIRRO',
+        'CIDADE',
+        'ESTADO',
+        'INDICACAO',
+        'INFORMACOES_ADICIONAIS',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'name',
+        'phone',
+        'phone_secondary',
+        'email',
+        'cpf',
+        'rg',
+        'cep',
+        'address',
+        'neighborhood',
+        'city',
+        'state',
+        'indication',
+        'additional_info',
+        'created',
+        'updated',
+      ],
+    },
+    {
+      name: 'clinical_records',
+      headers: [
+        'ID',
+        'ID_PACIENTE',
+        'QUEIXA_EVOLUCAO',
+        'DIAGNOSTICO',
+        'TRATAMENTO_PRESCRICAO',
+        'HASH_IMPORTACAO',
+        'DATA_ATENDIMENTO',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'patient_id',
+        'description',
+        'diagnosis',
+        'treatment',
+        'import_hash',
+        'created',
+        'updated',
+      ],
+    },
+    {
+      name: 'vaccines',
+      headers: [
+        'ID',
+        'ID_PACIENTE',
+        'NOME_VACINA',
+        'DATA_PREVISTA',
+        'REALIZADA',
+        'OBSERVACOES',
+        'HASH_IMPORTACAO',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'patient_id',
+        'name',
+        'date',
+        'completed',
+        'notes',
+        'import_hash',
+        'created',
+        'updated',
+      ],
+    },
+    {
+      name: 'appointments',
+      headers: [
+        'ID',
+        'ID_PACIENTE',
+        'DATA_HORA',
+        'TIPO',
+        'STATUS',
+        'OBSERVACOES',
+        'ORIGEM',
+        'HASH_IMPORTACAO',
+        'CRIADO_EM',
+        'ATUALIZADO_EM',
+      ],
+      fields: [
+        'id',
+        'patient_id',
+        'date',
+        'type',
+        'status',
+        'notes',
+        'source',
+        'import_hash',
+        'created',
+        'updated',
+      ],
+    },
+  ]
 
   function getTodayIsoDate() {
     var now = new Date()
@@ -393,7 +626,6 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
     ensureBackupDir()
     var dateStr = getTodayIsoDate()
     var results = []
-    var collectionsToExport = getCollectionsConfig()
 
     for (var i = 0; i < collectionsToExport.length; i++) {
       var item = collectionsToExport[i]
