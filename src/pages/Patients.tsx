@@ -996,16 +996,16 @@ export default function Patients() {
       </div>
 
       <Tabs defaultValue="patients" className="w-full">
-        <TabsList className="mb-4 bg-slate-200/70 p-1 border border-slate-300/80">
+        <TabsList className="mb-4 bg-slate-200/80 p-1 border border-slate-300/80 shadow-2xs">
           <TabsTrigger
             value="patients"
-            className="data-[state=active]:bg-white data-[state=active]:text-primary font-medium"
+            className="data-[state=active]:bg-slate-100 data-[state=active]:text-primary font-medium"
           >
             Lista de Animais
             {totalPatients > 0 && (
               <Badge
                 variant="secondary"
-                className="ml-2 px-1.5 py-0 text-xs bg-slate-100 text-slate-700"
+                className="ml-2 px-1.5 py-0 text-xs bg-slate-200 text-slate-700"
               >
                 {totalPatients.toLocaleString('pt-BR')}
               </Badge>
@@ -1013,13 +1013,13 @@ export default function Patients() {
           </TabsTrigger>
           <TabsTrigger
             value="tutors"
-            className="data-[state=active]:bg-white data-[state=active]:text-primary font-medium"
+            className="data-[state=active]:bg-slate-100 data-[state=active]:text-primary font-medium"
           >
             Lista de Tutores
             {totalTutors > 0 && (
               <Badge
                 variant="secondary"
-                className="ml-2 px-1.5 py-0 text-xs bg-slate-100 text-slate-700"
+                className="ml-2 px-1.5 py-0 text-xs bg-slate-200 text-slate-700"
               >
                 {totalTutors.toLocaleString('pt-BR')}
               </Badge>
@@ -1028,9 +1028,9 @@ export default function Patients() {
         </TabsList>
 
         <TabsContent value="patients" className="mt-0">
-          <Card className="border-none shadow-sm">
+          <Card className="border border-slate-200/80 shadow-xs overflow-hidden bg-slate-100/70">
             <CardContent className="p-0">
-              <div className="p-4 border-b flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-white rounded-t-lg">
+              <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between bg-slate-100/90 rounded-t-lg">
                 <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center flex-1">
                   <div className="relative w-full max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1038,7 +1038,7 @@ export default function Patients() {
                       placeholder="Buscar por nome do animal, nº oficial, espécie ou raça..."
                       value={patientSearch}
                       onChange={(e) => setPatientSearch(e.target.value)}
-                      className="pl-9 bg-white border-slate-300 w-full"
+                      className="pl-9 bg-slate-50/90 border-slate-300 w-full focus-visible:bg-white"
                     />
                   </div>
 
@@ -1050,7 +1050,7 @@ export default function Patients() {
                         setPatientPage(1)
                       }}
                     >
-                      <SelectTrigger className="bg-slate-50 border-slate-200">
+                      <SelectTrigger className="bg-slate-50/90 border-slate-300">
                         <SelectValue placeholder="Espécie" />
                       </SelectTrigger>
                       <SelectContent>
@@ -1081,8 +1081,8 @@ export default function Patients() {
 
               <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[350px]">
                 <Table className="min-w-[700px]">
-                  <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
-                    <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
+                  <TableHeader className="sticky top-0 bg-slate-200/90 z-10 shadow-2xs border-b border-slate-200">
+                    <TableRow className="bg-slate-200/95 hover:bg-slate-200/95">
                       <TableHead className="min-w-[180px]">
                         <button
                           type="button"
@@ -1127,16 +1127,16 @@ export default function Patients() {
                       <TableHead className="text-right min-w-[80px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="bg-slate-100/60 divide-y divide-slate-200/80">
                     {patientsLoading && patients.length === 0 ? (
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
                           Carregando animais...
                         </TableCell>
                       </TableRow>
                     ) : patients.length === 0 ? (
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
                           Nenhum animal encontrado.
                         </TableCell>
@@ -1145,7 +1145,7 @@ export default function Patients() {
                       sortedPatients.map((patient) => (
                         <TableRow
                           key={patient.id}
-                          className="group hover:bg-slate-50 cursor-pointer transition-colors"
+                          className="group bg-slate-100/70 hover:bg-slate-200/70 cursor-pointer transition-colors"
                         >
                           <TableCell>
                             <Link
@@ -1336,16 +1336,16 @@ export default function Patients() {
         </TabsContent>
 
         <TabsContent value="tutors" className="mt-0">
-          <Card className="border-none shadow-sm">
+          <Card className="border border-slate-200/80 shadow-xs overflow-hidden bg-slate-100/70">
             <CardContent className="p-0">
-              <div className="p-4 border-b flex flex-col sm:flex-row gap-4 items-center justify-between bg-white rounded-t-lg">
+              <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-100/90 rounded-t-lg">
                 <div className="relative w-full max-w-md">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Buscar tutor por nome, cidade, CPF ou telefone..."
                     value={tutorSearch}
                     onChange={(e) => setTutorSearch(e.target.value)}
-                    className="pl-9 bg-slate-50 border-slate-200 w-full"
+                    className="pl-9 bg-slate-50/90 border-slate-300 w-full focus-visible:bg-white"
                   />
                 </div>
 
@@ -1364,8 +1364,8 @@ export default function Patients() {
 
               <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-280px)] min-h-[350px]">
                 <Table className="min-w-[800px]">
-                  <TableHeader className="sticky top-0 bg-slate-50 z-10 shadow-sm">
-                    <TableRow className="bg-slate-50/95 hover:bg-slate-50/95">
+                  <TableHeader className="sticky top-0 bg-slate-200/90 z-10 shadow-2xs border-b border-slate-200">
+                    <TableRow className="bg-slate-200/95 hover:bg-slate-200/95">
                       <TableHead className="w-[110px] text-center">Animais</TableHead>
                       <TableHead className="min-w-[180px]">
                         <button
@@ -1393,16 +1393,16 @@ export default function Patients() {
                       <TableHead className="text-right min-w-[100px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
+                  <TableBody className="bg-slate-100/60 divide-y divide-slate-200/80">
                     {tutorsLoading && tutors.length === 0 ? (
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
                           Carregando tutores...
                         </TableCell>
                       </TableRow>
                     ) : tutors.length === 0 ? (
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                           Nenhum tutor encontrado.
                         </TableCell>
@@ -1412,7 +1412,7 @@ export default function Patients() {
                         <TableRow
                           key={tutor.id}
                           onClick={() => handleOpenEditTutor(tutor)}
-                          className="hover:bg-slate-50 cursor-pointer transition-colors group"
+                          className="bg-slate-100/70 hover:bg-slate-200/70 cursor-pointer transition-colors group"
                         >
                           <TableCell className="text-center" onClick={(e) => e.stopPropagation()}>
                             <Button
@@ -1819,7 +1819,7 @@ export default function Patients() {
               placeholder="Digite o nome do tutor (ex: Adao, Silva, Maria)..."
               value={tutorSelectQuery}
               onChange={(e) => setTutorSelectQuery(e.target.value)}
-              className="pl-9 pr-9 bg-white border-slate-300 w-full"
+              className="pl-9 pr-9 bg-slate-50/90 border-slate-300 w-full focus-visible:bg-white"
             />
             {tutorSelectQuery && (
               <button
@@ -1853,7 +1853,7 @@ export default function Patients() {
           </div>
 
           {/* Lista de Resultados com rolagem */}
-          <div className="flex-1 overflow-y-auto min-h-[260px] max-h-[50vh] border rounded-md divide-y bg-white">
+          <div className="flex-1 overflow-y-auto min-h-[260px] max-h-[50vh] border border-slate-200/80 rounded-md divide-y divide-slate-200/80 bg-slate-100/60 shadow-2xs">
             {tutorSelectLoading && tutorSelectResults.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
@@ -1881,8 +1881,10 @@ export default function Patients() {
                       setFormData((prev) => ({ ...prev, tutorId: tutor.id }))
                       setIsSelectTutorDialogOpen(false)
                     }}
-                    className={`p-3 flex items-center justify-between gap-3 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-primary/10 border-l-4 border-l-primary' : 'hover:bg-slate-50'
+                    className={`p-3 flex items-center justify-between gap-3 cursor-pointer transition-colors bg-slate-100/70 ${
+                      isSelected
+                        ? 'bg-primary/10 border-l-4 border-l-primary hover:bg-primary/15'
+                        : 'hover:bg-slate-200/70'
                     }`}
                   >
                     <div className="min-w-0 flex-1">
@@ -1984,13 +1986,13 @@ export default function Patients() {
                 Nenhum animal cadastrado para este tutor.
               </div>
             ) : (
-              <div className="divide-y rounded-lg border bg-white overflow-hidden">
+              <div className="divide-y divide-slate-200/80 rounded-lg border border-slate-200/80 bg-slate-100/60 overflow-hidden shadow-2xs">
                 {tutorPatientsList.map((patient) => (
                   <Link
                     key={patient.id}
                     to={`/pacientes/${patient.id}`}
                     onClick={() => setIsTutorPatientsDialogOpen(false)}
-                    className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors group cursor-pointer"
+                    className="p-3.5 flex items-center justify-between bg-slate-100/70 hover:bg-slate-200/70 transition-colors group cursor-pointer"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
