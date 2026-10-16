@@ -38,7 +38,7 @@ function escapeCsvValue(val) {
 }
 
 // Garante que o diretório de backups exista
-function ensureBackupDir() {
+const ensureBackupDir = function () {
   try {
     $os.mkdirAll(BACKUP_DIR, 0o755)
   } catch (err) {
@@ -47,7 +47,7 @@ function ensureBackupDir() {
 }
 
 // Executa a geração de CSVs de todas as coleções solicitadas
-function executeBackupProcess() {
+const executeBackupProcess = function () {
   ensureBackupDir()
   const dateStr = getTodayIsoDate()
   const results = []
@@ -282,6 +282,11 @@ function executeBackupProcess() {
   // Limpeza de arquivos com mais de 7 dias
   cleanOldBackups(7)
 
+  // Log explícito para auditoria/monitoramento
+  console.log(
+    `[Backup] Processo concluído com sucesso: ${results.length} arquivos gerados na data ${dateStr}`,
+  )
+
   return {
     date: dateStr,
     timestamp: new Date().toISOString(),
@@ -289,7 +294,7 @@ function executeBackupProcess() {
   }
 }
 
-// Exclui arquivos de backup com mais de N dias
+// Exclui arquivos de backup com mais de N dias (apaga SOMENTE arquivos .csv de backup antigos, nunca dados de coleções)
 function cleanOldBackups(retentionDays) {
   try {
     ensureBackupDir()

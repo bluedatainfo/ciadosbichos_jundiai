@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-16T01:43:04.659Z",
+  "generatedAt": "2026-10-16T02:37:18.414Z",
   "collections": [
     {
       "name": "users",
@@ -371,7 +371,9 @@
         }
       ],
       "indexes": [
-        "CREATE INDEX `idx_clinical_records_import_hash` ON `clinical_records` (import_hash)"
+        "CREATE INDEX `idx_clinical_records_import_hash` ON `clinical_records` (import_hash)",
+        "CREATE INDEX `idx_clinical_records_created` ON `clinical_records` (created)",
+        "CREATE INDEX `idx_clinical_records_patient_id` ON `clinical_records` (patient_id)"
       ]
     },
     {
