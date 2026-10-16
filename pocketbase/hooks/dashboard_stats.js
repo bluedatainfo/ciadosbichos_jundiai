@@ -36,7 +36,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Contagem de Pacientes
     let totalPatients = 0
     try {
-      const rowsPatients = $app.db().newQuery('SELECT COUNT(*) AS total FROM patients').all()
+      const rowsPatients = arrayOf(new DynamicModel({ total: 0 }))
+      $app.db().newQuery('SELECT COUNT(*) AS total FROM patients').all(rowsPatients)
       totalPatients =
         rowsPatients && rowsPatients.length > 0 && rowsPatients[0].total !== undefined
           ? Number(rowsPatients[0].total || 0)
@@ -48,7 +49,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Contagem de Tutores
     let totalTutors = 0
     try {
-      const rowsTutors = $app.db().newQuery('SELECT COUNT(*) AS total FROM tutors').all()
+      const rowsTutors = arrayOf(new DynamicModel({ total: 0 }))
+      $app.db().newQuery('SELECT COUNT(*) AS total FROM tutors').all(rowsTutors)
       totalTutors =
         rowsTutors && rowsTutors.length > 0 && rowsTutors[0].total !== undefined
           ? Number(rowsTutors[0].total || 0)
@@ -63,7 +65,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     let clinicalRecordsCountToday = 0
     const clinicalPatientIdsToday = {}
     try {
-      const rowTodayClinical = $app
+      const rowTodayClinical = arrayOf(new DynamicModel({ patient_id: '' }))
+      $app
         .db()
         .newQuery(
           `SELECT DISTINCT patient_id 
@@ -71,7 +74,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
            WHERE created >= {:start} AND created <= {:end}`,
         )
         .bind({ start: startOfDay, end: endOfDay })
-        .all()
+        .all(rowTodayClinical)
 
       if (rowTodayClinical && rowTodayClinical.length > 0) {
         for (let i = 0; i < rowTodayClinical.length; i++) {
@@ -92,7 +95,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Buscar agendamentos marcados para hoje
     let nonDuplicateAppointmentsToday = 0
     try {
-      const rowTodayAppointments = $app
+      const rowTodayAppointments = arrayOf(new DynamicModel({ id: '', patient_id: '' }))
+      $app
         .db()
         .newQuery(
           `SELECT id, patient_id 
@@ -100,7 +104,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
            WHERE date >= {:start} AND date <= {:end}`,
         )
         .bind({ start: startOfDay, end: endOfDay })
-        .all()
+        .all(rowTodayAppointments)
 
       if (rowTodayAppointments && rowTodayAppointments.length > 0) {
         for (let i = 0; i < rowTodayAppointments.length; i++) {
@@ -124,10 +128,11 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Itens em falta no estoque
     let lowStockCount = 0
     try {
-      const rowsInventory = $app
+      const rowsInventory = arrayOf(new DynamicModel({ total: 0 }))
+      $app
         .db()
         .newQuery('SELECT COUNT(*) AS total FROM inventory WHERE quantity < min_stock')
-        .all()
+        .all(rowsInventory)
       lowStockCount =
         rowsInventory && rowsInventory.length > 0 && rowsInventory[0].total !== undefined
           ? Number(rowsInventory[0].total || 0)
@@ -140,7 +145,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     let returnAlertsCount = 0
     try {
       // Subquery ou verificação otimizada para não varrer tabela sem necessidade
-      const rowAlerts = $app
+      const rowAlerts = arrayOf(new DynamicModel({ total: 0 }))
+      $app
         .db()
         .newQuery(
           `SELECT COUNT(DISTINCT v.patient_id) AS total
@@ -151,7 +157,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
              AND (v.completed = 0 OR v.completed IS NULL)
              AND (p.deceased = 0 OR p.deceased IS NULL)`,
         )
-        .all()
+        .all(rowAlerts)
       if (rowAlerts && rowAlerts.length > 0 && rowAlerts[0].total !== undefined) {
         returnAlertsCount = Number(rowAlerts[0].total || 0)
       }
@@ -168,7 +174,21 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Exibindo paciente, tutor, data e veterinário (identificado no audit_log correspondente ou notas).
     const recentClinicalRecords = []
     try {
-      const recentClinicalRows = $app
+      const recentClinicalRows = arrayOf(
+        new DynamicModel({
+          id: '',
+          patient_id: '',
+          description: '',
+          diagnosis: '',
+          treatment: '',
+          created: '',
+          updated: '',
+          patient_name: '',
+          tutor_id: '',
+          tutor_name: '',
+        }),
+      )
+      $app
         .db()
         .newQuery(
           `SELECT 
@@ -190,7 +210,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
            LIMIT 6`,
         )
         .bind({ maxDate: endOfDay })
-        .all()
+        .all(recentClinicalRows)
 
       if (recentClinicalRows && recentClinicalRows.length > 0) {
         // Coletar recordIds para buscar veterinários em UMA ÚNICA query em lote
@@ -205,7 +225,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         if (recordIds.length > 0) {
           try {
             const inPlaceholders = recordIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(',')
-            const auditRows = $app
+            const auditRows = arrayOf(new DynamicModel({ record_id: '', user_name: '' }))
+            $app
               .db()
               .newQuery(
                 `SELECT record_id, user_name 
@@ -215,7 +236,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
                    AND user_name IS NOT NULL AND user_name != ''
                  ORDER BY created ASC`,
               )
-              .all()
+              .all(auditRows)
 
             if (auditRows && auditRows.length > 0) {
               for (let j = 0; j < auditRows.length; j++) {
@@ -278,7 +299,23 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Aplicando limite sanitário (date <= maxFutureDateStr) para descartar datas corrompidas (> 2 anos).
     const upcomingAppointments = []
     try {
-      const upcomingRows = $app
+      const upcomingRows = arrayOf(
+        new DynamicModel({
+          id: '',
+          date: '',
+          type: '',
+          status: '',
+          notes: '',
+          source: '',
+          created: '',
+          updated: '',
+          patient_id: '',
+          patient_name: '',
+          tutor_id: '',
+          tutor_name: '',
+        }),
+      )
+      $app
         .db()
         .newQuery(
           `SELECT 
@@ -305,7 +342,7 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
            LIMIT 6`,
         )
         .bind({ minDate: endOfDay, maxDate: maxFutureDateStr })
-        .all()
+        .all(upcomingRows)
 
       if (upcomingRows && upcomingRows.length > 0) {
         for (let i = 0; i < upcomingRows.length; i++) {
