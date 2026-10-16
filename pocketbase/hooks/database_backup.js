@@ -20,7 +20,7 @@
 const BACKUP_DIR = 'pb_data/backups_csv'
 
 // Helper para formatar data YYYY-MM-DD
-function getTodayIsoDate() {
+const getTodayIsoDate = function () {
   const now = new Date()
   const yyyy = now.getFullYear()
   const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -29,7 +29,7 @@ function getTodayIsoDate() {
 }
 
 // Escapa valor para CSV padrão RFC 4180
-function escapeCsvValue(val) {
+const escapeCsvValue = function (val) {
   if (val === null || val === undefined) return '""'
   let str = String(val)
   // Substitui aspas duplas por par de aspas duplas
@@ -42,7 +42,40 @@ const ensureBackupDir = function () {
   try {
     $os.mkdirAll(BACKUP_DIR, 0o755)
   } catch (err) {
-    console.log('[Backup] Erro ao criar diretório:', err.message)
+    console.log('[Backup] Erro ao criar diretório:', err ? err.message : String(err))
+  }
+}
+
+// Exclui arquivos de backup com mais de N dias (apaga SOMENTE arquivos .csv de backup antigos, nunca dados de coleções)
+const cleanOldBackups = function (retentionDays) {
+  try {
+    ensureBackupDir()
+    const entries = $os.readDir(BACKUP_DIR)
+    if (!entries || entries.length === 0) return
+
+    const now = new Date().getTime()
+    const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]
+      if (entry.isDir()) continue
+      const name = entry.name()
+      if (!name.endsWith('.csv')) continue
+
+      const fullPath = `${BACKUP_DIR}/${name}`
+      try {
+        const fileInfo = $os.stat(fullPath)
+        const modTime = fileInfo.modTime().unixMilli()
+        if (now - modTime > maxAgeMs) {
+          $os.remove(fullPath)
+          console.log(`[Backup] Arquivo antigo removido (${retentionDays}+ dias): ${name}`)
+        }
+      } catch (e) {
+        // Ignora erro individual ao verificar data do arquivo
+      }
+    }
+  } catch (err) {
+    console.log('[Backup] Erro na limpeza de backups antigos:', err ? err.message : String(err))
   }
 }
 
@@ -291,39 +324,6 @@ const executeBackupProcess = function () {
     date: dateStr,
     timestamp: new Date().toISOString(),
     files: results,
-  }
-}
-
-// Exclui arquivos de backup com mais de N dias (apaga SOMENTE arquivos .csv de backup antigos, nunca dados de coleções)
-function cleanOldBackups(retentionDays) {
-  try {
-    ensureBackupDir()
-    const entries = $os.readDir(BACKUP_DIR)
-    if (!entries || entries.length === 0) return
-
-    const now = new Date().getTime()
-    const maxAgeMs = retentionDays * 24 * 60 * 60 * 1000
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]
-      if (entry.isDir()) continue
-      const name = entry.name()
-      if (!name.endsWith('.csv')) continue
-
-      const fullPath = `${BACKUP_DIR}/${name}`
-      try {
-        const fileInfo = $os.stat(fullPath)
-        const modTime = fileInfo.modTime().unixMilli()
-        if (now - modTime > maxAgeMs) {
-          $os.remove(fullPath)
-          console.log(`[Backup] Arquivo antigo removido (${retentionDays}+ dias): ${name}`)
-        }
-      } catch (e) {
-        // Ignora erro individual ao verificar data do arquivo
-      }
-    }
-  } catch (err) {
-    console.log('[Backup] Erro na limpeza de backups antigos:', err.message)
   }
 }
 

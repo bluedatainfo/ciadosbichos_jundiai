@@ -19,6 +19,7 @@
  */
 
 routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
+  console.log('[Dashboard Stats] Iniciando processamento de /backend/v1/dashboard/stats')
   try {
     // 1. Data de hoje para filtro de atendimentos
     const todayDate = new Date()
@@ -36,18 +37,19 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     let totalPatients = 0
     try {
       const rowPatients = $app.db().newQuery('SELECT COUNT(*) AS total FROM patients').one()
-      totalPatients = rowPatients ? Number(rowPatients.total || 0) : 0
+      totalPatients =
+        rowPatients && rowPatients.total !== undefined ? Number(rowPatients.total || 0) : 0
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao contar pacientes:', err.message)
+      console.log('[Dashboard Stats] Erro ao contar pacientes:', err ? err.message : String(err))
     }
 
     // Contagem de Tutores
     let totalTutors = 0
     try {
       const rowTutors = $app.db().newQuery('SELECT COUNT(*) AS total FROM tutors').one()
-      totalTutors = rowTutors ? Number(rowTutors.total || 0) : 0
+      totalTutors = rowTutors && rowTutors.total !== undefined ? Number(rowTutors.total || 0) : 0
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao contar tutores:', err.message)
+      console.log('[Dashboard Stats] Erro ao contar tutores:', err ? err.message : String(err))
     }
 
     // Contagem de Atendimentos Hoje:
@@ -76,7 +78,10 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         }
       }
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao contar fichas clínicas de hoje:', err.message)
+      console.log(
+        '[Dashboard Stats] Erro ao contar fichas clínicas de hoje:',
+        err ? err.message : String(err),
+      )
     }
 
     // Buscar agendamentos marcados para hoje
@@ -103,7 +108,10 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         }
       }
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao contar agendamentos de hoje:', err.message)
+      console.log(
+        '[Dashboard Stats] Erro ao contar agendamentos de hoje:',
+        err ? err.message : String(err),
+      )
     }
 
     const appointmentsToday = clinicalRecordsCountToday + nonDuplicateAppointmentsToday
@@ -115,7 +123,8 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         .db()
         .newQuery('SELECT COUNT(*) AS total FROM inventory WHERE quantity < min_stock')
         .one()
-      lowStockCount = rowInventory ? Number(rowInventory.total || 0) : 0
+      lowStockCount =
+        rowInventory && rowInventory.total !== undefined ? Number(rowInventory.total || 0) : 0
     } catch (_) {
       lowStockCount = 0
     }
@@ -135,9 +144,13 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
              AND (p.deceased = 0 OR p.deceased IS NULL)`,
         )
         .one()
-      returnAlertsCount = rowAlerts ? Number(rowAlerts.total || 0) : 0
+      returnAlertsCount =
+        rowAlerts && rowAlerts.total !== undefined ? Number(rowAlerts.total || 0) : 0
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao contar alertas de retorno:', err.message)
+      console.log(
+        '[Dashboard Stats] Erro ao contar alertas de retorno:',
+        err ? err.message : String(err),
+      )
     }
 
     // 3. ATENDIMENTOS RECENTES (Realizados)
@@ -219,7 +232,10 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         }
       }
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao buscar atendimentos recentes:', err.message)
+      console.log(
+        '[Dashboard Stats] Erro ao buscar atendimentos recentes:',
+        err ? err.message : String(err),
+      )
     }
 
     // 4. PRÓXIMOS AGENDAMENTOS (Futuros)
@@ -290,7 +306,10 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         }
       }
     } catch (err) {
-      console.log('[Dashboard Stats] Erro ao buscar próximos agendamentos:', err.message)
+      console.log(
+        '[Dashboard Stats] Erro ao buscar próximos agendamentos:',
+        err ? err.message : String(err),
+      )
     }
 
     const result = {
@@ -305,9 +324,16 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
       recentAppointments: upcomingAppointments,
     }
 
+    console.log(
+      '[Dashboard Stats] Sucesso ao montar stats: totalPatients=' +
+        totalPatients +
+        ', appointmentsToday=' +
+        appointmentsToday,
+    )
     return e.json(200, result)
   } catch (err) {
-    console.log('[Dashboard Stats] Erro geral:', err && (err.message || String(err)))
-    return e.json(500, { error: 'Falha ao buscar estatísticas do dashboard: ' + err.message })
+    const errText = err ? err.message || String(err) : 'erro desconhecido'
+    console.log('[Dashboard Stats] Erro geral:', errText)
+    return e.json(500, { error: 'Falha ao buscar estatísticas do dashboard: ' + errText })
   }
 })
