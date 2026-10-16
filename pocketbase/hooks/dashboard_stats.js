@@ -36,9 +36,11 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Contagem de Pacientes
     let totalPatients = 0
     try {
-      const rowPatients = $app.db().newQuery('SELECT COUNT(*) AS total FROM patients').one()
+      const rowsPatients = $app.db().newQuery('SELECT COUNT(*) AS total FROM patients').all()
       totalPatients =
-        rowPatients && rowPatients.total !== undefined ? Number(rowPatients.total || 0) : 0
+        rowsPatients && rowsPatients.length > 0 && rowsPatients[0].total !== undefined
+          ? Number(rowsPatients[0].total || 0)
+          : 0
     } catch (err) {
       console.log('[Dashboard Stats] Erro ao contar pacientes:', err ? err.message : String(err))
     }
@@ -46,8 +48,11 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Contagem de Tutores
     let totalTutors = 0
     try {
-      const rowTutors = $app.db().newQuery('SELECT COUNT(*) AS total FROM tutors').one()
-      totalTutors = rowTutors && rowTutors.total !== undefined ? Number(rowTutors.total || 0) : 0
+      const rowsTutors = $app.db().newQuery('SELECT COUNT(*) AS total FROM tutors').all()
+      totalTutors =
+        rowsTutors && rowsTutors.length > 0 && rowsTutors[0].total !== undefined
+          ? Number(rowsTutors[0].total || 0)
+          : 0
     } catch (err) {
       console.log('[Dashboard Stats] Erro ao contar tutores:', err ? err.message : String(err))
     }
@@ -119,12 +124,14 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Itens em falta no estoque
     let lowStockCount = 0
     try {
-      const rowInventory = $app
+      const rowsInventory = $app
         .db()
         .newQuery('SELECT COUNT(*) AS total FROM inventory WHERE quantity < min_stock')
-        .one()
+        .all()
       lowStockCount =
-        rowInventory && rowInventory.total !== undefined ? Number(rowInventory.total || 0) : 0
+        rowsInventory && rowsInventory.length > 0 && rowsInventory[0].total !== undefined
+          ? Number(rowsInventory[0].total || 0)
+          : 0
     } catch (_) {
       lowStockCount = 0
     }
@@ -132,20 +139,22 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     // Contagem rápida de Alertas de Retorno (vaccines pendentes de pacientes não falecidos)
     let returnAlertsCount = 0
     try {
+      // Subquery ou verificação otimizada para não varrer tabela sem necessidade
       const rowAlerts = $app
         .db()
         .newQuery(
           `SELECT COUNT(DISTINCT v.patient_id) AS total
            FROM vaccines v
-           JOIN patients p ON v.patient_id = p.id
+           INNER JOIN patients p ON v.patient_id = p.id
            WHERE v.date IS NOT NULL 
              AND TRIM(v.date) != ''
              AND (v.completed = 0 OR v.completed IS NULL)
              AND (p.deceased = 0 OR p.deceased IS NULL)`,
         )
-        .one()
-      returnAlertsCount =
-        rowAlerts && rowAlerts.total !== undefined ? Number(rowAlerts.total || 0) : 0
+        .all()
+      if (rowAlerts && rowAlerts.length > 0 && rowAlerts[0].total !== undefined) {
+        returnAlertsCount = Number(rowAlerts[0].total || 0)
+      }
     } catch (err) {
       console.log(
         '[Dashboard Stats] Erro ao contar alertas de retorno:',
@@ -184,28 +193,53 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
         .all()
 
       if (recentClinicalRows && recentClinicalRows.length > 0) {
+        // Coletar recordIds para buscar veterinários em UMA ÚNICA query em lote
+        const recordIds = []
+        for (let i = 0; i < recentClinicalRows.length; i++) {
+          if (recentClinicalRows[i].id) {
+            recordIds.push(String(recentClinicalRows[i].id))
+          }
+        }
+
+        const vetNameByRecordId = {}
+        if (recordIds.length > 0) {
+          try {
+            const inPlaceholders = recordIds.map((id) => `'${id.replace(/'/g, "''")}'`).join(',')
+            const auditRows = $app
+              .db()
+              .newQuery(
+                `SELECT record_id, user_name 
+                 FROM audit_logs 
+                 WHERE module = 'clinical_records' 
+                   AND record_id IN (${inPlaceholders})
+                   AND user_name IS NOT NULL AND user_name != ''
+                 ORDER BY created ASC`,
+              )
+              .all()
+
+            if (auditRows && auditRows.length > 0) {
+              for (let j = 0; j < auditRows.length; j++) {
+                const aRow = auditRows[j]
+                const rId = String(aRow.record_id || '')
+                if (rId && !vetNameByRecordId[rId] && aRow.user_name) {
+                  vetNameByRecordId[rId] = String(aRow.user_name)
+                }
+              }
+            }
+          } catch (auditErr) {
+            console.log(
+              '[Dashboard Stats] Aviso ao buscar auditoria em lote:',
+              auditErr ? auditErr.message : String(auditErr),
+            )
+          }
+        }
+
         for (let i = 0; i < recentClinicalRows.length; i++) {
           const cr = recentClinicalRows[i]
           const recordId = String(cr.id)
 
-          // Buscar se há veterinário responsável registrado no log de auditoria
-          let vetName = ''
-          try {
-            const auditRow = $app
-              .db()
-              .newQuery(
-                `SELECT user_name, user_role FROM audit_logs 
-                 WHERE module = 'clinical_records' AND record_id = {:recordId}
-                 ORDER BY created ASC LIMIT 1`,
-              )
-              .bind({ recordId })
-              .one()
-            if (auditRow && auditRow.user_name) {
-              vetName = String(auditRow.user_name)
-            }
-          } catch (_) {
-            // Silencioso se audit_logs não possuir
-          }
+          // Buscar se há veterinário responsável registrado no lote do audit_log
+          let vetName = vetNameByRecordId[recordId] || ''
 
           // Se ainda não encontrou no audit_log, tentar identificar assinatura conhecida no texto da descrição
           if (!vetName && cr.description) {
@@ -332,8 +366,12 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
     )
     return e.json(200, result)
   } catch (err) {
-    const errText = err ? err.message || String(err) : 'erro desconhecido'
-    console.log('[Dashboard Stats] Erro geral:', errText)
+    const errText = err
+      ? err.stack
+        ? String(err.stack)
+        : err.message || String(err)
+      : 'erro desconhecido'
+    console.log('[Dashboard Stats] Erro geral capturado:', errText)
     return e.json(500, { error: 'Falha ao buscar estatísticas do dashboard: ' + errText })
   }
 })

@@ -50,28 +50,134 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   }, [patient.id])
   useRealtime('clinical_records', () => loadRecords())
 
+  const checkAlreadyRecorded = async (
+    patientId: string,
+    desc: string,
+    diag: string,
+    treat: string,
+  ): Promise<ClinicalRecord | null> => {
+    try {
+      // Busca os últimos registros deste paciente criados recentemente (últimos 15 minutos)
+      const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString().replace('T', ' ')
+      const candidates = await pb.collection('clinical_records').getList<ClinicalRecord>(1, 5, {
+        filter: `patient_id = "${patientId}" && created >= "${fifteenMinsAgo}"`,
+        sort: '-created',
+      })
+
+      const norm = (s: string | null | undefined) => (s || '').trim()
+      const match = candidates.items.find(
+        (r) =>
+          norm(r.description) === norm(desc) &&
+          norm(r.diagnosis) === norm(diag) &&
+          norm(r.treatment) === norm(treat),
+      )
+      return match || null
+    } catch (err) {
+      console.warn('Erro ao verificar duplicidade de evolução clínica:', err)
+      return null
+    }
+  }
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    try {
-      const createdRecord = await api.createClinicalRecord({
-        patient_id: patient.id,
-        ...formData,
-        files,
-      })
 
-      // Auditoria: Lançamento de nova evolução / prescrição
-      const recordDateForLabel = createdRecord?.created || new Date().toISOString()
+    const submittedDesc = formData.description
+    const submittedDiag = formData.diagnosis
+    const submittedTreat = formData.treatment
+    const submittedFiles = files
+
+    let createdRecord: ClinicalRecord | null = null
+    let saveSucceeded = false
+    const maxRetries = 2
+
+    // 1. Salvamento resiliente com retry e verificação anti-duplicação
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Antes de retentar (ou logo no início caso venha de falha anterior),
+        // verificar se o registro com este mesmo conteúdo já foi persistido no banco
+        if (attempt > 0) {
+          const existing = await checkAlreadyRecorded(
+            patient.id,
+            submittedDesc,
+            submittedDiag,
+            submittedTreat,
+          )
+          if (existing) {
+            console.log(
+              'Registro já gravado previamente na base. Evitando duplicação:',
+              existing.id,
+            )
+            createdRecord = existing
+            saveSucceeded = true
+            break
+          }
+        }
+
+        createdRecord = (await api.createClinicalRecord({
+          patient_id: patient.id,
+          description: submittedDesc,
+          diagnosis: submittedDiag,
+          treatment: submittedTreat,
+          files: submittedFiles,
+        })) as unknown as ClinicalRecord
+        saveSucceeded = true
+        break
+      } catch (err: any) {
+        console.warn(`Falha ao gravar evolução (tentativa ${attempt + 1}/${maxRetries + 1}):`, err)
+
+        // Imediatamente após uma falha de rede/timeout, checa se gravou mesmo assim
+        const justSaved = await checkAlreadyRecorded(
+          patient.id,
+          submittedDesc,
+          submittedDiag,
+          submittedTreat,
+        )
+        if (justSaved) {
+          console.log('Registro encontrado na base após erro de rede:', justSaved.id)
+          createdRecord = justSaved
+          saveSucceeded = true
+          break
+        }
+
+        if (attempt < maxRetries) {
+          await new Promise((res) => setTimeout(res, 1200 * (attempt + 1)))
+        }
+      }
+    }
+
+    // Se após retentativas não houve sucesso confirmado
+    if (!saveSucceeded || !createdRecord) {
+      setLoading(false)
+      toast({
+        title: 'Instabilidade ao confirmar salvamento',
+        description:
+          'O atendimento PODE ter sido salvo no servidor devido à lentidão de rede. Por favor, confira a lista de atendimentos antes de redigitar.',
+        variant: 'destructive',
+      })
+      // Tenta recarregar a lista caso tenha sido gravado de fato
+      loadRecords().catch(() => {})
+      return
+    }
+
+    // 2. Registro gravado com sucesso! Limpar formulário e fechar modal imediatamente
+    setIsDialogOpen(false)
+    setFormData({ description: '', diagnosis: '', treatment: '' })
+    setFiles([])
+
+    // 3. Auditoria resiliente (nunca estoura erro na tela nem invalida o salvamento bem-sucedido)
+    try {
+      const recordDateForLabel = createdRecord.created || new Date().toISOString()
       const recordLabel = formatClinicalRecordAuditLabel(
         patient.name,
         recordDateForLabel,
-        formData.description,
+        submittedDesc,
       )
 
       auditService.log({
         action: 'create',
         module: 'clinical_records',
-        recordId: createdRecord?.id || '',
+        recordId: createdRecord.id || '',
         recordLabel,
         patientName: patient.name,
         tutorName: patient.expand?.tutor_id?.name || '',
@@ -79,38 +185,51 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
           description: {
             label: 'Queixa / Evolução',
             oldValue: null,
-            newValue: formData.description,
+            newValue: submittedDesc,
           },
           diagnosis: {
             label: 'Diagnóstico',
             oldValue: null,
-            newValue: formData.diagnosis || 'Não informado',
+            newValue: submittedDiag || 'Não informado',
           },
           treatment: {
             label: 'Tratamento Prescrito',
             oldValue: null,
-            newValue: formData.treatment || 'Não informado',
+            newValue: submittedTreat || 'Não informado',
           },
         },
-        details: `Nova evolução clínica registrada para ${patient.name}. Prescrição: ${formData.treatment || 'Sem prescrição informada'}`,
+        details: `Nova evolução clínica registrada para ${patient.name}. Prescrição: ${submittedTreat || 'Sem prescrição informada'}`,
       })
+    } catch (auditErr) {
+      console.warn('Erro não-bloqueante na auditoria pós-salvamento:', auditErr)
+    }
 
-      setIsDialogOpen(false)
-      setFormData({ description: '', diagnosis: '', treatment: '' })
-      setFiles([])
+    // 4. Recarga resiliente da ficha com retry automático de 1–2 vezes
+    let reloadOk = false
+    for (let rAttempt = 0; rAttempt <= 2; rAttempt++) {
+      try {
+        await loadRecords()
+        reloadOk = true
+        break
+      } catch (reloadErr) {
+        console.warn(`Erro na recarga da ficha (tentativa ${rAttempt + 1}):`, reloadErr)
+        await new Promise((res) => setTimeout(res, 1000))
+      }
+    }
+
+    setLoading(false)
+
+    if (reloadOk) {
       toast({
         title: 'Registro clínico salvo',
         description: 'A nova evolução foi registrada com sucesso.',
       })
-      await loadRecords()
-    } catch (err: any) {
+    } else {
       toast({
-        title: 'Erro ao salvar registro',
-        description: err.message || 'Falha ao registrar evolução clínica.',
-        variant: 'destructive',
+        title: 'Registro clínico salvo com sucesso',
+        description:
+          'A evolução foi gravada na base, mas houve lentidão ao recarregar a lista. Atualize a página se não visualizar de imediato.',
       })
-    } finally {
-      setLoading(false)
     }
   }
 

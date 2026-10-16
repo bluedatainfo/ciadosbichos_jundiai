@@ -16,16 +16,35 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await signIn(email, password)
+    setIsRetrying(false)
+
+    // Tentativa 1
+    const firstAttempt = await signIn(email, password)
+    if (!firstAttempt.error) {
+      setLoading(false)
+      navigate('/')
+      return
+    }
+
+    // Se a primeira tentativa falhar, aguarda ~3 segundos e tenta automaticamente mais uma vez
+    setIsRetrying(true)
+    await new Promise((resolve) => setTimeout(resolve, 3000))
+
+    // Tentativa 2
+    const secondAttempt = await signIn(email, password)
     setLoading(false)
-    if (error) {
+    setIsRetrying(false)
+
+    if (secondAttempt.error) {
       toast({
         title: 'Erro de Autenticação',
-        description: 'Credenciais inválidas. Verifique seu email e senha.',
+        description:
+          'Credenciais inválidas ou instabilidade no servidor. Verifique seu email e senha.',
         variant: 'destructive',
       })
     } else {
@@ -74,7 +93,7 @@ export default function Login() {
               />
             </div>
             <Button type="submit" className="w-full h-11 text-base font-medium" disabled={loading}>
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? (isRetrying ? 'Reconectando e autenticando...' : 'Entrando...') : 'Entrar'}
             </Button>
           </form>
         </CardContent>

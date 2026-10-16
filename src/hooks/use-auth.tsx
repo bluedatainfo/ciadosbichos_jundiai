@@ -30,10 +30,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     })
 
     if (pb.authStore.isValid) {
-      pb.collection('users')
-        .authRefresh()
-        .catch(() => pb.authStore.clear())
-        .finally(() => setLoading(false))
+      const refreshWithRetry = async (retries = 2, delayMs = 1500) => {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          try {
+            await pb.collection('users').authRefresh()
+            return
+          } catch (err: any) {
+            const status = err?.status || err?.response?.status
+            // Apenas 401 (Unauthorized) ou 403 (Forbidden) indica credencial/token inválido ou revogado
+            if (status === 401 || status === 403) {
+              console.warn('Sessão expirada ou não autorizada (401/403). Limpando autenticação.')
+              pb.authStore.clear()
+              return
+            }
+            // Outros erros (0, timeout, 502, 503, 504, erro de rede): manter sessão!
+            console.warn(
+              `Instabilidade na verificação da sessão (tentativa ${attempt + 1}/${retries + 1}):`,
+              err,
+            )
+            if (attempt < retries) {
+              await new Promise((resolve) => setTimeout(resolve, delayMs))
+            }
+          }
+        }
+        // Se todas as tentativas falharem por lentidão/rede, mantemos a sessão do authStore ativa
+        console.warn('Servidor temporariamente indisponível. Mantendo sessão local persistida.')
+      }
+
+      refreshWithRetry().finally(() => setLoading(false))
     } else {
       if (pb.authStore.record) pb.authStore.clear()
       setLoading(false)

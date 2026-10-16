@@ -12,23 +12,66 @@ interface ClinicSettingsContextType {
 }
 
 const DEFAULT_CLINIC_NAME = 'VetSaaS'
+const CACHE_KEY = 'vet_clinic_settings_cached'
+
+interface CachedClinicSettings {
+  settings: ClinicSettings
+  savedAt: number
+}
+
+function loadCachedSettings(): ClinicSettings | null {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(CACHE_KEY) : null
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CachedClinicSettings
+    if (parsed && parsed.settings && parsed.settings.name) {
+      return parsed.settings
+    }
+  } catch (err) {
+    console.warn('Erro ao ler cache de clinic_settings do localStorage:', err)
+  }
+  return null
+}
+
+function saveCachedSettings(settings: ClinicSettings) {
+  try {
+    if (typeof window !== 'undefined' && settings && settings.name) {
+      const data: CachedClinicSettings = {
+        settings,
+        savedAt: Date.now(),
+      }
+      localStorage.setItem(CACHE_KEY, JSON.stringify(data))
+    }
+  } catch (err) {
+    console.warn('Erro ao salvar cache de clinic_settings no localStorage:', err)
+  }
+}
+
+const initialCached = loadCachedSettings()
 
 const ClinicSettingsContext = createContext<ClinicSettingsContextType>({
-  clinicName: DEFAULT_CLINIC_NAME,
-  clinicLogoUrl: null,
-  clinicSettings: null,
-  loading: true,
+  clinicName: initialCached?.name?.trim() || DEFAULT_CLINIC_NAME,
+  clinicLogoUrl: initialCached?.logo
+    ? pb.files.getURL(initialCached as any, initialCached.logo)
+    : null,
+  clinicSettings: initialCached,
+  loading: !initialCached,
   reloadSettings: async () => {},
 })
 
 export function ClinicSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [clinicSettings, setClinicSettings] = useState<ClinicSettings | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [clinicSettings, setClinicSettings] = useState<ClinicSettings | null>(() =>
+    loadCachedSettings(),
+  )
+  const [loading, setLoading] = useState(() => !loadCachedSettings())
 
   const fetchSettings = useCallback(async () => {
     try {
       const data = await api.getClinicSettings()
-      setClinicSettings(data)
+      if (data && data.name) {
+        setClinicSettings(data)
+        saveCachedSettings(data)
+      }
     } catch (err) {
       console.warn('Erro ao carregar configurações da clínica:', err)
     } finally {
@@ -41,9 +84,12 @@ export function ClinicSettingsProvider({ children }: { children: React.ReactNode
   }, [fetchSettings])
 
   // Atualizar document.title com o nome da clínica
-  const clinicName = clinicSettings?.name?.trim() || DEFAULT_CLINIC_NAME
-  const clinicLogoUrl = clinicSettings?.logo
-    ? pb.files.getURL(clinicSettings as any, clinicSettings.logo)
+  const cachedFallback = loadCachedSettings()
+  const clinicName =
+    clinicSettings?.name?.trim() || cachedFallback?.name?.trim() || DEFAULT_CLINIC_NAME
+  const currentLogo = clinicSettings?.logo || cachedFallback?.logo
+  const clinicLogoUrl = currentLogo
+    ? pb.files.getURL((clinicSettings || cachedFallback) as any, currentLogo)
     : null
 
   useEffect(() => {
