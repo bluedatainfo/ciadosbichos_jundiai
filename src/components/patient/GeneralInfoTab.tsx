@@ -213,7 +213,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               <Input
                 value={tutorData.cpf}
                 onChange={(e) => setTutorData({ ...tutorData, cpf: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
             <div className="space-y-1">
@@ -221,7 +221,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               <Input
                 value={tutorData.rg}
                 onChange={(e) => setTutorData({ ...tutorData, rg: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
           </div>
@@ -244,7 +244,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               <Input
                 value={tutorData.phone}
                 onChange={(e) => setTutorData({ ...tutorData, phone: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
             <div className="space-y-1">
@@ -264,7 +264,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               <Input
                 value={tutorData.phone_secondary}
                 onChange={(e) => setTutorData({ ...tutorData, phone_secondary: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
           </div>
@@ -276,7 +276,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 type="email"
                 value={tutorData.email}
                 onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
             <div className="space-y-1">
@@ -284,7 +284,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
               <Input
                 value={tutorData.indication}
                 onChange={(e) => setTutorData({ ...tutorData, indication: e.target.value })}
-                className="bg-white"
+                className="bg-slate-100/70"
               />
             </div>
           </div>
@@ -300,7 +300,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   <Input
                     value={tutorData.cep}
                     onChange={handleCepChange}
-                    className="bg-white pr-8"
+                    className="bg-slate-100/70 pr-8"
                     maxLength={9}
                     placeholder="00000000"
                   />
@@ -314,7 +314,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={tutorData.address}
                   onChange={(e) => setTutorData({ ...tutorData, address: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                   placeholder="Rua, Av, Número, Complemento"
                   disabled={cepLoading}
                 />
@@ -327,7 +327,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={tutorData.neighborhood}
                   onChange={(e) => setTutorData({ ...tutorData, neighborhood: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                   placeholder="Bairro"
                 />
               </div>
@@ -336,7 +336,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={tutorData.city}
                   onChange={(e) => setTutorData({ ...tutorData, city: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                   placeholder="Cidade"
                 />
               </div>
@@ -347,7 +347,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   onChange={(e) =>
                     setTutorData({ ...tutorData, state: e.target.value.toUpperCase() })
                   }
-                  className="bg-white"
+                  className="bg-slate-100/70"
                   placeholder="SP"
                   maxLength={2}
                 />
@@ -360,7 +360,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
             <Textarea
               value={tutorData.additional_info}
               onChange={(e) => setTutorData({ ...tutorData, additional_info: e.target.value })}
-              className="bg-white min-h-[80px]"
+              className="bg-slate-100/70 min-h-[80px]"
             />
           </div>
         </CardContent>
@@ -428,7 +428,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                     type="file"
                     accept="image/*"
                     onChange={(e) => setPhotoFile(e.target.files?.[0] || null)}
-                    className="bg-white flex-1"
+                    className="bg-slate-100/70 flex-1"
                   />
                   {photoFile && (
                     <span className="text-sm text-muted-foreground truncate max-w-[150px]">
@@ -442,7 +442,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={createdDate}
                   readOnly
-                  className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                  className="bg-slate-100/70 text-slate-500 cursor-not-allowed"
                 />
               </div>
               <div className="space-y-1">
@@ -450,7 +450,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={lastVisitDate}
                   readOnly
-                  className="bg-slate-50 text-slate-500 cursor-not-allowed"
+                  className="bg-slate-100/70 text-slate-500 cursor-not-allowed"
                 />
               </div>
             </div>
@@ -462,7 +462,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   type="date"
                   value={patientData.birth_date}
                   onChange={(e) => setPatientData({ ...patientData, birth_date: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                 />
               </div>
             </div>
@@ -472,7 +472,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={patientData.species}
                   onChange={(e) => setPatientData({ ...patientData, species: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                 />
               </div>
               <div className="space-y-1">
@@ -480,7 +480,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={patientData.breed}
                   onChange={(e) => setPatientData({ ...patientData, breed: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                 />
               </div>
             </div>
@@ -490,7 +490,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={patientData.pelagem}
                   onChange={(e) => setPatientData({ ...patientData, pelagem: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                 />
               </div>
               <div className="space-y-1">
@@ -501,7 +501,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                     setPatientData({ ...patientData, gender: v })
                   }
                 >
-                  <SelectTrigger className="bg-white">
+                  <SelectTrigger className="bg-slate-100/70">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -517,7 +517,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   step="0.1"
                   value={patientData.weight}
                   onChange={(e) => setPatientData({ ...patientData, weight: e.target.value })}
-                  className="bg-white"
+                  className="bg-slate-100/70"
                 />
               </div>
             </div>
@@ -529,7 +529,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                   placeholder="Número do chip"
                   value={patientData.microchip}
                   onChange={(e) => setPatientData({ ...patientData, microchip: e.target.value })}
-                  className="bg-white font-mono text-xs"
+                  className="bg-slate-100/70 font-mono text-xs"
                 />
               </div>
               <div className="space-y-1">
@@ -537,7 +537,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={patientData.ctrl}
                   onChange={(e) => setPatientData({ ...patientData, ctrl: e.target.value })}
-                  className="bg-white font-mono text-xs"
+                  className="bg-slate-100/70 font-mono text-xs"
                 />
               </div>
             </div>
@@ -550,7 +550,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 <Input
                   value={patientData.import_key}
                   readOnly
-                  className="bg-slate-50 text-slate-500 font-mono text-[11px]"
+                  className="bg-slate-100/70 text-slate-500 font-mono text-[11px]"
                 />
               </div>
             )}
@@ -582,7 +582,7 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                     onChange={(e) =>
                       setPatientData({ ...patientData, status_notes: e.target.value })
                     }
-                    className="bg-white text-xs"
+                    className="bg-slate-100/70 text-xs"
                   />
                 </div>
               )}
