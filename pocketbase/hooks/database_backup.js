@@ -219,22 +219,37 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
       ],
     },
   ]
+  var dirRoot = null
+  try {
+    dirRoot = $os.openRoot(backupDir)
+  } catch (errOpenRoot) {
+    console.log('[Backup Cron] Erro ao abrir backupDir como root:', errOpenRoot)
+  }
+
   for (var i = 0; i < collections.length; i++) {
     var item = collections[i]
     var fileName = 'backup_' + item.name + '_' + dateStr + '.csv'
     var filePath = backupDir + '/' + fileName
+    var fileHandle = null
 
     try {
       var totalRows = 0
-      var csvContent = '\uFEFF'
+      if (!dirRoot) {
+        dirRoot = $os.openRoot(backupDir)
+      }
+      fileHandle = dirRoot.create(fileName)
+
+      // Escreve o BOM UTF-8 e o cabeçalho imediatamente no arquivo
       var headerCols = []
       for (var h = 0; h < item.headers.length; h++) {
         headerCols.push('"' + item.headers[h] + '"')
       }
-      csvContent += headerCols.join(';') + '\r\n'
+      fileHandle.writeString('\uFEFF' + headerCols.join(';') + '\r\n')
 
       var pageSize = 1000
       var lastId = ''
+      var pageCount = 0
+
       while (true) {
         var filter = lastId ? 'id > "' + lastId + '"' : ''
         var records = appInstance
@@ -242,7 +257,7 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
           : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
         if (!records || records.length === 0) break
 
-        totalRows += records.length
+        var chunkLines = []
         for (var r = 0; r < records.length; r++) {
           var rec = records[r]
           var lineVals = []
@@ -260,21 +275,61 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
             }
             lineVals.push(escapeCsvValue(val))
           }
-          csvContent += lineVals.join(';') + '\r\n'
+          chunkLines.push(lineVals.join(';') + '\r\n')
+        }
+
+        fileHandle.writeString(chunkLines.join(''))
+        totalRows += records.length
+        pageCount++
+
+        // Log de progresso a cada 10 páginas (10.000 registros)
+        if (pageCount % 10 === 0) {
+          console.log('[Backup Cron] ' + item.name + ': ' + totalRows + ' registros gravados...')
         }
 
         if (records.length < pageSize) break
         lastId = records[records.length - 1].id
       }
 
-      $os.writeFile(filePath, csvContent, 420) // 0644
-      console.log('[Backup Cron] Arquivo ' + fileName + ' gerado com ' + totalRows + ' registros.')
+      // Fecha o arquivo e obtém tamanho
+      try {
+        fileHandle.close()
+        fileHandle = null
+      } catch (_) {}
+
+      var fileSize = 0
+      try {
+        var statInfo = $os.stat(filePath)
+        fileSize = statInfo.size()
+      } catch (_) {}
+
+      console.log(
+        '[Backup Cron] Arquivo ' +
+          fileName +
+          ' gerado com ' +
+          totalRows +
+          ' registros (' +
+          fileSize +
+          ' bytes).',
+      )
     } catch (errCol) {
+      if (fileHandle) {
+        try {
+          fileHandle.close()
+        } catch (_) {}
+        fileHandle = null
+      }
       console.log(
         '[Backup Cron] Erro ao exportar ' + item.name + ':',
         errCol ? errCol.message || String(errCol) : String(errCol),
       )
     }
+  }
+
+  if (dirRoot && typeof dirRoot.close === 'function') {
+    try {
+      dirRoot.close()
+    } catch (_) {}
   }
 
   // Limpeza de backups antigos (> 7 dias)
@@ -305,6 +360,10 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
 
 // 2. ENDPOINT POST: Disparar Backup Agora (Sob Demanda)
 routerAdd('POST', '/backend/v1/backups/run', function (e) {
+  return runBackupExport(e)
+})
+
+function runBackupExport(e) {
   function escapeCsvValue(val) {
     if (val === null || val === undefined) return '""'
     var str = String(val)
@@ -551,23 +610,38 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
     var dateStr = getTodayIsoDate()
     var results = []
 
+    var dirRoot = null
+    try {
+      dirRoot = $os.openRoot(BACKUP_DIR)
+    } catch (errOpenRoot) {
+      console.log('[Backup] Erro ao abrir BACKUP_DIR como root:', errOpenRoot)
+    }
+
     for (var i = 0; i < collectionsToExport.length; i++) {
       var item = collectionsToExport[i]
       var fileName = 'backup_' + item.name + '_' + dateStr + '.csv'
       var filePath = BACKUP_DIR + '/' + fileName
+      var fileHandle = null
 
       try {
         var totalRows = 0
+        if (!dirRoot) {
+          dirRoot = $os.openRoot(BACKUP_DIR)
+        }
+        fileHandle = dirRoot.create(fileName)
+
         // UTF-8 com BOM (\uFEFF) para compatibilidade perfeita com Microsoft Excel
-        var csvContent = '\uFEFF'
+        // Gravado diretamente no início do arquivo em disco
         var headerCols = []
         for (var h = 0; h < item.headers.length; h++) {
           headerCols.push('"' + item.headers[h] + '"')
         }
-        csvContent += headerCols.join(';') + '\r\n'
+        fileHandle.writeString('\uFEFF' + headerCols.join(';') + '\r\n')
 
         var pageSize = 1000
         var lastId = ''
+        var pageCount = 0
+
         while (true) {
           // Busca paginada estritamente somente leitura via SDK nativo com id > lastId
           var filter = lastId ? 'id > "' + lastId + '"' : ''
@@ -576,7 +650,7 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
             : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
           if (!records || records.length === 0) break
 
-          totalRows += records.length
+          var chunkLines = []
           for (var r = 0; r < records.length; r++) {
             var rec = records[r]
             var lineVals = []
@@ -594,26 +668,58 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
               }
               lineVals.push(escapeCsvValue(val))
             }
-            csvContent += lineVals.join(';') + '\r\n'
+            chunkLines.push(lineVals.join(';') + '\r\n')
+          }
+
+          // Gravação direta no arquivo por página para liberar memória de forma incremental
+          fileHandle.writeString(chunkLines.join(''))
+          totalRows += records.length
+          pageCount++
+
+          // Log de progresso a cada 10 páginas (10.000 registros)
+          if (pageCount % 10 === 0) {
+            console.log('[Backup] ' + item.name + ': ' + totalRows + ' registros gravados...')
           }
 
           if (records.length < pageSize) break
           lastId = records[records.length - 1].id
         }
 
-        $os.writeFile(filePath, csvContent, 420) // 0644
+        // Fechar arquivo em disco
+        try {
+          fileHandle.close()
+          fileHandle = null
+        } catch (_) {}
+
+        var fileSize = 0
+        try {
+          var statInfo = $os.stat(filePath)
+          fileSize = statInfo.size()
+        } catch (_) {}
 
         results.push({
           collection: item.name,
           fileName: fileName,
           totalRows: totalRows,
-          sizeBytes: csvContent.length,
+          sizeBytes: fileSize,
           status: 'success',
         })
         console.log(
-          '[Backup] Arquivo gerado com sucesso: ' + fileName + ' (' + totalRows + ' registros)',
+          '[Backup] Arquivo gerado com sucesso: ' +
+            fileName +
+            ' (' +
+            totalRows +
+            ' registros, ' +
+            fileSize +
+            ' bytes)',
         )
       } catch (errCol) {
+        if (fileHandle) {
+          try {
+            fileHandle.close()
+          } catch (_) {}
+          fileHandle = null
+        }
         var msg = errCol ? errCol.message || String(errCol) : 'Erro desconhecido'
         console.log('[Backup] Erro ao exportar ' + item.name + ': ' + msg)
         results.push({
@@ -623,6 +729,12 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
           status: 'error',
         })
       }
+    }
+
+    if (dirRoot && typeof dirRoot.close === 'function') {
+      try {
+        dirRoot.close()
+      } catch (_) {}
     }
 
     cleanOldBackups(7)
@@ -647,7 +759,7 @@ routerAdd('POST', '/backend/v1/backups/run', function (e) {
     console.log('[Backup] Erro no endpoint /run: ' + topMsg)
     return e.json(500, { error: 'Falha ao executar backup: ' + topMsg })
   }
-})
+}
 
 // 3. ENDPOINT GET: Listar Arquivos de Backup Gerados
 routerAdd('GET', '/backend/v1/backups/list', function (e) {
@@ -682,15 +794,31 @@ routerAdd('GET', '/backend/v1/backups/list', function (e) {
     ensureBackupDir()
     var entries = []
     try {
-      entries = $os.readDir(BACKUP_DIR)
+      var rootHandle = $os.openRoot(BACKUP_DIR)
+      try {
+        var statDir = rootHandle.stat('.')
+        if (statDir) {
+          entries = $os.readDir(BACKUP_DIR)
+        }
+      } finally {
+        if (rootHandle && typeof rootHandle.close === 'function') {
+          try {
+            rootHandle.close()
+          } catch (_) {}
+        }
+      }
     } catch (readErr) {
-      // Se a pasta não existe ainda, retorna lista vazia normalmente
-      return e.json(200, {
-        backupDir: BACKUP_DIR,
-        retentionDays: 7,
-        totalFiles: 0,
-        files: [],
-      })
+      // Se a pasta não existe ainda ou erro na leitura, tenta $os.readDir ou retorna lista vazia
+      try {
+        entries = $os.readDir(BACKUP_DIR)
+      } catch (_) {
+        return e.json(200, {
+          backupDir: BACKUP_DIR,
+          retentionDays: 7,
+          totalFiles: 0,
+          files: [],
+        })
+      }
     }
     var files = []
 
@@ -791,29 +919,6 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
       console.log('[Backup Download] fileFS falhou, tentando fallback: ' + String(errFileFS))
     }
 
-    // 2) e.stream com $os.open
-    var fileHandle = null
-    try {
-      if (typeof e.stream === 'function' && typeof $os.open === 'function') {
-        fileHandle = $os.open(fullPath)
-        var streamRes = e.stream(200, 'text/csv; charset=utf-8', fileHandle)
-        try {
-          if (fileHandle && typeof fileHandle.close === 'function') fileHandle.close()
-        } catch (_) {}
-        return streamRes
-      }
-    } catch (errStream) {
-      if (fileHandle && typeof fileHandle.close === 'function') {
-        try {
-          fileHandle.close()
-        } catch (_) {}
-      }
-      console.log('[Backup Download] stream falhou, tentando fallback: ' + String(errStream))
-    }
-
-    // 3) Leitura e decodificação segura para string UTF-8 com suporte a arquivos grandes
-    // Nota: $os.readFile retorna bytes ([]byte) que, quando passados a e.string(), Goja serializa
-    // como array numérico ('239,187,191...'). É imperativo decodificar os bytes para texto UTF-8 real.
     var rawBytes = $os.readFile(fullPath)
     var textContent = ''
 
@@ -835,7 +940,7 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
       }
     }
 
-    // 3.3) Decodificador chunk a chunk de bytes UTF-8 puro em JS (garantia de decodificação correta e sem overflow)
+    // 3.3) Decodificador chunk a chunk de bytes UTF-8 puro em JS (garantia de decodificação correta)
     if (!textContent && rawBytes) {
       var len = rawBytes.length || 0
       var chunks = []
