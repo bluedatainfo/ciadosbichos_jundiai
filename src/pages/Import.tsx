@@ -13,6 +13,12 @@ import {
   serverImportPipelineService,
 } from '@/services/server-import-pipeline'
 import { ServerImportReportView } from '@/components/import/ServerImportReportView'
+import { ComplementaryImportReportView } from '@/components/import/ComplementaryImportReportView'
+import {
+  complementaryImportPipelineService,
+  ComplementaryImportProgress,
+  ComplementaryImportFinalReport,
+} from '@/services/complementary-import-pipeline'
 import {
   incrementalSyncService,
   SyncBalanceSummary,
@@ -71,7 +77,12 @@ import {
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 
-type ImportMode = 'server_reload' | 'access_legacy' | 'standard' | 'incremental_sync'
+type ImportMode =
+  | 'server_reload'
+  | 'access_legacy'
+  | 'standard'
+  | 'incremental_sync'
+  | 'complementary'
 type Step = 'select' | 'upload' | 'map' | 'preview' | 'sync_balance' | 'importing' | 'report'
 type AccessBatchSelection = 'range' | '50' | '200' | 'full'
 
@@ -96,6 +107,12 @@ export default function Import() {
     null,
   )
   const [serverImportReport, setServerImportReport] = useState<ServerImportFinalReport | null>(null)
+
+  // Estados da Importação Complementar (TEL3 / Débito)
+  const [complementaryProgress, setComplementaryProgress] =
+    useState<ComplementaryImportProgress | null>(null)
+  const [complementaryReport, setComplementaryReport] =
+    useState<ComplementaryImportFinalReport | null>(null)
 
   // Opções para importação do Access
   const [batchSelection, setBatchSelection] = useState<AccessBatchSelection>('range')
@@ -194,6 +211,15 @@ export default function Import() {
 
       // Se estamos no modo de recarga no servidor (padrão)
       const detectedAccess = isAccessHeader(result.headers)
+      if (mode === 'complementary') {
+        setStep('preview')
+        toast({
+          title: 'Arquivo DADOS.TXT Carregado',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para Importação Complementar (TEL3 / Débito).`,
+        })
+        return
+      }
+
       if (mode === 'server_reload' || detectedAccess) {
         if (mode === 'incremental_sync') {
           setMode('incremental_sync')
@@ -282,6 +308,15 @@ export default function Import() {
 
       // Se estamos no modo de recarga no servidor (padrão)
       const detectedAccess = isAccessHeader(result.headers)
+      if (mode === 'complementary') {
+        setStep('preview')
+        toast({
+          title: 'Arquivo DADOS.TXT Carregado',
+          description: `${result.rows.length.toLocaleString('pt-BR')} registros prontos para Importação Complementar (TEL3 / Débito).`,
+        })
+        return
+      }
+
       if (mode === 'server_reload' || detectedAccess) {
         if (mode === 'incremental_sync') {
           setMode('incremental_sync')
@@ -404,6 +439,56 @@ export default function Import() {
       toast({
         title: 'Erro na recarga de servidor',
         description: err.message || 'Falha ao executar pipeline no servidor.',
+        variant: 'destructive',
+      })
+      setStep('preview')
+    }
+  }
+
+  // Executar a Importação Complementar (TEL3 / Débito) no Servidor
+  const handleStartComplementaryImport = async () => {
+    if (!parseResult || !parseResult.rows.length) return
+
+    setStep('importing')
+    setComplementaryProgress({
+      current: 0,
+      total: parseResult.rows.length,
+      percent: 0,
+      statusMessage: 'Iniciando casamento de tutores e preenchimento de campos vazios...',
+      counts: {
+        linesRead: 0,
+        tutorsMatched: 0,
+        fieldsFilled: 0,
+        notMatched: 0,
+        tel3Filled: 0,
+        dbdtFilled: 0,
+        dbtxFilled: 0,
+        skippedAlreadyFilled: 0,
+      },
+    })
+
+    try {
+      const finalRep = await complementaryImportPipelineService.executeComplementaryImport(
+        parseResult.rows,
+        {
+          batchSize: 250,
+          onProgress: (p) => {
+            setComplementaryProgress(p)
+          },
+        },
+      )
+
+      setComplementaryReport(finalRep)
+      setStep('report')
+      toast({
+        title: 'Importação Complementar Concluída!',
+        description: `${finalRep.counts.tutorsMatched} tutores casados, ${finalRep.counts.fieldsFilled} campos preenchidos.`,
+      })
+    } catch (err: any) {
+      console.error('Falha na importação complementar:', err)
+      toast({
+        title: 'Erro na importação complementar',
+        description: err.message || 'Falha ao executar carga no servidor.',
         variant: 'destructive',
       })
       setStep('preview')
@@ -671,6 +756,8 @@ export default function Import() {
     setAccessReport(null)
     setServerImportProgress(null)
     setServerImportReport(null)
+    setComplementaryProgress(null)
+    setComplementaryReport(null)
     setSyncBalance(null)
     setSyncProgress(null)
     setSyncReport(null)
@@ -739,6 +826,55 @@ export default function Import() {
 
       {step === 'select' && (
         <div className="space-y-6">
+          {/* Card em Destaque: Importação Complementar (TEL3 / Débito) */}
+          <Card
+            onClick={() => {
+              setMode('complementary')
+              setStep('upload')
+            }}
+            className="cursor-pointer border-2 border-indigo-600 hover:border-indigo-700 hover:shadow-xl transition-all bg-gradient-to-r from-indigo-500/15 via-white to-indigo-500/5 p-2 group ring-1 ring-indigo-500/30"
+          >
+            <CardContent className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shrink-0 group-hover:scale-105 transition-transform shadow-md">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xl font-bold text-slate-900">
+                      Importação Complementar (TEL3 / Débito)
+                    </h3>
+                    <Badge className="bg-indigo-600 text-white font-semibold">
+                      Novo • Produção Segura
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-slate-600 max-w-2xl leading-relaxed">
+                    Casa cada linha do arquivo <code>DADOS.TXT</code> (~21.296 linhas) com o tutor
+                    já existente no sistema pela regra prioritária{' '}
+                    <strong>NUME &gt; import_key</strong> (sem usar CTRL). Preenche{' '}
+                    <strong>SOMENTE campos vazios</strong> de <code>tel3</code>,{' '}
+                    <code>dbdt_flag</code> (quando DBDT=-1) e <code>dbtx</code>.
+                    <br />
+                    <strong className="text-slate-800">
+                      NUNCA sobrescreve dados já cadastrados
+                    </strong>{' '}
+                    e{' '}
+                    <strong className="text-slate-800">NÃO cria novos tutores ou pacientes</strong>.
+                    Todas as alterações geram auditoria (anterior → novo).
+                  </p>
+                  <p className="text-xs text-indigo-800 font-medium flex items-center gap-1.5 pt-1">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                    Processamento seguro em segundo plano no servidor nativo com exibição dos totais
+                    de conferência.
+                  </p>
+                </div>
+              </div>
+              <Button className="shrink-0 gap-2 shadow-md bg-indigo-600 hover:bg-indigo-700 text-white group-hover:translate-x-1 transition-transform font-bold">
+                Carga Complementar <ArrowRight className="w-4 h-4" />
+              </Button>
+            </CardContent>
+          </Card>
+
           {/* Card em Destaque 1: Recarga Oficial no Servidor com Limpeza Prévia (Wipe Primeiro) */}
           <Card
             onClick={() => {
@@ -903,7 +1039,12 @@ export default function Import() {
         <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
-              {mode === 'server_reload' ? (
+              {mode === 'complementary' ? (
+                <>
+                  <ShieldCheck className="w-5 h-5 text-indigo-600" /> Enviar Arquivo DADOS.TXT
+                  (Importação Complementar)
+                </>
+              ) : mode === 'server_reload' ? (
                 <>
                   <Zap className="w-5 h-5 text-emerald-600" /> Enviar Arquivo Completo de 12/10
                   (.csv ou .txt)
@@ -917,6 +1058,13 @@ export default function Import() {
                 `Enviar arquivo — ${entityType ? ENTITY_LABELS[entityType] : ''}`
               )}
             </CardTitle>
+            {mode === 'complementary' && (
+              <CardDescription className="text-xs">
+                Selecione o arquivo <code>DADOS.TXT</code> original da clínica (~21.296 linhas). O
+                sistema cruzará os dados com os tutores e pacientes já existentes e preencherá
+                somente campos vazios de Telefone 3 e Débito.
+              </CardDescription>
+            )}
             {mode === 'server_reload' && (
               <CardDescription className="text-xs">
                 Envie o arquivo completo de uma única vez (sem dividir em partes). O sistema fará a
@@ -940,6 +1088,84 @@ export default function Import() {
             <div className="flex justify-between pt-2">
               <Button variant="ghost" onClick={() => setStep('select')}>
                 <ArrowLeft className="w-4 h-4 mr-1" /> Voltar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Passo PREVIEW (Modo Importação Complementar) */}
+      {step === 'preview' && mode === 'complementary' && parseResult && (
+        <Card className="border-none shadow-sm space-y-6">
+          <CardHeader className="pb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
+                  <ShieldCheck className="w-5 h-5 text-indigo-600" /> Prévia da Importação
+                  Complementar (TEL3 / Débito)
+                </CardTitle>
+                <CardDescription>
+                  Confira as linhas lidas do arquivo DADOS.TXT antes de iniciar o cruzamento no
+                  servidor.
+                </CardDescription>
+              </div>
+              <Badge
+                variant="outline"
+                className="w-fit text-xs bg-indigo-50 text-indigo-800 border-indigo-300 font-mono"
+              >
+                {fileName || 'DADOS.TXT'} ({parseResult.rows.length.toLocaleString('pt-BR')} linhas)
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/70 space-y-2">
+              <div className="flex items-center gap-2 text-indigo-950 font-bold text-sm">
+                <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />
+                Regras de Proteção em Produção Ativas
+              </div>
+              <ul className="text-xs text-indigo-900 leading-relaxed list-disc list-inside space-y-1">
+                <li>
+                  <strong>Casamento estrito:</strong> NUME oficial &gt; import_key (o campo CTRL não
+                  é usado como referência).
+                </li>
+                <li>
+                  <strong>Proteção de dados existentes:</strong> preenche SOMENTE campos vazios de{' '}
+                  <code>tel3</code>, <code>dbdt_flag</code> (quando DBDT=-1) e <code>dbtx</code>.
+                  Nunca sobrescreve nada já preenchido em produção.
+                </li>
+                <li>
+                  <strong>Sem criação de novos registros:</strong> linhas sem casamento serão apenas
+                  contadas e reportadas.
+                </li>
+                <li>
+                  <strong>Rastreabilidade total:</strong> cada alteração gerará registro na
+                  auditoria com os valores anterior e novo.
+                </li>
+              </ul>
+            </div>
+
+            {/* Prévia dos Dados */}
+            <AccessDataPreview
+              rows={parseResult.rows}
+              limit={50}
+              rangeStart={1}
+              rangeEnd={Math.min(50, parseResult.rows.length)}
+              isRangeMode={false}
+            />
+
+            {/* Ações Inferiores */}
+            <div className="flex justify-between items-center pt-2 flex-wrap gap-3">
+              <Button variant="ghost" onClick={() => setStep('upload')}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Escolher Outro Arquivo
+              </Button>
+              <Button
+                onClick={handleStartComplementaryImport}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-lg font-bold px-6 text-sm"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                Iniciar Carga Complementar ({parseResult.rows.length.toLocaleString('pt-BR')}{' '}
+                linhas)
               </Button>
             </div>
           </CardContent>
@@ -1764,62 +1990,101 @@ export default function Import() {
             <Loader2 className="w-12 h-12 animate-spin text-primary" />
             <div className="text-center space-y-1">
               <p className="font-semibold text-lg text-slate-800">
-                {mode === 'server_reload'
-                  ? serverImportProgress?.phase === 'wiping'
-                    ? 'Zerando Base de Dados e Preservando Administrador...'
-                    : 'Processando Recarga Completa no Servidor...'
-                  : mode === 'incremental_sync'
-                    ? 'Aplicando Sincronização no Servidor (Alta Performance)...'
-                    : mode === 'access_legacy'
-                      ? 'Processando migração em lotes...'
-                      : 'Processando importação...'}
+                {mode === 'complementary'
+                  ? 'Processando Importação Complementar (TEL3 / Débito)...'
+                  : mode === 'server_reload'
+                    ? serverImportProgress?.phase === 'wiping'
+                      ? 'Zerando Base de Dados e Preservando Administrador...'
+                      : 'Processando Recarga Completa no Servidor...'
+                    : mode === 'incremental_sync'
+                      ? 'Aplicando Sincronização no Servidor (Alta Performance)...'
+                      : mode === 'access_legacy'
+                        ? 'Processando migração em lotes...'
+                        : 'Processando importação...'}
               </p>
               <p className="text-xs text-muted-foreground max-w-md">
-                {mode === 'server_reload'
-                  ? 'Execução 100% no servidor nativo (pb_hooks / SQLite): sem limites de requisição do navegador. Gravando tutores, pacientes com NUME, fichas e vacinas em transações atômicas.'
-                  : mode === 'incremental_sync'
-                    ? 'Processamento em tempo real direto no banco de dados (pb_hooks): sem requisições HTTP individuais e sem sofrer rate limit. Regra "vale o do arquivo" com auditoria campo a campo.'
-                    : mode === 'access_legacy'
-                      ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
-                      : 'Gravando registros no banco de dados.'}
+                {mode === 'complementary'
+                  ? 'Casando tutores por NUME e preenchendo somente campos vazios de Telefone 3 e Débito no servidor, mantendo as edições de produção intactas.'
+                  : mode === 'server_reload'
+                    ? 'Execução 100% no servidor nativo (pb_hooks / SQLite): sem limites de requisição do navegador. Gravando tutores, pacientes com NUME, fichas e vacinas em transações atômicas.'
+                    : mode === 'incremental_sync'
+                      ? 'Processamento em tempo real direto no banco de dados (pb_hooks): sem requisições HTTP individuais e sem sofrer rate limit. Regra "vale o do arquivo" com auditoria campo a campo.'
+                      : mode === 'access_legacy'
+                        ? 'Desduplicando tutores, gerando chave composta dos animais e vinculando históricos clínicos e vacinas a cada paciente individual.'
+                        : 'Gravando registros no banco de dados.'}
               </p>
             </div>
 
             <div className="w-full max-w-md space-y-2">
               <Progress
                 value={
-                  mode === 'server_reload'
-                    ? serverImportProgress?.percent || 0
-                    : mode === 'incremental_sync'
-                      ? syncProgress?.percent || 0
-                      : mode === 'access_legacy'
-                        ? accessProgress?.percent || 0
-                        : standardProgress
+                  mode === 'complementary'
+                    ? complementaryProgress?.percent || 0
+                    : mode === 'server_reload'
+                      ? serverImportProgress?.percent || 0
+                      : mode === 'incremental_sync'
+                        ? syncProgress?.percent || 0
+                        : mode === 'access_legacy'
+                          ? accessProgress?.percent || 0
+                          : standardProgress
                 }
                 className="w-full h-3"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>
-                  {mode === 'server_reload'
-                    ? serverImportProgress?.statusMessage || 'Iniciando...'
-                    : mode === 'incremental_sync'
-                      ? syncProgress?.statusMessage || 'Iniciando sincronização...'
-                      : mode === 'access_legacy'
-                        ? accessProgress?.statusMessage || 'Iniciando...'
-                        : `${standardProgress}% concluído`}
+                  {mode === 'complementary'
+                    ? complementaryProgress?.statusMessage || 'Iniciando...'
+                    : mode === 'server_reload'
+                      ? serverImportProgress?.statusMessage || 'Iniciando...'
+                      : mode === 'incremental_sync'
+                        ? syncProgress?.statusMessage || 'Iniciando sincronização...'
+                        : mode === 'access_legacy'
+                          ? accessProgress?.statusMessage || 'Iniciando...'
+                          : `${standardProgress}% concluído`}
                 </span>
                 <span className="font-semibold">
-                  {mode === 'server_reload'
-                    ? `${serverImportProgress?.percent || 0}%`
-                    : mode === 'incremental_sync'
-                      ? `${syncProgress?.percent || 0}%`
-                      : mode === 'access_legacy'
-                        ? `${accessProgress?.percent || 0}%`
-                        : `${standardProgress}%`}
+                  {mode === 'complementary'
+                    ? `${complementaryProgress?.percent || 0}%`
+                    : mode === 'server_reload'
+                      ? `${serverImportProgress?.percent || 0}%`
+                      : mode === 'incremental_sync'
+                        ? `${syncProgress?.percent || 0}%`
+                        : mode === 'access_legacy'
+                          ? `${accessProgress?.percent || 0}%`
+                          : `${standardProgress}%`}
                 </span>
               </div>
             </div>
 
+            {/* Contadores ao vivo do modo complementary */}
+            {mode === 'complementary' && complementaryProgress && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-xl mt-4 text-center">
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-indigo-700">
+                    {complementaryProgress.counts.linesRead.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Linhas Lidas</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-emerald-700">
+                    {complementaryProgress.counts.tutorsMatched.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Tutores Casados</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-blue-700">
+                    {complementaryProgress.counts.fieldsFilled.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Campos Preenchidos</p>
+                </div>
+                <div className="p-2.5 bg-slate-50 rounded-lg border text-xs">
+                  <p className="font-bold text-amber-700">
+                    {complementaryProgress.counts.notMatched.toLocaleString('pt-BR')}
+                  </p>
+                  <p className="text-[10px] text-slate-500">Não Casados</p>
+                </div>
+              </div>
+            )}
             {/* Contadores ao vivo do modo server_reload */}
             {mode === 'server_reload' && serverImportProgress && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full max-w-xl mt-4 text-center">
@@ -1935,6 +2200,10 @@ export default function Import() {
       {/* Passo REPORT */}
       {step === 'report' && (
         <>
+          {mode === 'complementary' && complementaryReport && (
+            <ComplementaryImportReportView report={complementaryReport} onReset={reset} />
+          )}
+
           {mode === 'server_reload' && serverImportReport && (
             <ServerImportReportView
               report={serverImportReport}

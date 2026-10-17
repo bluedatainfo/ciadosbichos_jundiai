@@ -13,6 +13,9 @@ export type Tutor = {
   city?: string
   state?: string
   neighborhood?: string
+  tel3?: string
+  dbdt_flag?: boolean
+  dbtx?: string
 }
 
 export type User = {

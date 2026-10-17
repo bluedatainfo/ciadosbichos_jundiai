@@ -38,6 +38,9 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
     state: tutor?.state || '',
     neighborhood: tutor?.neighborhood || '',
     indication: tutor?.indication || '',
+    tel3: tutor?.tel3 || '',
+    dbdt_flag: tutor?.dbdt_flag || false,
+    dbtx: tutor?.dbtx || '',
   })
 
   const [photoFile, setPhotoFile] = useState<File | null>(null)
@@ -153,6 +156,9 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
           state: tutorData.state,
           neighborhood: tutorData.neighborhood,
           indication: tutorData.indication,
+          tel3: tutorData.tel3,
+          dbdt_flag: tutorData.dbdt_flag,
+          dbtx: tutorData.dbtx,
         }
 
         const tutorDiff = auditService.computeDiff(tutor, tutorUpdatePayload)
@@ -271,12 +277,24 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label>Email</Label>
+              <Label className="flex items-center gap-2">
+                Telefone 3
+                {tutorData.tel3 && (
+                  <button
+                    type="button"
+                    onClick={() => openWhatsApp(tutorData.tel3)}
+                    className="text-green-600 hover:text-green-700"
+                    title="Abrir WhatsApp"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                  </button>
+                )}
+              </Label>
               <Input
-                type="email"
-                value={tutorData.email}
-                onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
+                value={tutorData.tel3}
+                onChange={(e) => setTutorData({ ...tutorData, tel3: e.target.value })}
                 className="bg-slate-100/70"
+                placeholder="Telefone adicional / recado"
               />
             </div>
             <div className="space-y-1">
@@ -285,6 +303,50 @@ export function GeneralInfoTab({ patient }: { patient: Patient }) {
                 value={tutorData.indication}
                 onChange={(e) => setTutorData({ ...tutorData, indication: e.target.value })}
                 className="bg-slate-100/70"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={tutorData.email}
+              onChange={(e) => setTutorData({ ...tutorData, email: e.target.value })}
+              className="bg-slate-100/70"
+            />
+          </div>
+
+          <div className="space-y-2 p-3 rounded-lg border border-slate-200 bg-slate-100/70">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="tutor-dbdt-flag"
+                checked={tutorData.dbdt_flag}
+                onChange={(e) => setTutorData({ ...tutorData, dbdt_flag: e.target.checked })}
+                className="rounded border-slate-300 text-red-600 focus:ring-red-500 w-4 h-4 cursor-pointer"
+              />
+              <Label
+                htmlFor="tutor-dbdt-flag"
+                className="font-semibold text-slate-800 cursor-pointer flex items-center gap-2 flex-wrap"
+              >
+                <span>Débito</span>
+                {tutorData.dbtx && (
+                  <span className="font-normal text-xs text-red-700 bg-red-100/80 px-2 py-0.5 rounded border border-red-200">
+                    {tutorData.dbtx}
+                  </span>
+                )}
+              </Label>
+            </div>
+            <div className="space-y-1 pt-1">
+              <Label className="text-xs text-muted-foreground">
+                Texto / Detalhe do Débito (DBTX)
+              </Label>
+              <Input
+                placeholder="Ex: Débito pendente R$ 150,00 referente a consulta em..."
+                value={tutorData.dbtx}
+                onChange={(e) => setTutorData({ ...tutorData, dbtx: e.target.value })}
+                className="bg-white/90 text-xs"
               />
             </div>
           </div>

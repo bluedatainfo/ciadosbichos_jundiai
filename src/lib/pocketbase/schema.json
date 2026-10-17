@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-17T01:39:14.331Z",
+  "generatedAt": "2026-10-17T02:19:53.330Z",
   "collections": [
     {
       "name": "users",
@@ -156,6 +156,24 @@
         },
         {
           "name": "neighborhood",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tel3",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dbdt_flag",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dbtx",
           "type": "text",
           "required": false,
           "system": false
