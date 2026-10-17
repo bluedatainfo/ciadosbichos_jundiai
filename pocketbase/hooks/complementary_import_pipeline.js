@@ -260,12 +260,19 @@ routerAdd('POST', '/backend/v1/import/complementary-batch', (e) => {
         }
 
         // Extrair valores candidatos do arquivo
-        const fileTel3 = sanitizeText(row.TEL3 || row.tel3)
-        const fileDbdtRaw = sanitizeText(row.DBDT || row.dbdt)
-        const fileDbtx = sanitizeText(row.DBTX || row.dbtx)
+        // Observação: chaves do arquivo podem vir em minúsculo ou maiúsculo
+        const fileTel3 = sanitizeText(row.TEL3 !== undefined ? row.TEL3 : row.tel3)
+        const rawDbdtVal = row.DBDT !== undefined ? row.DBDT : row.dbdt
+        const fileDbdtRaw = sanitizeText(rawDbdtVal)
+        const fileDbtx = sanitizeText(row.DBTX !== undefined ? row.DBTX : row.dbtx)
 
-        // DBDT = -1 determina flag ticada de Débito
-        const shouldSetDbdtFlag = fileDbdtRaw === '-1' || fileDbdtRaw === -1
+        // DBDT = -1 determina flag ticada de Débito (suporta string "-1", número -1 ou texto com espaços/aspas)
+        const shouldSetDbdtFlag =
+          rawDbdtVal === -1 ||
+          rawDbdtVal === '-1' ||
+          fileDbdtRaw === '-1' ||
+          fileDbdtRaw === '-1.0' ||
+          parseInt(fileDbdtRaw, 10) === -1
 
         // Valores atuais no tutor
         const currentTel3 = (tutorRecord.getString('tel3') || '').trim()
