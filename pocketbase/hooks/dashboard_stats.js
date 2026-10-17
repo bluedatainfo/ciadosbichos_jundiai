@@ -22,9 +22,6 @@ routerAdd('GET', '/backend/v1/dashboard/stats', (e) => {
   console.log('[Dashboard Stats] Iniciando processamento de /backend/v1/dashboard/stats')
 
   var q = e.requestInfo().query || {}
-  if (q.execBackupNow === 'true') {
-    return runBackupExport(e)
-  }
 
   try {
     // 1. Data de hoje para filtro de atendimentos

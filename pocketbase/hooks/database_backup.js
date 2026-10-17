@@ -246,32 +246,40 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
       }
       fileHandle.writeString('\uFEFF' + headerCols.join(';') + '\r\n')
 
-      var pageSize = 1000
+      var pageSize = 2000
       var lastId = ''
       var pageCount = 0
+      var dbQueryCols = item.fields.join(', ')
 
       while (true) {
-        var filter = lastId ? 'id > "' + lastId + '"' : ''
-        var records = appInstance
-          ? appInstance.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
-          : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
-        if (!records || records.length === 0) break
+        var querySql = 'SELECT ' + dbQueryCols + ' FROM ' + item.name
+        if (lastId) {
+          querySql += ' WHERE id > {:lastId}'
+        }
+        querySql += ' ORDER BY id ASC LIMIT ' + pageSize
+
+        var q = (appInstance ? appInstance.db() : $app.db()).newQuery(querySql)
+        if (lastId) {
+          q.bind({ lastId: lastId })
+        }
+        var rawRows = q.all()
+        if (!rawRows || rawRows.length === 0) break
 
         var chunkLines = []
-        for (var r = 0; r < records.length; r++) {
-          var rec = records[r]
+        for (var r = 0; r < rawRows.length; r++) {
+          var rec = rawRows[r]
           var lineVals = []
           for (var f = 0; f < item.fields.length; f++) {
             var fName = item.fields[f]
+            var rawVal = rec[fName]
             var val = ''
-            if (fName === 'id') {
-              val = rec.id
-            } else if (fName === 'deceased' || fName === 'completed') {
-              val = rec.getBool(fName) ? 'true' : 'false'
-            } else if (fName === 'weight') {
-              val = rec.getFloat(fName)
-            } else {
-              val = rec.getString(fName)
+            if (fName === 'deceased' || fName === 'completed') {
+              val =
+                rawVal === 1 || rawVal === true || rawVal === 'true' || rawVal === '1'
+                  ? 'true'
+                  : 'false'
+            } else if (rawVal !== null && rawVal !== undefined) {
+              val = String(rawVal)
             }
             lineVals.push(escapeCsvValue(val))
           }
@@ -279,16 +287,17 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         }
 
         fileHandle.writeString(chunkLines.join(''))
-        totalRows += records.length
+        totalRows += rawRows.length
         pageCount++
 
-        // Log de progresso a cada 10 páginas (10.000 registros)
+        // Log de progresso a cada 10 páginas (20.000 registros)
         if (pageCount % 10 === 0) {
           console.log('[Backup Cron] ' + item.name + ': ' + totalRows + ' registros gravados...')
         }
 
-        if (records.length < pageSize) break
-        lastId = records[records.length - 1].id
+        if (rawRows.length < pageSize) break
+        lastId = String(rawRows[rawRows.length - 1].id || '')
+        if (!lastId) break
       }
 
       // Fecha o arquivo e obtém tamanho
@@ -638,33 +647,40 @@ function runBackupExport(e) {
         }
         fileHandle.writeString('\uFEFF' + headerCols.join(';') + '\r\n')
 
-        var pageSize = 1000
+        var pageSize = 2000
         var lastId = ''
         var pageCount = 0
+        var dbQueryCols = item.fields.join(', ')
 
         while (true) {
-          // Busca paginada estritamente somente leitura via SDK nativo com id > lastId
-          var filter = lastId ? 'id > "' + lastId + '"' : ''
-          var records = appInstance
-            ? appInstance.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
-            : $app.findRecordsByFilter(item.name, filter, 'id', pageSize, 0)
-          if (!records || records.length === 0) break
+          var querySql = 'SELECT ' + dbQueryCols + ' FROM ' + item.name
+          if (lastId) {
+            querySql += ' WHERE id > {:lastId}'
+          }
+          querySql += ' ORDER BY id ASC LIMIT ' + pageSize
+
+          var q = (appInstance ? appInstance.db() : $app.db()).newQuery(querySql)
+          if (lastId) {
+            q.bind({ lastId: lastId })
+          }
+          var rawRows = q.all()
+          if (!rawRows || rawRows.length === 0) break
 
           var chunkLines = []
-          for (var r = 0; r < records.length; r++) {
-            var rec = records[r]
+          for (var r = 0; r < rawRows.length; r++) {
+            var rec = rawRows[r]
             var lineVals = []
             for (var f = 0; f < item.fields.length; f++) {
               var fName = item.fields[f]
+              var rawVal = rec[fName]
               var val = ''
-              if (fName === 'id') {
-                val = rec.id
-              } else if (fName === 'deceased' || fName === 'completed') {
-                val = rec.getBool(fName) ? 'true' : 'false'
-              } else if (fName === 'weight') {
-                val = rec.getFloat(fName)
-              } else {
-                val = rec.getString(fName)
+              if (fName === 'deceased' || fName === 'completed') {
+                val =
+                  rawVal === 1 || rawVal === true || rawVal === 'true' || rawVal === '1'
+                    ? 'true'
+                    : 'false'
+              } else if (rawVal !== null && rawVal !== undefined) {
+                val = String(rawVal)
               }
               lineVals.push(escapeCsvValue(val))
             }
@@ -673,16 +689,17 @@ function runBackupExport(e) {
 
           // Gravação direta no arquivo por página para liberar memória de forma incremental
           fileHandle.writeString(chunkLines.join(''))
-          totalRows += records.length
+          totalRows += rawRows.length
           pageCount++
 
-          // Log de progresso a cada 10 páginas (10.000 registros)
+          // Log de progresso a cada 10 páginas (20.000 registros)
           if (pageCount % 10 === 0) {
             console.log('[Backup] ' + item.name + ': ' + totalRows + ' registros gravados...')
           }
 
-          if (records.length < pageSize) break
-          lastId = records[records.length - 1].id
+          if (rawRows.length < pageSize) break
+          lastId = String(rawRows[rawRows.length - 1].id || '')
+          if (!lastId) break
         }
 
         // Fechar arquivo em disco
@@ -909,8 +926,7 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
     e.response.header().set('Content-Type', 'text/csv; charset=utf-8')
     e.response.header().set('Content-Disposition', 'attachment; filename="' + fileName + '"')
 
-    // Tenta servir diretamente do filesystem de forma eficiente e sem carregar tudo em memória
-    // 1) e.fileFS com $os.dirFS
+    // Servir diretamente do filesystem via e.fileFS com $os.dirFS para streaming de alta performance
     try {
       if (typeof e.fileFS === 'function' && typeof $os.dirFS === 'function') {
         return e.fileFS($os.dirFS(BACKUP_DIR), fileName)
@@ -920,9 +936,13 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
     }
 
     var rawBytes = $os.readFile(fullPath)
-    var textContent = ''
+    if (typeof e.blob === 'function') {
+      try {
+        return e.blob(200, 'text/csv; charset=utf-8', rawBytes)
+      } catch (_) {}
+    }
 
-    // 3.1) toString nativo global do PocketBase (converte bytes slice Go para UTF-8 string)
+    var textContent = ''
     if (typeof toString === 'function') {
       try {
         textContent = toString(rawBytes)
@@ -931,7 +951,6 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
       }
     }
 
-    // 3.2) Buffer do Node/Goja se disponível
     if (!textContent && typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
       try {
         textContent = Buffer.from(rawBytes).toString('utf-8')
@@ -940,7 +959,6 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
       }
     }
 
-    // 3.3) Decodificador chunk a chunk de bytes UTF-8 puro em JS (garantia de decodificação correta)
     if (!textContent && rawBytes) {
       var len = rawBytes.length || 0
       var chunks = []
