@@ -41,8 +41,108 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   })
   const [editLoading, setEditLoading] = useState(false)
 
+  /**
+   * Extrai a data cronológica real de um registro clínico:
+   * 1. Busca prefixo de data no início da descrição: [dd/mm/aaaa], [d/m/aaaa], [dd/mm/aa]
+   *    Também tolera data no início sem colchetes seguida de pontuação (ex: 15/10/2026.P=...)
+   * 2. Anos de 2 dígitos (26, 25...): >= 30 => 19xx; < 30 => 20xx (26 -> 2026, 25 -> 2025)
+   * 3. Se não houver data no início do texto, usa record.created
+   */
+  /**
+   * Extrai a data cronológica real de um registro clínico:
+   * 1. Busca prefixo de data no início da descrição: [dd/mm/aaaa], [d/m/aaaa], [dd/mm/aa]
+   *    Também tolera data no início sem colchetes seguida de pontuação (ex: 15/10/2026.P=...)
+   * 2. Anos de 2 dígitos (26, 25...): >= 30 => 19xx; < 30 => 20xx (26 -> 2026, 25 -> 2025)
+   * 3. Se não houver data no início do texto, usa record.created
+   */
+  const getRecordDateInfo = (
+    record: ClinicalRecord,
+  ): { timestamp: number; displayDate: string; displayTime?: string } => {
+    const desc = (record.description || '').trim()
+    const pad = (n: number) => n.toString().padStart(2, '0')
+
+    // 1. Prefixo com colchetes: [11/7/2026], [02/10/26], [22/12/2025], etc.
+    const bracketMatch = desc.match(/^\[\s*(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\s*\]/)
+    if (bracketMatch) {
+      const d = parseInt(bracketMatch[1], 10)
+      const m = parseInt(bracketMatch[2], 10)
+      let y = parseInt(bracketMatch[3], 10)
+      if (y < 100) {
+        y = y >= 30 ? 1900 + y : 2000 + y
+      }
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return {
+          timestamp: new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getTime(),
+          displayDate: `${pad(d)}/${pad(m)}/${y}`,
+        }
+      }
+    }
+
+    // 2. Prefixo sem colchetes no início (ex: "15/10/2026.P=31.6 KG..." ou "15/10/2026 - ...")
+    const leadingMatch = desc.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})(?:[.:\-\s]|$)/)
+    if (leadingMatch) {
+      const d = parseInt(leadingMatch[1], 10)
+      const m = parseInt(leadingMatch[2], 10)
+      let y = parseInt(leadingMatch[3], 10)
+      if (y < 100) {
+        y = y >= 30 ? 1900 + y : 2000 + y
+      }
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return {
+          timestamp: new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getTime(),
+          displayDate: `${pad(d)}/${pad(m)}/${y}`,
+        }
+      }
+    }
+
+    // 3. Fallback: data de gravação do registro (created)
+    if (record.created) {
+      const cd = new Date(record.created)
+      const t = cd.getTime()
+      if (!isNaN(t)) {
+        return {
+          timestamp: t,
+          displayDate: cd.toLocaleDateString('pt-BR'),
+          displayTime: cd.toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        }
+      }
+    }
+
+    return { timestamp: 0, displayDate: '-' }
+  }
+
+  const getRecordTimestamp = (record: ClinicalRecord): number => {
+    return getRecordDateInfo(record).timestamp
+  }
+
+  /**
+   * Ordena registros do mais recente para o mais antigo:
+   * Chave primária: timestamp extraído do prefixo ou created
+   * Chave de desempate: created decrescente (ou id)
+   */
+  const sortRecordsDescending = (list: ClinicalRecord[]): ClinicalRecord[] => {
+    return [...list].sort((a, b) => {
+      const tA = getRecordTimestamp(a)
+      const tB = getRecordTimestamp(b)
+      if (tA !== tB) {
+        return tB - tA // decrescente estrito
+      }
+      // Desempate por created
+      const cA = a.created ? new Date(a.created).getTime() : 0
+      const cB = b.created ? new Date(b.created).getTime() : 0
+      if (cA !== cB) {
+        return cB - cA
+      }
+      return (b.id || '').localeCompare(a.id || '')
+    })
+  }
+
   const loadRecords = async () => {
-    setRecords(await api.getClinicalRecords(patient.id))
+    const raw = await api.getClinicalRecords(patient.id)
+    setRecords(sortRecordsDescending(raw))
   }
 
   useEffect(() => {
@@ -415,14 +515,12 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
             <Card key={record.id} className="border-none shadow-sm overflow-hidden">
               <div className="bg-primary/5 px-6 py-3 border-b flex items-center justify-between">
                 <div className="font-semibold text-primary flex items-center gap-2">
-                  <span>{new Date(record.created).toLocaleDateString('pt-BR')}</span>
-                  <span className="text-xs font-normal text-muted-foreground">
-                    às{' '}
-                    {new Date(record.created).toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
+                  <span>{getRecordDateInfo(record).displayDate}</span>
+                  {getRecordDateInfo(record).displayTime && (
+                    <span className="text-xs font-normal text-muted-foreground">
+                      às {getRecordDateInfo(record).displayTime}
+                    </span>
+                  )}
                 </div>
                 {!isAttendant && (
                   <Button
