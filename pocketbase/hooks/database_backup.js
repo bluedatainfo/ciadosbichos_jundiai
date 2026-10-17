@@ -770,16 +770,124 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
     }
 
     var fullPath = BACKUP_DIR + '/' + fileName
-    var content = ''
+
+    // Verifica existência do arquivo
     try {
-      content = $os.readFile(fullPath)
-    } catch (errRead) {
+      $os.stat(fullPath)
+    } catch (errStat) {
       return e.json(404, { error: 'Arquivo de backup não encontrado ou expirado.' })
     }
 
     e.response.header().set('Content-Type', 'text/csv; charset=utf-8')
     e.response.header().set('Content-Disposition', 'attachment; filename="' + fileName + '"')
-    return e.string(200, content)
+
+    // Tenta servir diretamente do filesystem de forma eficiente e sem carregar tudo em memória
+    // 1) e.fileFS com $os.dirFS
+    try {
+      if (typeof e.fileFS === 'function' && typeof $os.dirFS === 'function') {
+        return e.fileFS($os.dirFS(BACKUP_DIR), fileName)
+      }
+    } catch (errFileFS) {
+      console.log('[Backup Download] fileFS falhou, tentando fallback: ' + String(errFileFS))
+    }
+
+    // 2) e.stream com $os.open
+    var fileHandle = null
+    try {
+      if (typeof e.stream === 'function' && typeof $os.open === 'function') {
+        fileHandle = $os.open(fullPath)
+        var streamRes = e.stream(200, 'text/csv; charset=utf-8', fileHandle)
+        try {
+          if (fileHandle && typeof fileHandle.close === 'function') fileHandle.close()
+        } catch (_) {}
+        return streamRes
+      }
+    } catch (errStream) {
+      if (fileHandle && typeof fileHandle.close === 'function') {
+        try {
+          fileHandle.close()
+        } catch (_) {}
+      }
+      console.log('[Backup Download] stream falhou, tentando fallback: ' + String(errStream))
+    }
+
+    // 3) Leitura e decodificação segura para string UTF-8 com suporte a arquivos grandes
+    // Nota: $os.readFile retorna bytes ([]byte) que, quando passados a e.string(), Goja serializa
+    // como array numérico ('239,187,191...'). É imperativo decodificar os bytes para texto UTF-8 real.
+    var rawBytes = $os.readFile(fullPath)
+    var textContent = ''
+
+    // 3.1) toString nativo global do PocketBase (converte bytes slice Go para UTF-8 string)
+    if (typeof toString === 'function') {
+      try {
+        textContent = toString(rawBytes)
+      } catch (errToString) {
+        textContent = ''
+      }
+    }
+
+    // 3.2) Buffer do Node/Goja se disponível
+    if (!textContent && typeof Buffer !== 'undefined' && typeof Buffer.from === 'function') {
+      try {
+        textContent = Buffer.from(rawBytes).toString('utf-8')
+      } catch (errBuf) {
+        textContent = ''
+      }
+    }
+
+    // 3.3) Decodificador chunk a chunk de bytes UTF-8 puro em JS (garantia de decodificação correta e sem overflow)
+    if (!textContent && rawBytes) {
+      var len = rawBytes.length || 0
+      var chunks = []
+      var chunkSize = 8192
+      var chunkChars = []
+
+      for (var idx = 0; idx < len; ) {
+        var b1 = rawBytes[idx++]
+        var codePoint = 0
+
+        if (b1 < 0x80) {
+          codePoint = b1
+        } else if (b1 >> 5 === 0x06) {
+          var b2 = idx < len ? rawBytes[idx++] : 0
+          codePoint = ((b1 & 0x1f) << 6) | (b2 & 0x3f)
+        } else if (b1 >> 4 === 0x0e) {
+          var b2_3 = idx < len ? rawBytes[idx++] : 0
+          var b3 = idx < len ? rawBytes[idx++] : 0
+          codePoint = ((b1 & 0x0f) << 12) | ((b2_3 & 0x3f) << 6) | (b3 & 0x3f)
+        } else if (b1 >> 3 === 0x1e) {
+          var b2_4 = idx < len ? rawBytes[idx++] : 0
+          var b3_4 = idx < len ? rawBytes[idx++] : 0
+          var b4 = idx < len ? rawBytes[idx++] : 0
+          codePoint =
+            ((b1 & 0x07) << 18) | ((b2_4 & 0x3f) << 12) | ((b3_4 & 0x3f) << 6) | (b4 & 0x3f)
+        } else {
+          codePoint = b1
+        }
+
+        if (codePoint <= 0xffff) {
+          chunkChars.push(String.fromCharCode(codePoint))
+        } else {
+          codePoint -= 0x10000
+          chunkChars.push(
+            String.fromCharCode((codePoint >> 10) + 0xd800),
+            String.fromCharCode((codePoint % 0x400) + 0xdc00),
+          )
+        }
+
+        if (chunkChars.length >= chunkSize) {
+          chunks.push(chunkChars.join(''))
+          chunkChars = []
+        }
+      }
+
+      if (chunkChars.length > 0) {
+        chunks.push(chunkChars.join(''))
+      }
+      textContent = chunks.join('')
+    }
+
+    return e.string(200, textContent)
   } catch (err) {
     var errMsg = err ? err.message || String(err) : 'Erro desconhecido'
     console.log('[Backup] Erro no endpoint /download: ' + errMsg)

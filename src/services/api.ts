@@ -519,7 +519,20 @@ export const api = {
       }>
     }
   }> => {
-    return pb.send('/backend/v1/backups/run', { method: 'POST' })
+    // A geração completa dos 5 arquivos CSV (com dezenas de milhares de registros)
+    // pode levar vários minutos no servidor. Definimos um timeout de 15 minutos (900.000 ms)
+    // via AbortController para que a requisição HTTP do navegador não expire prematuramente.
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15 * 60 * 1000)
+
+    try {
+      return await pb.send('/backend/v1/backups/run', {
+        method: 'POST',
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timeoutId)
+    }
   },
   getBackupDownloadUrl: (fileName: string): string => {
     const baseUrl = pb.baseUrl || ''

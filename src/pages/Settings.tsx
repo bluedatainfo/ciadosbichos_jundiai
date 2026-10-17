@@ -70,6 +70,7 @@ export default function Settings() {
   const [backups, setBackups] = useState<Array<{ name: string; size: number; updated: string }>>([])
   const [loadingBackups, setLoadingBackups] = useState(false)
   const [runningBackup, setRunningBackup] = useState(false)
+  const [backupStartedAt, setBackupStartedAt] = useState<Date | null>(null)
 
   const publicBookingUrl = `${window.location.origin}/agendamento`
 
@@ -86,23 +87,56 @@ export default function Settings() {
   }
 
   const handleRunBackupNow = async () => {
-    try {
-      setRunningBackup(true)
-      const res = await api.runBackupNow()
-      toast({
-        title: 'Backup concluído com sucesso!',
-        description: `${res.result?.files?.length || 5} arquivos CSV gerados em pb_data/backups_csv.`,
+    const started = new Date()
+    setRunningBackup(true)
+    setBackupStartedAt(started)
+
+    toast({
+      title: 'Geração de backup iniciada em segundo plano',
+      description:
+        'A exportação das 5 tabelas pode levar vários minutos no servidor devido ao volume de registros. Você pode continuar usando o sistema e acompanhar a lista com o botão Atualizar.',
+    })
+
+    // Dispara a chamada sem bloquear o usuário e com tratamento de erro/sucesso robusto
+    api
+      .runBackupNow()
+      .then(async (res) => {
+        toast({
+          title: 'Backup concluído com sucesso!',
+          description: `${res.result?.files?.length || 5} arquivos CSV gerados no servidor. A lista foi atualizada.`,
+        })
+        await loadBackups()
       })
-      await loadBackups()
-    } catch (err: any) {
-      toast({
-        title: 'Erro ao gerar backup',
-        description: getErrorMessage(err) || 'Falha ao executar backup.',
-        variant: 'destructive',
+      .catch(async (err: any) => {
+        console.warn('Retorno do disparo de backup:', err)
+        // Como o backend conclui a escrita no servidor mesmo se houver desconexão temporária,
+        // recarregamos a lista antes de disparar alerta
+        await loadBackups()
+        const errMsg = getErrorMessage(err) || ''
+        const isAbort =
+          err?.name === 'AbortError' ||
+          errMsg.toLowerCase().includes('abort') ||
+          errMsg.toLowerCase().includes('timeout') ||
+          errMsg.toLowerCase().includes('failed to fetch')
+
+        if (isAbort) {
+          toast({
+            title: 'Backup continua em execução no servidor',
+            description:
+              'A requisição no navegador encerrou a espera, mas o servidor segue processando a geração dos CSVs. Clique no botão "Atualizar" para acompanhar a conclusão.',
+          })
+        } else {
+          toast({
+            title: 'Aviso sobre a geração do backup',
+            description:
+              errMsg || 'Acompanhe o término na lista de backups abaixo clicando em "Atualizar".',
+          })
+        }
       })
-    } finally {
-      setRunningBackup(false)
-    }
+      .finally(() => {
+        setRunningBackup(false)
+        setBackupStartedAt(null)
+      })
   }
 
   useEffect(() => {
@@ -878,6 +912,24 @@ export default function Settings() {
               qualquer registro do banco de dados em produção através deste módulo.
             </span>
           </div>
+
+          {runningBackup && (
+            <div className="flex items-start gap-3 text-xs bg-amber-50 text-amber-900 p-3.5 rounded-lg border border-amber-200 animate-in fade-in">
+              <Loader2 className="w-4 h-4 text-amber-600 animate-spin shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-semibold">
+                  Backup em andamento no servidor (iniciado às{' '}
+                  {backupStartedAt ? backupStartedAt.toLocaleTimeString('pt-BR') : 'pouco'})...
+                </p>
+                <p className="text-amber-800 text-[11px] leading-relaxed">
+                  Exportando Animais, Tutores, Fichas Clínicas, Vacinas e Agendamentos. Devido ao
+                  grande volume de dados reais, o processo leva alguns minutos. Você pode navegar em
+                  outras telas normalmente e clicar no botão <strong>&quot;Atualizar&quot;</strong>{' '}
+                  acima para verificar quando os novos arquivos aparecerem na tabela.
+                </p>
+              </div>
+            </div>
+          )}
 
           {loadingBackups ? (
             <div className="py-8 text-center text-muted-foreground flex items-center justify-center gap-2">
