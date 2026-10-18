@@ -4,7 +4,19 @@ import { api } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Plus, Activity, Paperclip, Trash2, UploadCloud, Edit2, CheckCircle2 } from 'lucide-react'
+import {
+  Plus,
+  Activity,
+  Paperclip,
+  Trash2,
+  UploadCloud,
+  Edit2,
+  CheckCircle2,
+  Download,
+  FileText,
+  Image as ImageIcon,
+  ExternalLink,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import pb from '@/lib/pocketbase/client'
 import {
@@ -12,6 +24,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -29,6 +42,12 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({ description: '', diagnosis: '', treatment: '' })
   const [files, setFiles] = useState<File[]>([])
+
+  // Estado do Visualizador de Anexo Embutido
+  const [viewingAttachment, setViewingAttachment] = useState<{
+    url: string
+    filename: string
+  } | null>(null)
 
   // Estado de Edição de Registro
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -577,31 +596,45 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
                       )}
                     </div>
                     <div className="flex flex-wrap gap-3 mt-2">
-                      {record.files?.map((file) => (
-                        <div
-                          key={file}
-                          className="flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md border border-primary/10"
-                        >
-                          <a
-                            href={pb.files.getURL(record, file)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5"
+                      {record.files?.map((file) => {
+                        const fileUrl = pb.files.getURL(record, file)
+                        const isImg = /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(file)
+                        const isPdf = /\.pdf$/i.test(file)
+
+                        return (
+                          <div
+                            key={file}
+                            className="flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md border border-primary/10 hover:border-primary/30 transition-colors"
                           >
-                            <Paperclip className="w-4 h-4" />{' '}
-                            {file.length > 20 ? file.substring(0, 20) + '...' : file}
-                          </a>
-                          {!isAttendant && (
                             <button
-                              onClick={() => handleDeleteAttachment(record.id, file)}
-                              className="text-red-500 hover:text-red-700 ml-1 p-1"
-                              disabled={loading}
+                              type="button"
+                              onClick={() => setViewingAttachment({ url: fileUrl, filename: file })}
+                              className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-left"
+                              title={`Visualizar ${file}`}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {isImg ? (
+                                <ImageIcon className="w-4 h-4 shrink-0 text-primary" />
+                              ) : isPdf ? (
+                                <FileText className="w-4 h-4 shrink-0 text-primary" />
+                              ) : (
+                                <Paperclip className="w-4 h-4 shrink-0" />
+                              )}
+                              <span>{file.length > 20 ? file.substring(0, 20) + '...' : file}</span>
                             </button>
-                          )}
-                        </div>
-                      ))}
+                            {!isAttendant && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(record.id, file)}
+                                className="text-red-500 hover:text-red-700 ml-1 p-1"
+                                disabled={loading}
+                                title="Excluir anexo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -610,6 +643,118 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
           ))
         )}
       </div>
+
+      {/* Dialog do Visualizador de Anexo Embutido */}
+      <Dialog
+        open={!!viewingAttachment}
+        onOpenChange={(open) => {
+          if (!open) setViewingAttachment(null)
+        }}
+      >
+        <DialogContent className="max-w-4xl w-[95vw] sm:w-[90vw] md:w-[85vw] max-h-[92vh] flex flex-col p-4 sm:p-6">
+          <DialogHeader className="pb-3 border-b shrink-0 flex flex-row items-center justify-between pr-8">
+            <div className="space-y-1 min-w-0 flex-1 mr-4">
+              <DialogTitle className="text-base sm:text-lg font-semibold flex items-center gap-2 truncate">
+                {viewingAttachment &&
+                /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(viewingAttachment.filename) ? (
+                  <ImageIcon className="w-5 h-5 text-primary shrink-0" />
+                ) : viewingAttachment && /\.pdf$/i.test(viewingAttachment.filename) ? (
+                  <FileText className="w-5 h-5 text-primary shrink-0" />
+                ) : (
+                  <Paperclip className="w-5 h-5 text-primary shrink-0" />
+                )}
+                <span className="truncate" title={viewingAttachment?.filename}>
+                  {viewingAttachment?.filename}
+                </span>
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Visualização integrada de anexo da ficha clínica
+              </DialogDescription>
+            </div>
+            {viewingAttachment && (
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs shrink-0" asChild>
+                <a href={viewingAttachment.url} download={viewingAttachment.filename}>
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </a>
+              </Button>
+            )}
+          </DialogHeader>
+
+          <div className="flex-1 overflow-auto mt-4 flex items-center justify-center min-h-[300px] max-h-[calc(92vh-130px)] bg-slate-50/50 rounded-lg border">
+            {viewingAttachment &&
+              (() => {
+                const fname = viewingAttachment.filename
+                const url = viewingAttachment.url
+                const isImage = /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(fname)
+                const isPdf = /\.pdf$/i.test(fname)
+
+                if (isImage) {
+                  return (
+                    <div className="w-full h-full p-2 flex items-center justify-center">
+                      <img
+                        src={url}
+                        alt={fname}
+                        className="max-w-full max-h-[calc(92vh-160px)] object-contain rounded shadow-xs"
+                      />
+                    </div>
+                  )
+                }
+
+                if (isPdf) {
+                  return (
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                      <object
+                        data={url}
+                        type="application/pdf"
+                        className="w-full h-[calc(92vh-160px)] min-h-[480px] rounded"
+                      >
+                        {/* Fallback caso o navegador não renderize via object */}
+                        <iframe
+                          src={url}
+                          title={fname}
+                          className="w-full h-[calc(92vh-160px)] min-h-[480px] rounded border-0"
+                        >
+                          <div className="p-8 text-center space-y-4">
+                            <FileText className="w-12 h-12 text-slate-400 mx-auto" />
+                            <p className="text-sm text-slate-600">
+                              Não foi possível carregar o visualizador de PDF embutido neste
+                              navegador.
+                            </p>
+                            <Button asChild className="gap-2">
+                              <a href={url} download={fname}>
+                                <Download className="w-4 h-4" /> Baixar PDF
+                              </a>
+                            </Button>
+                          </div>
+                        </iframe>
+                      </object>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="p-8 text-center space-y-4 max-w-md">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto text-primary">
+                      <Paperclip className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-slate-800 break-all">{fname}</h3>
+                      <p className="text-sm text-slate-500 mt-1">
+                        Este tipo de arquivo não possui pré-visualização direta no navegador. Faça o
+                        download para abrir no seu computador.
+                      </p>
+                    </div>
+                    <Button asChild className="gap-2 bg-primary">
+                      <a href={url} download={fname}>
+                        <Download className="w-4 h-4" /> Baixar Arquivo
+                      </a>
+                    </Button>
+                  </div>
+                )
+              })()}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de Edição de Registro Clínico */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
