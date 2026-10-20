@@ -43,6 +43,7 @@ import {
 } from '@/lib/prescription-engine'
 import { prescriptionService, PrescriptionRecord } from '@/services/prescription'
 import { auditService } from '@/services/audit'
+import { buildFieldVariantsFilter, removeAccents } from '@/lib/search-utils'
 import { Link } from 'react-router-dom'
 
 interface SearchPatientResult {
@@ -76,9 +77,14 @@ export default function PrescriptionPage() {
   // Estado de busca de pacientes/tutores
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchPatientResult[]>([])
+  const [totalSearchResults, setTotalSearchResults] = useState<number>(0)
+  const [searchPage, setSearchPage] = useState<number>(1)
+  const [hasMoreSearch, setHasMoreSearch] = useState<boolean>(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const searchContainerRef = useRef<HTMLDivElement>(null)
+  const dropdownListRef = useRef<HTMLDivElement>(null)
 
   // Estados de ação e pré-visualização
   const [isGenerating, setIsGenerating] = useState(false)
@@ -124,24 +130,79 @@ export default function PrescriptionPage() {
     }
   }
 
-  // Busca debounced de animal/tutor
+  // Construtor do filtro PocketBase para busca por nome do animal OU tutor
+  const buildSearchFilter = (query: string): string => {
+    const term = query.trim()
+    if (!term) return ''
+    const patientNameFilter = buildFieldVariantsFilter('name', term)
+    const tutorNameFilter = buildFieldVariantsFilter('tutor_id.name', term)
+    if (patientNameFilter && tutorNameFilter) {
+      return `(${patientNameFilter} || ${tutorNameFilter})`
+    }
+    return patientNameFilter || tutorNameFilter || ''
+  }
+
+  // Ordenação inteligente: pacientes cujo nome começa com o termo vêm primeiro,
+  // seguidos por pacientes cujo nome contém o termo, seguidos por tutores.
+  // Dentro do mesmo grupo, ordem alfabética.
+  const sortResultsByRelevance = (
+    items: SearchPatientResult[],
+    query: string,
+  ): SearchPatientResult[] => {
+    const qNorm = removeAccents(query).trim().toLowerCase()
+    if (!qNorm) return items
+
+    return [...items].sort((a, b) => {
+      const aName = removeAccents(a.name || '').toLowerCase()
+      const bName = removeAccents(b.name || '').toLowerCase()
+      const aTutor = removeAccents(a.expand?.tutor_id?.name || '').toLowerCase()
+      const bTutor = removeAccents(b.expand?.tutor_id?.name || '').toLowerCase()
+
+      const aNameExact = aName === qNorm
+      const bNameExact = bName === qNorm
+      if (aNameExact !== bNameExact) return aNameExact ? -1 : 1
+
+      const aNameStarts = aName.startsWith(qNorm)
+      const bNameStarts = bName.startsWith(qNorm)
+      if (aNameStarts !== bNameStarts) return aNameStarts ? -1 : 1
+
+      const aNameContains = aName.includes(qNorm)
+      const bNameContains = bName.includes(qNorm)
+      if (aNameContains !== bNameContains) return aNameContains ? -1 : 1
+
+      const aTutorStarts = aTutor.startsWith(qNorm)
+      const bTutorStarts = bTutor.startsWith(qNorm)
+      if (aTutorStarts !== bTutorStarts) return aTutorStarts ? -1 : 1
+
+      return aName.localeCompare(bName, 'pt-BR')
+    })
+  }
+
+  // Busca inicial debounced de animal/tutor (página 1, lote de 50)
   useEffect(() => {
-    if (!searchQuery.trim() || searchQuery.trim().length < 2) {
+    const trimmed = searchQuery.trim()
+    if (!trimmed || trimmed.length < 2) {
       setSearchResults([])
+      setTotalSearchResults(0)
+      setSearchPage(1)
+      setHasMoreSearch(false)
       return
     }
 
     const timer = setTimeout(async () => {
       setIsSearching(true)
       try {
-        const clean = searchQuery.trim().replace(/"/g, '\\"')
-        // Busca por nome do paciente ou pelo nome do tutor expandido
-        const res = await pb.collection('patients').getList<SearchPatientResult>(1, 10, {
-          filter: `name ~ "${clean}" || tutor_id.name ~ "${clean}"`,
+        const filterStr = buildSearchFilter(trimmed)
+        const res = await pb.collection('patients').getList<SearchPatientResult>(1, 50, {
+          filter: filterStr,
           expand: 'tutor_id',
           sort: 'name',
         })
-        setSearchResults(res.items)
+        const sorted = sortResultsByRelevance(res.items, trimmed)
+        setSearchResults(sorted)
+        setTotalSearchResults(res.totalItems)
+        setSearchPage(1)
+        setHasMoreSearch(res.page < res.totalPages)
         setShowDropdown(true)
       } catch (err) {
         console.warn('Erro na busca de pacientes para receituário:', err)
@@ -152,6 +213,46 @@ export default function PrescriptionPage() {
 
     return () => clearTimeout(timer)
   }, [searchQuery])
+
+  // Carregar mais resultados (rolagem contínua / scroll infinito)
+  const handleLoadMoreResults = async () => {
+    if (isLoadingMore || !hasMoreSearch) return
+    const trimmed = searchQuery.trim()
+    if (!trimmed) return
+
+    setIsLoadingMore(true)
+    try {
+      const nextPage = searchPage + 1
+      const filterStr = buildSearchFilter(trimmed)
+      const res = await pb.collection('patients').getList<SearchPatientResult>(nextPage, 50, {
+        filter: filterStr,
+        expand: 'tutor_id',
+        sort: 'name',
+      })
+
+      setSearchResults((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id))
+        const newUnique = res.items.filter((p) => !existingIds.has(p.id))
+        return [...prev, ...newUnique]
+      })
+      setSearchPage(res.page)
+      setTotalSearchResults(res.totalItems)
+      setHasMoreSearch(res.page < res.totalPages)
+    } catch (err) {
+      console.warn('Erro ao carregar mais pacientes:', err)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }
+
+  // Handler de scroll no container de dropdown
+  const handleDropdownScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    if (nearBottom && hasMoreSearch && !isLoadingMore) {
+      handleLoadMoreResults()
+    }
+  }
 
   // Formatação rápida na área de texto
   const insertFormatting = (prefix: string, suffix = '') => {
@@ -512,39 +613,116 @@ export default function PrescriptionPage() {
                   </div>
 
                   {/* Dropdown de Resultados da Busca */}
-                  {showDropdown && searchResults.length > 0 && (
-                    <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-md border border-slate-200 shadow-lg z-30 max-h-60 overflow-y-auto">
+                  {showDropdown && (
+                    <div
+                      ref={dropdownListRef}
+                      onScroll={handleDropdownScroll}
+                      className="absolute left-0 right-0 top-full mt-1 bg-white rounded-md border border-slate-200 shadow-xl z-30 max-h-80 overflow-y-auto divide-y divide-slate-100"
+                    >
+                      {/* Cabeçalho informativo do total de resultados */}
+                      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 flex items-center justify-between sticky top-0 z-10">
+                        <span>
+                          {totalSearchResults > 0 ? (
+                            <>
+                              <strong>{totalSearchResults}</strong> resultado
+                              {totalSearchResults > 1 ? 's' : ''} encontrado
+                              {totalSearchResults > 1 ? 's' : ''}
+                              {searchResults.length < totalSearchResults && (
+                                <span className="text-slate-400 font-normal">
+                                  {' '}
+                                  (exibindo {searchResults.length}, role para ver todos)
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            'Nenhum resultado'
+                          )}
+                        </span>
+                        {isSearching && (
+                          <span className="text-emerald-700 font-medium">Buscando...</span>
+                        )}
+                      </div>
+
+                      {searchResults.length === 0 && !isSearching && (
+                        <div className="p-4 text-center text-xs text-slate-500">
+                          Nenhum animal ou tutor encontrado para "{searchQuery}".
+                        </div>
+                      )}
+
                       {searchResults.map((p) => {
-                        const tutorName = p.expand?.tutor_id?.name || 'Tutor não vinculado'
+                        const tutorName = p.expand?.tutor_id?.name || 'Tutor não informado'
                         return (
                           <div
                             key={p.id}
-                            className="p-2.5 hover:bg-emerald-50 cursor-pointer border-b last:border-b-0 transition-colors flex items-center justify-between"
+                            className="p-3 hover:bg-emerald-50/70 cursor-pointer transition-colors flex items-center justify-between gap-3 group"
                             onClick={() => {
                               setSelectedPatient(p)
                               setSearchQuery('')
                               setShowDropdown(false)
                             }}
                           >
-                            <div className="min-w-0">
-                              <div className="font-semibold text-sm text-slate-900 flex items-center gap-2">
-                                <PawPrint className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                <span>{p.name}</span>
+                            <div className="min-w-0 flex-1">
+                              {/* Linha do Animal com identificação clara e em destaque */}
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="inline-flex items-center gap-1 font-bold text-sm text-slate-900 group-hover:text-emerald-900">
+                                  <PawPrint className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                  <span>{p.name}</span>
+                                </span>
+
                                 {p.species && (
-                                  <Badge variant="outline" className="text-[10px] py-0 px-1.5 h-4">
-                                    {p.species} {p.breed ? `(${p.breed})` : ''}
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] py-0 px-1.5 h-4.5 font-medium border-emerald-600/30 text-emerald-800 bg-emerald-50/50"
+                                  >
+                                    {p.species}
+                                    {p.breed ? ` • ${p.breed}` : ''}
                                   </Badge>
                                 )}
                               </div>
-                              <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                                <User className="w-3 h-3 text-slate-400" />
-                                <span>Tutor: {tutorName}</span>
+
+                              {/* Linha do Tutor com identificação clara ao lado/abaixo */}
+                              <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-1">
+                                <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-slate-700">Tutor:</span>
+                                <span className="text-slate-700 font-normal truncate">
+                                  {tutorName}
+                                </span>
+                                {p.expand?.tutor_id?.phone && (
+                                  <span className="text-slate-400 text-[11px] hidden sm:inline">
+                                    • {p.expand.tutor_id.phone}
+                                  </span>
+                                )}
                               </div>
                             </div>
-                            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+
+                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-700 shrink-0 transition-colors" />
                           </div>
                         )
                       })}
+
+                      {/* Indicador de carregamento ou botão de carregar mais ao final da rolagem */}
+                      {hasMoreSearch && (
+                        <div className="p-2.5 text-center bg-slate-50 border-t border-slate-100">
+                          {isLoadingMore ? (
+                            <span className="text-xs text-slate-500 animate-pulse">
+                              Carregando mais resultados...
+                            </span>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleLoadMoreResults()
+                              }}
+                              className="text-xs text-emerald-700 hover:text-emerald-800 h-7"
+                            >
+                              Carregar mais ({searchResults.length} de {totalSearchResults})
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
