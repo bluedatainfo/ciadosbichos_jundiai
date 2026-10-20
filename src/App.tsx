@@ -21,6 +21,7 @@ import BirthdayReportPage from '@/pages/BirthdayReportPage'
 import PendingVaccinesReportPage from '@/pages/PendingVaccinesReportPage'
 import SpeciesStatsReportPage from '@/pages/SpeciesStatsReportPage'
 import { AuditPage } from '@/pages/AuditPage'
+import PrescriptionPage from '@/pages/PrescriptionPage'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
 
@@ -47,6 +48,7 @@ const AppRoutes = () => {
         <Route path="/" element={<Index />} />
         <Route path="/pacientes" element={<Patients />} />
         <Route path="/pacientes/:id" element={<PatientProfile />} />
+        <Route path="/receituario" element={<PrescriptionPage />} />
         <Route path="/relatorios/retornos" element={<ReturnReportPage />} />
         <Route path="/relatorios/aniversariantes" element={<BirthdayReportPage />} />
         <Route path="/relatorios/vacinas" element={<PendingVaccinesReportPage />} />

@@ -1,7 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 
 export type AuditAction = 'create' | 'update' | 'delete' | 'mark_completed' | 'reopen'
-export type AuditModule = 'patients' | 'tutors' | 'clinical_records' | 'returns'
+export type AuditModule = 'patients' | 'tutors' | 'clinical_records' | 'returns' | 'prescriptions'
 
 export interface FieldDiff {
   label?: string
@@ -137,6 +137,10 @@ export const MODULE_LABELS: Record<AuditModule, { label: string; colorClass: str
   returns: {
     label: 'Agenda de Retornos',
     colorClass: 'text-amber-800 bg-amber-50 border-amber-300',
+  },
+  prescriptions: {
+    label: 'Receituário Oficial',
+    colorClass: 'text-emerald-800 bg-emerald-50 border-emerald-300',
   },
 }
 

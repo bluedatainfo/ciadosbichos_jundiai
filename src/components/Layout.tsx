@@ -30,6 +30,7 @@ import {
 import {
   LayoutDashboard,
   Users,
+  FileSignature,
   CalendarDays,
   Settings,
   UserCircle,
@@ -58,6 +59,12 @@ const menuItems = [
     title: 'Animais & Tutores',
     path: '/pacientes',
     icon: Users,
+    roles: ['admin', 'veterinarian', 'attendant'],
+  },
+  {
+    title: 'Receituário',
+    path: '/receituario',
+    icon: FileSignature,
     roles: ['admin', 'veterinarian', 'attendant'],
   },
   {

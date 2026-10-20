@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-18T01:46:08.247Z",
+  "generatedAt": "2026-10-20T00:23:42.524Z",
   "collections": [
     {
       "name": "users",
@@ -930,7 +930,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["patients", "tutors", "clinical_records", "returns"]
+          "selectValues": ["patients", "tutors", "clinical_records", "returns", "prescriptions"]
         },
         {
           "name": "record_id",
@@ -989,6 +989,68 @@
         "CREATE INDEX idx_audit_module ON audit_logs (module)",
         "CREATE INDEX idx_audit_created ON audit_logs (created DESC)",
         "CREATE INDEX idx_audit_record_id ON audit_logs (record_id)"
+      ]
+    },
+    {
+      "name": "prescriptions",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != '' && @request.auth.role != 'attendant'"
+      },
+      "fields": [
+        {
+          "name": "patient_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "patients"
+        },
+        {
+          "name": "patient_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "tutor_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "date",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_prescriptions_patient_id ON prescriptions (patient_id)",
+        "CREATE INDEX idx_prescriptions_created ON prescriptions (created DESC)"
       ]
     }
   ]
