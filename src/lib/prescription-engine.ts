@@ -1,4 +1,4 @@
-import officialTemplateBg from '@/assets/image-e1d11.png'
+import officialTemplateBg from '@/assets/receituariooriginal-41b76.png'
 import { buildPdfFromJpegImages } from './pdf-generator'
 
 export interface PrescriptionDocData {
@@ -17,20 +17,22 @@ export interface FormattedLine {
   indent?: number
 }
 
-// Largura e altura da arte original em pixels
-const ART_WIDTH = 1000
-const ART_HEIGHT = 1481
+// Largura e altura da arte original do talão oficial (receituariooriginal-41b76.png)
+// Arte oficial em alta definição (1024 x 1536, proporção 2:3 próxima ao A4 1:1.4142)
+const ART_WIDTH = 1024
+const ART_HEIGHT = 1536
 
-// Coordenadas da área interna da receita em pixels da arte
-// Retângulo verde arredondado onde o texto é renderizado:
-// x: de ~45px até ~955px (largura útil: ~910px, com margens internas 820px)
-// y: topo inicia abaixo do cabeçalho (~320px). Deixamos espaço para a linha do Paciente/Tutor/Data (~340px)
-// y: limite inferior antes do rodapé de contatos/endereço (~1260px)
+// Coordenadas da área interna da receita calibradas contra o print do modelo oficial:
+// - Borda do retângulo arredondado verde: x ~ 40px a ~ 984px, y ~ 316px a ~ 1324px
+// - Cabeçalho acima do retângulo: logotipo, título "VETERINÁRIA COMPANHIA DOS BICHOS", CRMVs até ~300px
+// - Rodapé abaixo do retângulo: Endereço à esquerda, Telefones e Retorno 30 dias à direita a partir de ~1340px
+// - Margens internas seguras dentro do retângulo arredondado verde:
+//   left: 76px, top: 340px, width: 872px (até 948px), bottom: 1290px (altura útil: 950px)
 const CONTENT_BOX = {
-  left: 80,
-  top: 330,
-  width: 840,
-  height: 920, // 330 + 920 = 1250 (antes do rodapé em ~1280)
+  left: 76,
+  top: 340,
+  width: 872,
+  height: 950, // 340 + 950 = 1290px (folga interna confortável antes da borda inferior em 1324px e do rodapé em 1340px)
 }
 
 /**
@@ -188,47 +190,75 @@ export function paginatePrescriptionContent(
     paragraphs.push({
       lines: renderedLines,
       lineHeight: isHeader ? 30 : 26,
-      spaceAfter: isHeader ? 12 : 8,
+      spaceAfter: isHeader ? 14 : 8,
     })
   }
 
-  // Distribuição em páginas respeitando a altura disponível
+  // Distribuição em páginas respeitando estritamente a altura disponível
+  // Regra crítica: NUNCA truncar texto, NUNCA cortar linha ao meio.
+  // Quando uma página enche, abre uma nova página e continua.
   const pages: RenderedParagraph[][] = []
   let currentPage: RenderedParagraph[] = []
   let currentY = 0
 
   for (const para of paragraphs) {
-    const paraHeight = para.lines.length * para.lineHeight + para.spaceAfter
+    const paraTotalHeight = para.lines.length * para.lineHeight + para.spaceAfter
 
-    // Se o parágrafo inteiro cabe na página atual
-    if (currentY + paraHeight <= availableHeight || currentPage.length === 0) {
+    // Se o parágrafo inteiro cabe na página atual (e ainda cabe pelo menos 1 linha)
+    if (currentY + paraTotalHeight <= availableHeight) {
       currentPage.push(para)
-      currentY += paraHeight
-    } else {
-      // Se não cabe inteiro, tenta quebrar por linhas do parágrafo de forma limpa
-      let remainingLines = [...para.lines]
-      while (remainingLines.length > 0) {
-        const spaceLeft = availableHeight - currentY
-        const linesFitCount = Math.floor(spaceLeft / para.lineHeight)
+      currentY += paraTotalHeight
+      continue
+    }
 
-        if (linesFitCount >= 1) {
-          const linesForThisPage = remainingLines.slice(0, linesFitCount)
-          remainingLines = remainingLines.slice(linesFitCount)
-          currentPage.push({
-            lines: linesForThisPage,
-            lineHeight: para.lineHeight,
-            spaceAfter: remainingLines.length === 0 ? para.spaceAfter : 0,
-          })
-          // Fecha a página
-          pages.push(currentPage)
-          currentPage = []
-          currentY = 0
-        } else {
-          // Não cabe nem 1 linha na página atual: vira de página
-          pages.push(currentPage)
-          currentPage = []
-          currentY = 0
-        }
+    // O parágrafo inteiro não cabe na página atual.
+    // Verifica quantas linhas cabem no espaço restante da página atual
+    let remainingLines = [...para.lines]
+    const spaceLeft = availableHeight - currentY
+    const linesFit = Math.floor(spaceLeft / para.lineHeight)
+
+    // Se couber pelo menos 1 linha inteira na página atual e houver mais linhas para virar
+    if (linesFit >= 1 && currentPage.length > 0) {
+      const chunk = remainingLines.slice(0, linesFit)
+      remainingLines = remainingLines.slice(linesFit)
+      currentPage.push({
+        lines: chunk,
+        lineHeight: para.lineHeight,
+        spaceAfter: 0,
+      })
+      pages.push(currentPage)
+      currentPage = []
+      currentY = 0
+    } else if (currentPage.length > 0) {
+      // Nem 1 linha cabe no espaço restante: fecha a página atual e vira para nova página
+      pages.push(currentPage)
+      currentPage = []
+      currentY = 0
+    }
+
+    // Agora processa as linhas restantes em páginas novas
+    while (remainingLines.length > 0) {
+      const spaceInNewPage = availableHeight - currentY
+      const maxLines = Math.floor(spaceInNewPage / para.lineHeight)
+      const count = Math.max(1, Math.min(maxLines, remainingLines.length))
+      const chunk = remainingLines.slice(0, count)
+      remainingLines = remainingLines.slice(count)
+
+      const isLastChunk = remainingLines.length === 0
+      const chunkHeight = chunk.length * para.lineHeight + (isLastChunk ? para.spaceAfter : 0)
+
+      currentPage.push({
+        lines: chunk,
+        lineHeight: para.lineHeight,
+        spaceAfter: isLastChunk ? para.spaceAfter : 0,
+      })
+      currentY += chunkHeight
+
+      // Se ainda restam linhas do parágrafo, precisa virar a página
+      if (!isLastChunk) {
+        pages.push(currentPage)
+        currentPage = []
+        currentY = 0
       }
     }
   }
@@ -286,65 +316,73 @@ export async function renderPrescriptionPageToCanvas(
   ctx.drawImage(bgImg, 0, 0, ART_WIDTH, ART_HEIGHT)
 
   // 1. Cabeçalho de Identificação do Paciente / Tutor / Data dentro do topo da área útil
-  // Renderizamos uma faixa elegante na parte superior da área interna (y: 335 a 380)
-  const headerY = 348
+  // Renderizamos uma faixa elegante na parte superior da área interna (y: 340 a 395)
+  const headerY = CONTENT_BOX.top + 22
   ctx.save()
 
   // Linha de dados: Paciente, Tutor e Data
-  ctx.fillStyle = '#1e293b' // slate-800
+  ctx.fillStyle = '#065f46' // verde escuro combinando com a identidade visual
   ctx.font = 'bold 18px system-ui, sans-serif'
   ctx.fillText('PACIENTE:', CONTENT_BOX.left, headerY)
 
-  ctx.font = '600 18px system-ui, sans-serif'
+  ctx.font = 'bold 18px system-ui, sans-serif'
   ctx.fillStyle = '#0f172a'
   const patientText = (data.patientName || 'Não informado').toUpperCase()
-  ctx.fillText(patientText, CONTENT_BOX.left + 95, headerY)
+  ctx.fillText(patientText, CONTENT_BOX.left + 100, headerY)
 
-  // Tutor ao lado
-  if (data.tutorName) {
-    const tutorX = CONTENT_BOX.left + 420
+  // Tutor ao lado (calcula dinamicamente a posição x para evitar sobreposições)
+  const patientWidth = ctx.measureText(patientText).width
+  const tutorX = Math.max(CONTENT_BOX.left + 400, CONTENT_BOX.left + 115 + patientWidth)
+
+  if (data.tutorName && tutorX < CONTENT_BOX.left + CONTENT_BOX.width - 240) {
     ctx.font = 'bold 16px system-ui, sans-serif'
-    ctx.fillStyle = '#475569'
+    ctx.fillStyle = '#065f46'
     ctx.fillText('TUTOR:', tutorX, headerY)
 
-    ctx.font = '500 16px system-ui, sans-serif'
+    ctx.font = '600 16px system-ui, sans-serif'
     ctx.fillStyle = '#0f172a'
-    const tutorText = data.tutorName
-    ctx.fillText(tutorText, tutorX + 65, headerY)
+    const maxTutorWidth = CONTENT_BOX.left + CONTENT_BOX.width - 160 - (tutorX + 70)
+    let tutorText = data.tutorName
+    if (ctx.measureText(tutorText).width > maxTutorWidth && maxTutorWidth > 50) {
+      while (ctx.measureText(tutorText + '...').width > maxTutorWidth && tutorText.length > 3) {
+        tutorText = tutorText.slice(0, -1)
+      }
+      tutorText += '...'
+    }
+    ctx.fillText(tutorText, tutorX + 70, headerY)
   }
 
   // Data à direita
   const dateFormatted = formatPrescriptionDate(data.date)
   if (dateFormatted) {
     const dateStr = `Data: ${dateFormatted}`
-    ctx.font = '600 16px system-ui, sans-serif'
-    ctx.fillStyle = '#334155'
+    ctx.font = 'bold 16px system-ui, sans-serif'
+    ctx.fillStyle = '#1e293b'
     const dateWidth = ctx.measureText(dateStr).width
     ctx.fillText(dateStr, CONTENT_BOX.left + CONTENT_BOX.width - dateWidth, headerY)
   }
 
-  // Linha divisória sutil
-  ctx.strokeStyle = '#cbd5e1' // slate-300
-  ctx.lineWidth = 1
+  // Linha divisória sutil em verde suave
+  ctx.strokeStyle = '#a7f3d0' // emerald-200
+  ctx.lineWidth = 1.5
   ctx.beginPath()
-  ctx.moveTo(CONTENT_BOX.left, headerY + 12)
-  ctx.lineTo(CONTENT_BOX.left + CONTENT_BOX.width, headerY + 12)
+  ctx.moveTo(CONTENT_BOX.left, headerY + 14)
+  ctx.lineTo(CONTENT_BOX.left + CONTENT_BOX.width, headerY + 14)
   ctx.stroke()
 
-  // Se for página 2+, adiciona indicador de continuação
-  if (totalPages > 1) {
-    const pageInd = `(Página ${pageNumber} de ${totalPages})`
-    ctx.font = 'italic 14px system-ui, sans-serif'
-    ctx.fillStyle = '#64748b'
-    const pWidth = ctx.measureText(pageInd).width
-    ctx.fillText(pageInd, CONTENT_BOX.left + CONTENT_BOX.width - pWidth, headerY + 28)
-  }
+  // Indicador oficial de página "Página X de Y" obrigatório
+  // Posicionado com clareza no canto direito, logo abaixo da linha divisória do topo
+  const pageIndicatorText = `Página ${pageNumber} de ${totalPages}`
+  ctx.font = '600 14px system-ui, sans-serif'
+  ctx.fillStyle = '#047857' // emerald-700
+  const pageIndWidth = ctx.measureText(pageIndicatorText).width
+  ctx.fillText(pageIndicatorText, CONTENT_BOX.left + CONTENT_BOX.width - pageIndWidth, headerY + 34)
 
   ctx.restore()
 
   // 2. Renderização do conteúdo da prescrição
-  // Inicia logo abaixo da linha divisória
-  let currentY = headerY + 40
+  // Inicia logo abaixo da identificação e indicador
+  let currentY = headerY + 46
   const fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
 
   for (const para of paragraphs) {
@@ -430,12 +468,12 @@ export async function generatePrescriptionDocument(data: PrescriptionDocData): P
   const measureCtx = measureCanvas.getContext('2d')
   if (!measureCtx) throw new Error('Não foi possível inicializar contexto de medição')
 
-  // Altura útil da área interna subtraindo cabeçalho da receita (header + divisória + margem = ~70px)
-  const usableHeight = CONTENT_BOX.height - 80
+  // Altura útil da área interna subtraindo cabeçalho da receita (header + divisória + margem + indicador = ~85px)
+  const usableHeight = CONTENT_BOX.height - 85
   const pagesParagraphs = paginatePrescriptionContent(
     measureCtx,
     data.content || 'Sem prescrição informada.',
-    CONTENT_BOX.width,
+    CONTENT_BOX.width - 10,
     usableHeight,
   )
 
@@ -525,6 +563,16 @@ export async function printPrescriptionDocument(pageCanvases: HTMLCanvasElement[
           }
           .page-break {
             page-break-before: always;
+          }
+          @media print {
+            html, body {
+              width: 210mm;
+              height: 297mm;
+            }
+            .page-container {
+              width: 210mm;
+              height: 297mm;
+            }
           }
           .page-img {
             width: 100%;
