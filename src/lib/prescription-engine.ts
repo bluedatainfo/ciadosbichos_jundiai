@@ -604,3 +604,340 @@ export async function printPrescriptionDocument(pageCanvases: HTMLCanvasElement[
     }, 2000)
   }
 }
+
+/**
+ * Medidas físicas do talão timbrado fornecidas pela clínica:
+ * Folha de 20cm (200mm) de largura x 28,5cm (285mm) de altura (retrato).
+ * Área útil: começa a 6cm (60mm) da borda superior e vai até 22cm (220mm) -> 16cm (160mm) de altura útil.
+ * Horizontal: margem esquerda de 1,5cm (15mm) até 18,5cm -> 17cm (170mm) de largura útil.
+ */
+export const PRE_PRINTED_SHEET = {
+  widthMm: 200,
+  heightMm: 285,
+  marginTopMm: 60,
+  marginLeftMm: 15,
+  contentWidthMm: 170,
+  contentHeightMm: 160,
+}
+
+/**
+ * Imprime APENAS o texto da receita sobre o papel timbrado já carregado na impressora.
+ * - Tamanho da folha: 20cm x 28,5cm (@page { size: 200mm 285mm; margin: 0; })
+ * - Margem superior: 6cm (60mm)
+ * - Margem esquerda: 1,5cm (15mm)
+ * - Largura útil: 17cm (170mm)
+ * - Altura útil: 16cm (160mm)
+ * - Sem fundo, sem cabeçalho/rodapé da arte
+ * - Paginação idêntica ao motor existente (quando encher os 16cm, quebra para próxima folha sem cortar linha)
+ */
+export async function printPrescriptionOnlyText(
+  data: PrescriptionDocData,
+): Promise<{ totalPages: number }> {
+  // Conversão de medidas: 1mm = ~3.7795px a 96 DPI
+  // Largura útil: 170mm * 3.7795 = ~642.5px
+  // Altura útil: 160mm * 3.7795 = ~604.7px
+  const MM_TO_PX = 3.7795275591
+  const availableWidthPx = PRE_PRINTED_SHEET.contentWidthMm * MM_TO_PX
+  const usableHeightPx = PRE_PRINTED_SHEET.contentHeightMm * MM_TO_PX
+
+  // Altura estimada para o bloco de identificação do paciente/tutor/data (~40px)
+  const headerHeightPx = 40
+  const contentUsableHeightPx = usableHeightPx - headerHeightPx
+
+  // Medição no canvas
+  const measureCanvas = document.createElement('canvas')
+  const measureCtx = measureCanvas.getContext('2d')
+  if (!measureCtx) throw new Error('Não foi possível inicializar contexto de medição')
+
+  const pagesParagraphs = paginatePrescriptionContent(
+    measureCtx,
+    data.content || 'Sem prescrição informada.',
+    availableWidthPx,
+    contentUsableHeightPx,
+  )
+
+  const totalPages = pagesParagraphs.length
+
+  // Montagem do HTML das páginas
+  const dateFormatted = formatPrescriptionDate(data.date)
+
+  const pagesHtml = pagesParagraphs
+    .map((paragraphs, pageIdx) => {
+      const isMultiPage = totalPages > 1
+      const patientUpper = (data.patientName || 'Não informado').toUpperCase()
+      const tutorText = data.tutorName || ''
+
+      const paragraphsHtml = paragraphs
+        .map((para) => {
+          return para.lines
+            .map((line, lIdx) => {
+              if (!line.text) {
+                return '<div class="line blank-line">&nbsp;</div>'
+              }
+
+              const isHeader = !!line.isHeader
+              const isBold = line.isBold || isHeader
+              const isItalic = !!line.isItalic
+              const isBullet = !!line.isBullet
+              const isBulletContinuation = lIdx > 0 && !!para.lines[0]?.isBullet
+
+              const classes = [
+                'line',
+                isHeader ? 'header-line' : 'body-line',
+                isBold ? 'bold' : '',
+                isItalic ? 'italic' : '',
+                isBullet ? 'bullet-line' : '',
+                isBulletContinuation ? 'bullet-continuation' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')
+
+              const bulletDot = isBullet ? '<span class="bullet-dot">•</span>' : ''
+              const textEscaped = escapeHtml(line.text)
+
+              return `<div class="${classes}">${bulletDot}<span class="line-text">${textEscaped}</span></div>`
+            })
+            .join('\n')
+        })
+        .join('\n<div class="paragraph-spacer"></div>\n')
+
+      return `
+        <div class="sheet ${pageIdx > 0 ? 'page-break' : ''}">
+          <div class="useful-area">
+            <!-- Cabeçalho de Identificação (Paciente, Tutor, Data) -->
+            <div class="patient-header">
+              <div class="patient-info">
+                <span class="patient-label">PACIENTE:</span>
+                <span class="patient-name">${escapeHtml(patientUpper)}</span>
+                ${
+                  tutorText
+                    ? `<span class="tutor-label">TUTOR:</span>
+                       <span class="tutor-name">${escapeHtml(tutorText)}</span>`
+                    : ''
+                }
+              </div>
+              <div class="date-info">
+                ${dateFormatted ? `<span>Data: ${escapeHtml(dateFormatted)}</span>` : ''}
+                ${isMultiPage ? `<span class="page-num">Pág. ${pageIdx + 1}/${totalPages}</span>` : ''}
+              </div>
+            </div>
+            <div class="header-divider"></div>
+
+            <!-- Conteúdo da prescrição formatado -->
+            <div class="prescription-body">
+              ${paragraphsHtml}
+            </div>
+          </div>
+        </div>
+      `
+    })
+    .join('\n')
+
+  const printIframe = document.createElement('iframe')
+  printIframe.style.position = 'fixed'
+  printIframe.style.right = '0'
+  printIframe.style.bottom = '0'
+  printIframe.style.width = '0'
+  printIframe.style.height = '0'
+  printIframe.style.border = '0'
+  printIframe.style.visibility = 'hidden'
+
+  document.body.appendChild(printIframe)
+
+  const iframeDoc = printIframe.contentWindow?.document
+  if (!iframeDoc || !printIframe.contentWindow) {
+    document.body.removeChild(printIframe)
+    throw new Error('Não foi possível inicializar ambiente isolado de impressão')
+  }
+
+  iframeDoc.open()
+  iframeDoc.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Imprimir no Timbrado</title>
+        <style>
+          @page {
+            size: 200mm 285mm portrait;
+            margin: 0;
+          }
+          * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          html, body {
+            width: 200mm;
+            height: 285mm;
+            background: #ffffff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #0f172a;
+          }
+          .sheet {
+            position: relative;
+            width: 200mm;
+            height: 285mm;
+            page-break-inside: avoid;
+            background: transparent;
+            overflow: hidden;
+          }
+          .page-break {
+            page-break-before: always;
+          }
+          /* Área útil calibrada estritamente com as medidas do talão:
+             - Topo: 6cm (60mm)
+             - Esquerda: 1,5cm (15mm)
+             - Largura: 17cm (170mm)
+             - Altura útil: 16cm (160mm) -> termina em 22cm (220mm)
+          */
+          .useful-area {
+            position: absolute;
+            top: 60mm;
+            left: 15mm;
+            width: 170mm;
+            height: 160mm;
+            box-sizing: border-box;
+            overflow: hidden;
+          }
+          .patient-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            font-size: 13px;
+            line-height: 1.3;
+            padding-bottom: 3px;
+          }
+          .patient-info {
+            display: flex;
+            gap: 6px;
+            align-items: baseline;
+            overflow: hidden;
+          }
+          .patient-label {
+            font-weight: 700;
+            color: #065f46;
+            font-size: 12px;
+          }
+          .patient-name {
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .tutor-label {
+            font-weight: 700;
+            color: #065f46;
+            font-size: 11px;
+            margin-left: 8px;
+          }
+          .tutor-name {
+            color: #334155;
+            font-size: 12px;
+          }
+          .date-info {
+            display: flex;
+            gap: 10px;
+            font-size: 11px;
+            color: #334155;
+            white-space: nowrap;
+          }
+          .page-num {
+            font-weight: 600;
+            color: #047857;
+          }
+          .header-divider {
+            height: 1px;
+            background-color: #cbd5e1;
+            margin-bottom: 8px;
+          }
+          .prescription-body {
+            font-size: 13px;
+            line-height: 19px;
+            color: #0f172a;
+          }
+          .line {
+            min-height: 19px;
+          }
+          .blank-line {
+            height: 10px;
+          }
+          .header-line {
+            font-size: 14px;
+            font-weight: 700;
+            color: #065f46;
+            margin-top: 4px;
+            margin-bottom: 2px;
+          }
+          .body-line {
+            font-size: 13px;
+          }
+          .bold {
+            font-weight: 700;
+          }
+          .italic {
+            font-style: italic;
+          }
+          .bullet-line {
+            display: flex;
+            align-items: flex-start;
+          }
+          .bullet-dot {
+            color: #059669;
+            font-size: 14px;
+            line-height: 19px;
+            width: 14px;
+            flex-shrink: 0;
+            text-align: center;
+          }
+          .bullet-continuation {
+            padding-left: 14px;
+          }
+          .paragraph-spacer {
+            height: 5px;
+          }
+          @media screen {
+            /* Visualização amigável de teste/inspeção caso aberto fora de print */
+            body {
+              background: #e2e8f0;
+              padding: 20px;
+            }
+            .sheet {
+              background: #ffffff;
+              box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+              margin-bottom: 20px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${pagesHtml}
+      </body>
+    </html>
+  `)
+  iframeDoc.close()
+
+  await new Promise((res) => setTimeout(res, 250))
+
+  try {
+    printIframe.contentWindow.focus()
+    printIframe.contentWindow.print()
+  } finally {
+    setTimeout(() => {
+      if (document.body.contains(printIframe)) {
+        document.body.removeChild(printIframe)
+      }
+    }, 2000)
+  }
+
+  return { totalPages }
+}
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}

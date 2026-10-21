@@ -2,6 +2,7 @@ import {
   parseContentToLines,
   paginatePrescriptionContent,
   formatPrescriptionDate,
+  PRE_PRINTED_SHEET,
 } from '../prescription-engine'
 
 /**
@@ -128,6 +129,72 @@ export function runPrescriptionEngineTests(): {
       lastPageText.includes('RECOMENDAÇÕES FINAIS') || lastPageText.includes('Retorno obrigatório'),
       'Fim deve estar na última página',
     )
+  })
+
+  test('Medidas físicas do talão timbrado atendem à especificação da clínica', () => {
+    // Folha: 20cm x 28,5cm
+    assert(PRE_PRINTED_SHEET.widthMm === 200, 'Largura da folha deve ser 200mm (20cm)')
+    assert(PRE_PRINTED_SHEET.heightMm === 285, 'Altura da folha deve ser 285mm (28,5cm)')
+
+    // Topo: 6cm (60mm) a 22cm (220mm) -> 16cm (160mm) altura útil
+    assert(PRE_PRINTED_SHEET.marginTopMm === 60, 'Margem superior deve ser 60mm (6cm)')
+    assert(PRE_PRINTED_SHEET.contentHeightMm === 160, 'Altura útil deve ser 160mm (16cm)')
+    assert(
+      PRE_PRINTED_SHEET.marginTopMm + PRE_PRINTED_SHEET.contentHeightMm === 220,
+      'Área útil vertical termina em 22cm (220mm)',
+    )
+
+    // Horizontal: 1,5cm (15mm) a 18,5cm (185mm) -> 17cm (170mm) largura útil
+    assert(PRE_PRINTED_SHEET.marginLeftMm === 15, 'Margem esquerda deve ser 15mm (1,5cm)')
+    assert(PRE_PRINTED_SHEET.contentWidthMm === 170, 'Largura útil deve ser 170mm (17cm)')
+    assert(
+      PRE_PRINTED_SHEET.marginLeftMm + PRE_PRINTED_SHEET.contentWidthMm === 185,
+      'Área útil horizontal termina em 18,5cm (185mm)',
+    )
+  })
+
+  test('Paginação na área útil do timbrado quebra corretamente quando ultrapassa 16cm', () => {
+    const ctx = createMockMeasureCtx()
+    const MM_TO_PX = 3.7795275591
+    const availableWidthPx = PRE_PRINTED_SHEET.contentWidthMm * MM_TO_PX
+    const usableHeightPx = PRE_PRINTED_SHEET.contentHeightMm * MM_TO_PX - 40 // desconta header
+
+    // Texto curto cabe em 1 página
+    const shortContent = '1. Medicamento Teste 10mg - Tomar 1 comprimido ao dia por 5 dias.'
+    const pagesShort = paginatePrescriptionContent(
+      ctx,
+      shortContent,
+      availableWidthPx,
+      usableHeightPx,
+    )
+    assert(
+      pagesShort.length === 1,
+      `Texto curto deve ocupar 1 página no timbrado (obtido: ${pagesShort.length})`,
+    )
+
+    // Texto extenso com muitos itens quebra em mais páginas sem cortar linhas
+    let longContent = '# PRESCRIÇÃO CLÍNICA COMPLETA\n\n'
+    for (let i = 1; i <= 20; i++) {
+      longContent += `${i}. Medicamento de Linha Longa ${i} ---------- 20 comprimidos\n`
+      longContent += `   Administrar via oral a cada 12 horas durante 10 dias seguidos.\n\n`
+    }
+    const pagesLong = paginatePrescriptionContent(
+      ctx,
+      longContent,
+      availableWidthPx,
+      usableHeightPx,
+    )
+    assert(
+      pagesLong.length >= 2,
+      `Texto longo deve gerar 2 ou mais páginas na área de 16cm (obtido: ${pagesLong.length})`,
+    )
+
+    // Garante integridade de cada página
+    for (let i = 0; i < pagesLong.length; i++) {
+      assert(pagesLong[i].length > 0, `Página ${i + 1} não deve ser vazia`)
+      const linesCount = pagesLong[i].reduce((sum, p) => sum + p.lines.length, 0)
+      assert(linesCount > 0, `Página ${i + 1} deve conter linhas`)
+    }
   })
 
   function contentLines(c: string) {

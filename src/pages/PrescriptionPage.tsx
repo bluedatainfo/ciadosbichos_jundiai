@@ -39,6 +39,7 @@ import pb from '@/lib/pocketbase/client'
 import {
   generatePrescriptionDocument,
   printPrescriptionDocument,
+  printPrescriptionOnlyText,
   formatPrescriptionDate,
 } from '@/lib/prescription-engine'
 import { prescriptionService, PrescriptionRecord } from '@/services/prescription'
@@ -380,6 +381,44 @@ export default function PrescriptionPage() {
       toast({
         title: 'Erro ao gerar PDF',
         description: err.message || 'Falha na compilação do documento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  // Ação: Imprimir no Timbrado (papel timbrado já carregado na impressora - sai apenas o texto)
+  const handlePrintPreprinted = async () => {
+    if (!validateForm()) return
+    setIsGenerating(true)
+    try {
+      const tutorName = selectedPatient?.expand?.tutor_id?.name || ''
+      const result = await printPrescriptionOnlyText({
+        patientName: selectedPatient!.name,
+        tutorName,
+        date,
+        content: prescriptionText,
+      })
+
+      // Registra no histórico
+      await prescriptionService.create({
+        patient_id: selectedPatient!.id,
+        patient_name: selectedPatient!.name,
+        tutor_name: tutorName,
+        date,
+        content: prescriptionText,
+      })
+      loadHistory()
+
+      toast({
+        title: 'Impressão no Timbrado iniciada',
+        description: `Enviado para impressão em papel timbrado (${result.totalPages} folha${result.totalPages > 1 ? 's' : ''}). Insira o talão timbrado na impressora.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao imprimir no timbrado',
+        description: err.message || 'Falha ao inicializar impressão.',
         variant: 'destructive',
       })
     } finally {
@@ -929,6 +968,17 @@ export default function PrescriptionPage() {
                   <Button
                     type="button"
                     variant="outline"
+                    onClick={handlePrintPreprinted}
+                    disabled={isGenerating || isSavingAttachment}
+                    className="gap-2 border-emerald-600 bg-emerald-50/60 text-emerald-900 hover:bg-emerald-100/70 font-medium"
+                    title="Imprime apenas o texto digitado posicionado para a folha do talão timbrado já carregada na impressora"
+                  >
+                    <Printer className="w-4 h-4 text-emerald-700" /> Imprimir no Timbrado
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
                     onClick={handlePrint}
                     disabled={isGenerating || isSavingAttachment}
                     className="gap-2 border-emerald-600/30 text-emerald-800 hover:bg-emerald-50"
@@ -1091,6 +1141,18 @@ export default function PrescriptionPage() {
             </div>
 
             <div className="flex items-center gap-2 pr-6">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsPreviewModalOpen(false)
+                  handlePrintPreprinted()
+                }}
+                className="gap-1.5 h-8 text-xs border-emerald-600 text-emerald-900 bg-emerald-50/60 hover:bg-emerald-100/70"
+                title="Imprime apenas o texto no papel timbrado físico"
+              >
+                <Printer className="w-3.5 h-3.5 text-emerald-700" /> Imprimir no Timbrado
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
