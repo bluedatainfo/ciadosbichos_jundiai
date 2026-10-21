@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-21T18:34:47.862Z",
+  "generatedAt": "2026-10-21T19:19:59.044Z",
   "collections": [
     {
       "name": "users",
@@ -1046,6 +1046,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "attached_to_record",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "attached_record_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "clinical_records"
         }
       ],
       "indexes": [

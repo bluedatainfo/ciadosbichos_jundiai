@@ -20,6 +20,8 @@ import {
   User,
   PawPrint,
   Clock,
+  Trash2,
+  FileCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +29,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +37,16 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import {
@@ -97,6 +110,11 @@ export default function PrescriptionPage() {
   // Histórico de receituários
   const [historyList, setHistoryList] = useState<PrescriptionRecord[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+
+  // Diálogo inteligente de exclusão
+  const [deletingItem, setDeletingItem] = useState<PrescriptionRecord | null>(null)
+  const [removeAttachmentChecked, setRemoveAttachmentChecked] = useState<boolean>(true)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -483,7 +501,7 @@ export default function PrescriptionPage() {
       const dateFormatted = formatPrescriptionDate(date)
 
       // 1. Grava como anexo em clinical_records do paciente e registra auditoria
-      await prescriptionService.attachToClinicalHistory(
+      const attachResult = await prescriptionService.attachToClinicalHistory(
         selectedPatient!.id,
         selectedPatient!.name,
         tutorName,
@@ -493,13 +511,15 @@ export default function PrescriptionPage() {
         dateFormatted,
       )
 
-      // 2. Grava no histórico de receituários
+      // 2. Grava no histórico de receituários com rastreabilidade de anexo
       await prescriptionService.create({
         patient_id: selectedPatient!.id,
         patient_name: selectedPatient!.name,
         tutor_name: tutorName,
         date,
         content: prescriptionText,
+        attached_to_record: true,
+        attached_record_id: attachResult.recordId,
       })
       loadHistory()
 
@@ -543,6 +563,45 @@ export default function PrescriptionPage() {
       title: 'Receituário carregado',
       description: `Dados de ${record.patient_name} recarregados no formulário.`,
     })
+  }
+
+  // Abertura do diálogo de exclusão inteligente
+  const handleOpenDelete = (record: PrescriptionRecord) => {
+    setDeletingItem(record)
+    // Se está anexado à ficha, o checkbox vem marcado por padrão
+    setRemoveAttachmentChecked(Boolean(record.attached_to_record))
+  }
+
+  // Confirmação de exclusão inteligente
+  const handleConfirmDelete = async () => {
+    if (!deletingItem) return
+    setIsDeleting(true)
+    try {
+      const willRemoveAttachment =
+        Boolean(deletingItem.attached_to_record) && removeAttachmentChecked
+      const res = await prescriptionService.delete(deletingItem, willRemoveAttachment)
+
+      // Remove otimisticamente do estado local
+      setHistoryList((prev) => prev.filter((item) => item.id !== deletingItem.id))
+
+      toast({
+        title: 'Receituário excluído com sucesso',
+        description: res.attachmentRemoved
+          ? `O receituário foi excluído e o PDF correspondente foi removido da ficha clínica de ${deletingItem.patient_name}.`
+          : `O receituário de ${deletingItem.patient_name} foi excluído do histórico.`,
+      })
+      setDeletingItem(null)
+    } catch (err: any) {
+      console.error('Erro ao excluir receituário:', err)
+      toast({
+        title: 'Erro ao excluir receituário',
+        description:
+          err.message || 'Falha de conexão ao tentar excluir. Tente novamente mais tarde.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   // Inserir modelo rápido de prescrição
@@ -1075,49 +1134,88 @@ export default function PrescriptionPage() {
                   Carregando histórico...
                 </div>
               ) : historyList.length === 0 ? (
-                <div className="py-6 text-center text-xs text-slate-400 border border-dashed rounded-md">
-                  Nenhum receituário registrado ainda.
+                <div className="py-8 px-4 text-center border border-dashed border-slate-200 rounded-lg bg-slate-50/60">
+                  <FileSignature className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p className="text-xs font-medium text-slate-600">
+                    Nenhum receituário registrado
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Os receituários emitidos ou anexados à ficha clínica aparecerão listados aqui.
+                  </p>
                 </div>
               ) : (
                 <div className="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
-                  {historyList.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors text-xs space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between font-semibold text-slate-900">
-                        <span className="flex items-center gap-1.5 truncate">
-                          <PawPrint className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                          {item.patient_name}
-                        </span>
-                        <span className="text-[11px] font-normal text-slate-500 shrink-0 flex items-center gap-1">
-                          <Clock className="w-3 h-3 text-slate-400" />
-                          {formatPrescriptionDate(item.date)}
-                        </span>
-                      </div>
+                  {historyList.map((item) => {
+                    const isAttached = Boolean(item.attached_to_record)
 
-                      {item.tutor_name && (
-                        <div className="text-[11px] text-slate-500 truncate">
-                          Tutor: {item.tutor_name}
+                    return (
+                      <div
+                        key={item.id}
+                        className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition-colors text-xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between font-semibold text-slate-900 gap-2">
+                          <span className="flex items-center gap-1.5 truncate">
+                            <PawPrint className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                            {item.patient_name}
+                          </span>
+                          <span className="text-[11px] font-normal text-slate-500 shrink-0 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                            {formatPrescriptionDate(item.date)}
+                          </span>
                         </div>
-                      )}
 
-                      <div className="flex items-center justify-between pt-1 border-t border-slate-200">
-                        <span className="text-[10px] text-slate-400 line-clamp-1 flex-1 mr-2">
-                          {item.content.replace(/\n+/g, ' ')}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleReopenHistory(item)}
-                          className="h-6 px-2 text-[11px] text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100/60"
-                        >
-                          Reabrir
-                        </Button>
+                        {item.tutor_name && (
+                          <div className="text-[11px] text-slate-500 truncate">
+                            Tutor: {item.tutor_name}
+                          </div>
+                        )}
+
+                        {/* Selo/Badge: Anexado à ficha clínica */}
+                        {isAttached && (
+                          <div className="pt-0.5">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] py-0 px-1.5 h-5 font-medium border-emerald-600/30 text-emerald-800 bg-emerald-50 inline-flex items-center gap-1"
+                            >
+                              <FileCheck className="w-3 h-3 text-emerald-600" />
+                              Anexado à ficha clínica
+                            </Badge>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between pt-1.5 border-t border-slate-200 gap-2">
+                          <span className="text-[10px] text-slate-400 line-clamp-1 flex-1">
+                            {item.content.replace(/\n+/g, ' ')}
+                          </span>
+
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleReopenHistory(item)}
+                              className="h-6 px-2 text-[11px] text-emerald-700 hover:text-emerald-800 hover:bg-emerald-100/60"
+                              title="Recarregar dados no formulário"
+                            >
+                              Reabrir
+                            </Button>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleOpenDelete(item)}
+                              className="h-6 w-6 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                              title="Excluir receituário"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="sr-only">Excluir</span>
+                            </Button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
@@ -1195,6 +1293,76 @@ export default function PrescriptionPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo Inteligente de Exclusão de Receituário */}
+      <AlertDialog
+        open={!!deletingItem}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeletingItem(null)
+        }}
+      >
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-slate-900">
+              <Trash2 className="w-5 h-5 text-rose-600" />
+              {deletingItem?.attached_to_record
+                ? 'Excluir receituário anexado?'
+                : 'Excluir este receituário?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-slate-600 space-y-2">
+              <p>
+                Você está prestes a excluir o receituário de{' '}
+                <strong className="text-slate-800">{deletingItem?.patient_name}</strong> emitido em{' '}
+                <strong className="text-slate-800">
+                  {deletingItem?.date ? formatPrescriptionDate(deletingItem.date) : ''}
+                </strong>
+                .
+              </p>
+
+              {deletingItem?.attached_to_record && (
+                <div className="mt-3 p-3 bg-amber-50/80 border border-amber-200 rounded-lg space-y-2 text-left">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-700 shrink-0" />
+                    Este receituário possui documento vinculado à ficha clínica
+                  </div>
+                  <div className="flex items-start gap-2.5 pt-1">
+                    <Checkbox
+                      id="remove-attached-pdf-checkbox"
+                      checked={removeAttachmentChecked}
+                      onCheckedChange={(checked) => setRemoveAttachmentChecked(Boolean(checked))}
+                      className="mt-0.5"
+                    />
+                    <label
+                      htmlFor="remove-attached-pdf-checkbox"
+                      className="text-xs text-slate-700 font-medium cursor-pointer leading-snug select-none"
+                    >
+                      Também remover o PDF da ficha clínica
+                      <span className="block text-[11px] font-normal text-slate-500 mt-0.5">
+                        Remove apenas o arquivo deste receituário, mantendo intactos todos os demais
+                        anexos da ficha.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter className="mt-4">
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              {isDeleting ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
