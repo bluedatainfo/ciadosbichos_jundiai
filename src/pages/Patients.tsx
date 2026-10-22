@@ -56,6 +56,7 @@ import {
   X,
 } from 'lucide-react'
 import { removeAccents } from '@/lib/search-utils'
+import { MainTutorAnimalSearch } from '@/components/patient/MainTutorAnimalSearch'
 import {
   Dialog,
   DialogContent,
@@ -994,6 +995,9 @@ export default function Patients() {
           </SheetContent>
         </Sheet>
       </div>
+
+      {/* Nova Busca Principal (Tutor + Animal) — Lógica Reutilizável */}
+      <MainTutorAnimalSearch onOpenTutorPatients={handleOpenTutorPatients} />
 
       <Tabs defaultValue="patients" className="w-full">
         <TabsList className="mb-4 bg-slate-200/80 p-1 border border-slate-300/80 shadow-2xs">
