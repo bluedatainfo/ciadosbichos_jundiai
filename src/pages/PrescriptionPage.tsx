@@ -161,9 +161,9 @@ export default function PrescriptionPage() {
     return patientNameFilter || tutorNameFilter || ''
   }
 
-  // Ordenação inteligente: pacientes cujo nome começa com o termo vêm primeiro,
-  // seguidos por pacientes cujo nome contém o termo, seguidos por tutores.
-  // Dentro do mesmo grupo, ordem alfabética.
+  // Ordenação inteligente alinhada à regra da clínica:
+  // Primeiro os casados pelo NOME DO TUTOR, depois os casados apenas pelo NOME DO ANIMAL.
+  // Dentro de cada grupo, mantém relevância (correspondência exata e início de nome primeiro).
   const sortResultsByRelevance = (
     items: SearchPatientResult[],
     query: string,
@@ -177,22 +177,42 @@ export default function PrescriptionPage() {
       const aTutor = removeAccents(a.expand?.tutor_id?.name || '').toLowerCase()
       const bTutor = removeAccents(b.expand?.tutor_id?.name || '').toLowerCase()
 
-      const aNameExact = aName === qNorm
-      const bNameExact = bName === qNorm
-      if (aNameExact !== bNameExact) return aNameExact ? -1 : 1
+      // Grupo 1: Casados pelo tutor (exato, início ou contém o termo)
+      const aTutorMatch = aTutor.includes(qNorm)
+      const bTutorMatch = bTutor.includes(qNorm)
+      if (aTutorMatch !== bTutorMatch) return aTutorMatch ? -1 : 1
 
-      const aNameStarts = aName.startsWith(qNorm)
-      const bNameStarts = bName.startsWith(qNorm)
-      if (aNameStarts !== bNameStarts) return aNameStarts ? -1 : 1
+      // Dentro do mesmo grupo (tutores casados ou animais casados):
+      // Correspondência exata de tutor
+      const aTutorExact = aTutor === qNorm
+      const bTutorExact = bTutor === qNorm
+      if (aTutorExact !== bTutorExact) return aTutorExact ? -1 : 1
 
-      const aNameContains = aName.includes(qNorm)
-      const bNameContains = bName.includes(qNorm)
-      if (aNameContains !== bNameContains) return aNameContains ? -1 : 1
-
+      // Início de nome de tutor
       const aTutorStarts = aTutor.startsWith(qNorm)
       const bTutorStarts = bTutor.startsWith(qNorm)
       if (aTutorStarts !== bTutorStarts) return aTutorStarts ? -1 : 1
 
+      // Correspondência exata do animal
+      const aNameExact = aName === qNorm
+      const bNameExact = bName === qNorm
+      if (aNameExact !== bNameExact) return aNameExact ? -1 : 1
+
+      // Início de nome do animal
+      const aNameStarts = aName.startsWith(qNorm)
+      const bNameStarts = bName.startsWith(qNorm)
+      if (aNameStarts !== bNameStarts) return aNameStarts ? -1 : 1
+
+      // Contém o termo no animal
+      const aNameContains = aName.includes(qNorm)
+      const bNameContains = bName.includes(qNorm)
+      if (aNameContains !== bNameContains) return aNameContains ? -1 : 1
+
+      // Desempate alfabético
+      if (aTutorMatch && bTutorMatch) {
+        const compTutor = aTutor.localeCompare(bTutor, 'pt-BR')
+        if (compTutor !== 0) return compTutor
+      }
       return aName.localeCompare(bName, 'pt-BR')
     })
   }

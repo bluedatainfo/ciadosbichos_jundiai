@@ -7,6 +7,8 @@
  * - Busca multi-palavra (todas as palavras presentes em tutor e/ou animal, em qualquer ordem)
  * - Tolerante a acentuação e case-insensitive (buildFieldVariantsFilter / removeAccents)
  * - Relevância: correspondência exata e por início de nome primeiro; busca mista prioriza par onde ambos aparecem
+ * - Ordem (busca textual, escopo "Tudo"): primeiro os casados pelo NOME DO TUTOR, depois os casados
+ *   apenas pelo NOME DO ANIMAL — dentro de cada grupo mantém a relevância atual
  * - Filtros complementares: Espécie, Raça, Telefone do tutor (tolerante a pontuação)
  * - Carregamento em lotes (50) com suporte a paginação contínua ("Carregar mais")
  */
@@ -25,8 +27,9 @@ export interface TutorAnimalPair {
   associatedPatients: Patient[]
   /** Score de relevância calculado para ordenação */
   relevanceScore: number
+  /** Se o NOME DO TUTOR casou com a busca (grupo que vem primeiro no escopo "Tudo") */
+  isTutorMatch: boolean
 }
-
 export interface TutorAnimalSearchFilters {
   query?: string
   species?: string
@@ -175,10 +178,10 @@ export function calculateRelevance(
   patient: Patient,
   tutor: Tutor | undefined,
   query: string,
-): { score: number; isAnimalMatch: boolean } {
+): { score: number; isAnimalMatch: boolean; isTutorMatch: boolean } {
   const normQuery = normalizeSearchStr(query)
   if (!normQuery) {
-    return { score: 10, isAnimalMatch: false }
+    return { score: 10, isAnimalMatch: false, isTutorMatch: false }
   }
 
   const queryWords = normQuery.split(/\s+/).filter(Boolean)
@@ -253,7 +256,11 @@ export function calculateRelevance(
   // (se o nome do animal tiver correspondência mais forte com os termos)
   const isAnimalMatch = animalHits > tutorHits || normPatientName.includes(normQuery)
 
-  return { score, isAnimalMatch }
+  // Define se a busca casou pelo NOME DO TUTOR (termo no início ou contido no nome do tutor)
+  const isTutorMatch =
+    tutorHits > 0 || normTutorName.startsWith(normQuery) || normTutorName.includes(normQuery)
+
+  return { score, isAnimalMatch, isTutorMatch }
 }
 
 /**
@@ -318,7 +325,7 @@ export async function searchTutorAnimalPairs(
       address: '',
     }
 
-    const { score, isAnimalMatch } = calculateRelevance(patient, tutor, query)
+    const { score, isAnimalMatch, isTutorMatch } = calculateRelevance(patient, tutor, query)
 
     // Lista de animais associados ao tutor (garantindo que o paciente atual esteja incluído)
     let associated = tutorPatientsMap.get(tutor.id) || []
@@ -330,16 +337,21 @@ export async function searchTutorAnimalPairs(
       tutor,
       matchedPatient: patient,
       isAnimalMatch,
+      isTutorMatch,
       associatedPatients: associated,
       relevanceScore: score,
     }
   })
 
-  // Se houver busca textual, ordena por relevância dentro do lote
+  // Se houver busca textual, ordena: primeiro os casados pelo NOME DO TUTOR,
+  // depois os casados apenas pelo NOME DO ANIMAL; dentro de cada grupo,
+  // mantém a relevância atual (correspondência exata e início de nome primeiro)
   if (query) {
-    pairs.sort((a, b) => b.relevanceScore - a.relevanceScore)
+    pairs.sort((a, b) => {
+      if (a.isTutorMatch !== b.isTutorMatch) return a.isTutorMatch ? -1 : 1
+      return b.relevanceScore - a.relevanceScore
+    })
   }
-
   return {
     items: pairs,
     totalItems: res.totalItems,
