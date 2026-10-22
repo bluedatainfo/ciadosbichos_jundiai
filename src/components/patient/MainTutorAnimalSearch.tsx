@@ -58,6 +58,17 @@ interface MainTutorAnimalSearchProps {
   initialState?: MainSearchNavState
   /** Callback quando o estado interno da busca muda para persistência */
   onStateChange?: (state: MainSearchNavState) => void
+  /**
+   * Modo de seleção (ex: /receituario):
+   * Exibe botão de ação principal "Selecionar" no destaque e no drawer lateral
+   */
+  selectionMode?: boolean
+  /** Texto customizado para o botão de seleção (padrão: "Selecionar") */
+  selectActionLabel?: string
+  /** Se deve fechar o drawer automaticamente ao selecionar o animal (padrão: true quando selectionMode=true) */
+  closeDrawerOnSelect?: boolean
+  /** Se deve sincronizar o estado da busca com o histórico da URL via popstate (padrão: true) */
+  syncWithUrl?: boolean
 }
 
 const DEFAULT_SPECIES = ['Canino', 'Felino', 'Cão', 'Gato', 'Ave', 'Silvestre', 'Outro']
@@ -70,6 +81,10 @@ export function MainTutorAnimalSearch({
   speciesOptions = DEFAULT_SPECIES,
   initialState,
   onStateChange,
+  selectionMode = false,
+  selectActionLabel = 'Selecionar',
+  closeDrawerOnSelect = true,
+  syncWithUrl = true,
 }: MainTutorAnimalSearchProps) {
   const [searchTerm, setSearchTerm] = useState(initialState?.term || '')
   const [debouncedSearch, setDebouncedSearch] = useState(initialState?.term || '')
@@ -162,6 +177,7 @@ export function MainTutorAnimalSearch({
 
   // Sincronização ao navegar com o botão Voltar/Avançar do navegador (popstate)
   useEffect(() => {
+    if (!syncWithUrl) return
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search)
       const drawerTutorParam = params.get('drawerTutor')
@@ -174,7 +190,7 @@ export function MainTutorAnimalSearch({
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [])
+  }, [syncWithUrl])
 
   const openDrawerForTutorId = async (
     tutorId: string,
@@ -337,7 +353,16 @@ export function MainTutorAnimalSearch({
       onSelectTutor(pair.tutor)
     }
     setSelectedDrawerTutor(pair.tutor)
-    setDrawerAnimals(pair.associatedPatients)
+    // Garante que se o animal tiver o tutor associado no expand ele seja mantido
+    const enrichedAnimals = pair.associatedPatients.map((animal) => ({
+      ...animal,
+      tutor_id: animal.tutor_id || pair.tutor.id,
+      expand: {
+        ...(animal.expand || {}),
+        tutor_id: animal.expand?.tutor_id || pair.tutor,
+      },
+    }))
+    setDrawerAnimals(enrichedAnimals)
     setDrawerOpen(true)
     notifyStateChange({ drawerTutorId: pair.tutor.id })
   }
@@ -345,6 +370,23 @@ export function MainTutorAnimalSearch({
   const handleDrawerClose = (open: boolean) => {
     setDrawerOpen(open)
     if (!open) {
+      notifyStateChange({ drawerTutorId: null })
+    }
+  }
+
+  const handleSelectAnimal = (patient: Patient, tutor?: Tutor) => {
+    if (onSelectPatient) {
+      const patientWithTutor: Patient = {
+        ...patient,
+        expand: {
+          ...(patient.expand || {}),
+          tutor_id: patient.expand?.tutor_id || tutor || selectedDrawerTutor || undefined,
+        },
+      }
+      onSelectPatient(patientWithTutor)
+    }
+    if (closeDrawerOnSelect) {
+      setDrawerOpen(false)
       notifyStateChange({ drawerTutorId: null })
     }
   }
@@ -877,6 +919,22 @@ export function MainTutorAnimalSearch({
 
                       {/* Lado Direito: Ações Diretas */}
                       <div className="flex items-center gap-1.5 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                        {/* Se estiver em modo de seleção (ex: /receituario), exibe botão Selecionar com destaque */}
+                        {patient && selectionMode && onSelectPatient && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 text-xs gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold shadow-2xs"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleSelectAnimal(patient, tutor)
+                            }}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>{selectActionLabel}</span>
+                          </Button>
+                        )}
+
                         {patient && enableNavigation && (
                           <Link to={`/pacientes/${patient.id}`}>
                             <Button
@@ -1044,19 +1102,40 @@ export function MainTutorAnimalSearch({
                       </div>
                     </div>
 
-                    {/* Botão de Ação Direta para a Ficha Clínica */}
-                    <div className="shrink-0">
-                      {enableNavigation ? (
+                    {/* Botão de Ação Direta (Ficha Clínica ou Selecionar para Receituário) */}
+                    <div className="shrink-0 flex items-center gap-1.5">
+                      {selectionMode && onSelectPatient && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() =>
+                            handleSelectAnimal(animal, selectedDrawerTutor || undefined)
+                          }
+                          className="h-8 text-xs gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold shadow-2xs"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{selectActionLabel}</span>
+                        </Button>
+                      )}
+
+                      {enableNavigation && (
                         <Link to={`/pacientes/${animal.id}`}>
                           <Button
+                            variant={selectionMode ? 'outline' : 'default'}
                             size="sm"
-                            className="h-8 text-xs gap-1.5 bg-primary text-white hover:bg-primary/90"
+                            className={`h-8 text-xs gap-1.5 ${
+                              selectionMode
+                                ? 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                                : 'bg-primary text-white hover:bg-primary/90'
+                            }`}
                           >
                             <span>Ficha Clínica</span>
                             <ChevronRight className="w-3.5 h-3.5" />
                           </Button>
                         </Link>
-                      ) : (
+                      )}
+
+                      {!enableNavigation && !selectionMode && (
                         <Button
                           size="sm"
                           onClick={() => onSelectPatient?.(animal)}

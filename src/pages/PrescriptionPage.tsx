@@ -4,19 +4,16 @@ import {
   Printer,
   Download,
   Paperclip,
-  Search,
   Calendar as CalendarIcon,
   Bold,
   Italic,
   List,
   Heading2,
-  CheckCircle2,
   History,
   RotateCcw,
   Sparkles,
   AlertCircle,
   Eye,
-  ChevronRight,
   User,
   PawPrint,
   Clock,
@@ -56,8 +53,8 @@ import {
   formatPrescriptionDate,
 } from '@/lib/prescription-engine'
 import { prescriptionService, PrescriptionRecord } from '@/services/prescription'
-import { auditService } from '@/services/audit'
-import { buildFieldVariantsFilter, removeAccents } from '@/lib/search-utils'
+import { Patient, Tutor } from '@/lib/types'
+import { MainTutorAnimalSearch } from '@/components/patient/MainTutorAnimalSearch'
 import { Link } from 'react-router-dom'
 
 interface SearchPatientResult {
@@ -65,6 +62,8 @@ interface SearchPatientResult {
   name: string
   species?: string
   breed?: string
+  nume?: string
+  ctrl?: string
   tutor_id?: string
   expand?: {
     tutor_id?: {
@@ -80,25 +79,12 @@ export default function PrescriptionPage() {
 
   // IDs acessíveis para campos de formulário
   const dateInputId = useId()
-  const searchInputId = useId()
   const prescriptionAreaId = useId()
 
   // Estado do formulário
   const [selectedPatient, setSelectedPatient] = useState<SearchPatientResult | null>(null)
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0])
   const [prescriptionText, setPrescriptionText] = useState<string>('')
-
-  // Estado de busca de pacientes/tutores
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchPatientResult[]>([])
-  const [totalSearchResults, setTotalSearchResults] = useState<number>(0)
-  const [searchPage, setSearchPage] = useState<number>(1)
-  const [hasMoreSearch, setHasMoreSearch] = useState<boolean>(false)
-  const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [isSearching, setIsSearching] = useState(false)
-  const [showDropdown, setShowDropdown] = useState(false)
-  const searchContainerRef = useRef<HTMLDivElement>(null)
-  const dropdownListRef = useRef<HTMLDivElement>(null)
 
   // Estados de ação e pré-visualização
   const [isGenerating, setIsGenerating] = useState(false)
@@ -118,20 +104,6 @@ export default function PrescriptionPage() {
 
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Fechar dropdown de busca ao clicar fora
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        searchContainerRef.current &&
-        !searchContainerRef.current.contains(event.target as Node)
-      ) {
-        setShowDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
   // Carregar histórico inicial
   useEffect(() => {
     loadHistory()
@@ -149,148 +121,32 @@ export default function PrescriptionPage() {
     }
   }
 
-  // Construtor do filtro PocketBase para busca por nome do animal OU tutor
-  const buildSearchFilter = (query: string): string => {
-    const term = query.trim()
-    if (!term) return ''
-    const patientNameFilter = buildFieldVariantsFilter('name', term)
-    const tutorNameFilter = buildFieldVariantsFilter('tutor_id.name', term)
-    if (patientNameFilter && tutorNameFilter) {
-      return `(${patientNameFilter} || ${tutorNameFilter})`
-    }
-    return patientNameFilter || tutorNameFilter || ''
-  }
-
-  // Ordenação inteligente alinhada à regra da clínica:
-  // Primeiro os casados pelo NOME DO TUTOR, depois os casados apenas pelo NOME DO ANIMAL.
-  // Dentro de cada grupo, mantém relevância (correspondência exata e início de nome primeiro).
-  const sortResultsByRelevance = (
-    items: SearchPatientResult[],
-    query: string,
-  ): SearchPatientResult[] => {
-    const qNorm = removeAccents(query).trim().toLowerCase()
-    if (!qNorm) return items
-
-    return [...items].sort((a, b) => {
-      const aName = removeAccents(a.name || '').toLowerCase()
-      const bName = removeAccents(b.name || '').toLowerCase()
-      const aTutor = removeAccents(a.expand?.tutor_id?.name || '').toLowerCase()
-      const bTutor = removeAccents(b.expand?.tutor_id?.name || '').toLowerCase()
-
-      // Grupo 1: Casados pelo tutor (exato, início ou contém o termo)
-      const aTutorMatch = aTutor.includes(qNorm)
-      const bTutorMatch = bTutor.includes(qNorm)
-      if (aTutorMatch !== bTutorMatch) return aTutorMatch ? -1 : 1
-
-      // Dentro do mesmo grupo (tutores casados ou animais casados):
-      // Correspondência exata de tutor
-      const aTutorExact = aTutor === qNorm
-      const bTutorExact = bTutor === qNorm
-      if (aTutorExact !== bTutorExact) return aTutorExact ? -1 : 1
-
-      // Início de nome de tutor
-      const aTutorStarts = aTutor.startsWith(qNorm)
-      const bTutorStarts = bTutor.startsWith(qNorm)
-      if (aTutorStarts !== bTutorStarts) return aTutorStarts ? -1 : 1
-
-      // Correspondência exata do animal
-      const aNameExact = aName === qNorm
-      const bNameExact = bName === qNorm
-      if (aNameExact !== bNameExact) return aNameExact ? -1 : 1
-
-      // Início de nome do animal
-      const aNameStarts = aName.startsWith(qNorm)
-      const bNameStarts = bName.startsWith(qNorm)
-      if (aNameStarts !== bNameStarts) return aNameStarts ? -1 : 1
-
-      // Contém o termo no animal
-      const aNameContains = aName.includes(qNorm)
-      const bNameContains = bName.includes(qNorm)
-      if (aNameContains !== bNameContains) return aNameContains ? -1 : 1
-
-      // Desempate alfabético
-      if (aTutorMatch && bTutorMatch) {
-        const compTutor = aTutor.localeCompare(bTutor, 'pt-BR')
-        if (compTutor !== 0) return compTutor
-      }
-      return aName.localeCompare(bName, 'pt-BR')
+  // Seleciona o paciente vindo da busca unificada
+  const handleSelectPatientFromSearch = (patient: Patient) => {
+    const tutorObj = (patient as any).expand?.tutor_id
+    setSelectedPatient({
+      id: patient.id,
+      name: patient.name,
+      species: patient.species,
+      breed: patient.breed,
+      nume: patient.nume,
+      ctrl: patient.ctrl,
+      tutor_id: patient.tutor_id,
+      expand: {
+        tutor_id: tutorObj
+          ? {
+              id: tutorObj.id || patient.tutor_id || '',
+              name: tutorObj.name || '',
+              phone: tutorObj.phone || '',
+            }
+          : undefined,
+      },
     })
-  }
 
-  // Busca inicial debounced de animal/tutor (página 1, lote de 50)
-  useEffect(() => {
-    const trimmed = searchQuery.trim()
-    if (!trimmed || trimmed.length < 2) {
-      setSearchResults([])
-      setTotalSearchResults(0)
-      setSearchPage(1)
-      setHasMoreSearch(false)
-      return
-    }
-
-    const timer = setTimeout(async () => {
-      setIsSearching(true)
-      try {
-        const filterStr = buildSearchFilter(trimmed)
-        const res = await pb.collection('patients').getList<SearchPatientResult>(1, 50, {
-          filter: filterStr,
-          expand: 'tutor_id',
-          sort: 'name',
-        })
-        const sorted = sortResultsByRelevance(res.items, trimmed)
-        setSearchResults(sorted)
-        setTotalSearchResults(res.totalItems)
-        setSearchPage(1)
-        setHasMoreSearch(res.page < res.totalPages)
-        setShowDropdown(true)
-      } catch (err) {
-        console.warn('Erro na busca de pacientes para receituário:', err)
-      } finally {
-        setIsSearching(false)
-      }
-    }, 280)
-
-    return () => clearTimeout(timer)
-  }, [searchQuery])
-
-  // Carregar mais resultados (rolagem contínua / scroll infinito)
-  const handleLoadMoreResults = async () => {
-    if (isLoadingMore || !hasMoreSearch) return
-    const trimmed = searchQuery.trim()
-    if (!trimmed) return
-
-    setIsLoadingMore(true)
-    try {
-      const nextPage = searchPage + 1
-      const filterStr = buildSearchFilter(trimmed)
-      const res = await pb.collection('patients').getList<SearchPatientResult>(nextPage, 50, {
-        filter: filterStr,
-        expand: 'tutor_id',
-        sort: 'name',
-      })
-
-      setSearchResults((prev) => {
-        const existingIds = new Set(prev.map((p) => p.id))
-        const newUnique = res.items.filter((p) => !existingIds.has(p.id))
-        return [...prev, ...newUnique]
-      })
-      setSearchPage(res.page)
-      setTotalSearchResults(res.totalItems)
-      setHasMoreSearch(res.page < res.totalPages)
-    } catch (err) {
-      console.warn('Erro ao carregar mais pacientes:', err)
-    } finally {
-      setIsLoadingMore(false)
-    }
-  }
-
-  // Handler de scroll no container de dropdown
-  const handleDropdownScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget
-    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
-    if (nearBottom && hasMoreSearch && !isLoadingMore) {
-      handleLoadMoreResults()
-    }
+    toast({
+      title: 'Animal selecionado para receita',
+      description: `${patient.name}${tutorObj?.name ? ` (Tutor: ${tutorObj.name})` : ''}`,
+    })
   }
 
   // Formatação rápida na área de texto
@@ -705,186 +561,37 @@ export default function PrescriptionPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Busca de Paciente / Tutor */}
-                <div className="md:col-span-2 relative" ref={searchContainerRef}>
-                  <Label htmlFor={searchInputId} className="text-xs font-semibold text-slate-700">
-                    Buscar Animal ou Tutor *
-                  </Label>
-                  <div className="relative mt-1">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <Input
-                      id={searchInputId}
-                      placeholder="Digite o nome do animal ou do tutor..."
-                      className="pl-9 text-sm"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onFocus={() => {
-                        if (searchResults.length > 0) setShowDropdown(true)
-                      }}
-                    />
-                    {isSearching && (
-                      <div className="absolute right-3 top-2.5">
-                        <span className="animate-spin text-xs text-muted-foreground">⏳</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Dropdown de Resultados da Busca */}
-                  {showDropdown && (
-                    <div
-                      ref={dropdownListRef}
-                      onScroll={handleDropdownScroll}
-                      className="absolute left-0 right-0 top-full mt-1 bg-white rounded-md border border-slate-200 shadow-xl z-30 max-h-80 overflow-y-auto divide-y divide-slate-100"
-                    >
-                      {/* Cabeçalho informativo do total de resultados */}
-                      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 text-[11px] text-slate-500 flex items-center justify-between sticky top-0 z-10">
-                        <span>
-                          {totalSearchResults > 0 ? (
-                            <>
-                              <strong>{totalSearchResults}</strong> resultado
-                              {totalSearchResults > 1 ? 's' : ''} encontrado
-                              {totalSearchResults > 1 ? 's' : ''}
-                              {searchResults.length < totalSearchResults && (
-                                <span className="text-slate-400 font-normal">
-                                  {' '}
-                                  (exibindo {searchResults.length}, role para ver todos)
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            'Nenhum resultado'
-                          )}
-                        </span>
-                        {isSearching && (
-                          <span className="text-emerald-700 font-medium">Buscando...</span>
-                        )}
-                      </div>
-
-                      {searchResults.length === 0 && !isSearching && (
-                        <div className="p-4 text-center text-xs text-slate-500">
-                          Nenhum animal ou tutor encontrado para "{searchQuery}".
-                        </div>
-                      )}
-
-                      {searchResults.map((p) => {
-                        const tutorName = p.expand?.tutor_id?.name || 'Tutor não informado'
-                        return (
-                          <div
-                            key={p.id}
-                            className="p-3 hover:bg-emerald-50/70 cursor-pointer transition-colors flex items-center justify-between gap-3 group"
-                            onClick={() => {
-                              setSelectedPatient(p)
-                              setSearchQuery('')
-                              setShowDropdown(false)
-                            }}
-                          >
-                            <div className="min-w-0 flex-1">
-                              {/* Linha do Animal com identificação clara e em destaque */}
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="inline-flex items-center gap-1 font-bold text-sm text-slate-900 group-hover:text-emerald-900">
-                                  <PawPrint className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                  <span>{p.name}</span>
-                                </span>
-
-                                {p.species && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px] py-0 px-1.5 h-4.5 font-medium border-emerald-600/30 text-emerald-800 bg-emerald-50/50"
-                                  >
-                                    {p.species}
-                                    {p.breed ? ` • ${p.breed}` : ''}
-                                  </Badge>
-                                )}
-                              </div>
-
-                              {/* Linha do Tutor com identificação clara ao lado/abaixo */}
-                              <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-1">
-                                <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="font-semibold text-slate-700">Tutor:</span>
-                                <span className="text-slate-700 font-normal truncate">
-                                  {tutorName}
-                                </span>
-                                {p.expand?.tutor_id?.phone && (
-                                  <span className="text-slate-400 text-[11px] hidden sm:inline">
-                                    • {p.expand.tutor_id.phone}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-700 shrink-0 transition-colors" />
-                          </div>
-                        )
-                      })}
-
-                      {/* Indicador de carregamento ou botão de carregar mais ao final da rolagem */}
-                      {hasMoreSearch && (
-                        <div className="p-2.5 text-center bg-slate-50 border-t border-slate-100">
-                          {isLoadingMore ? (
-                            <span className="text-xs text-slate-500 animate-pulse">
-                              Carregando mais resultados...
-                            </span>
-                          ) : (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleLoadMoreResults()
-                              }}
-                              className="text-xs text-emerald-700 hover:text-emerald-800 h-7"
-                            >
-                              Carregar mais ({searchResults.length} de {totalSearchResults})
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Campo de Data da Receita */}
-                <div>
-                  <Label htmlFor={dateInputId} className="text-xs font-semibold text-slate-700">
-                    Data da Receita *
-                  </Label>
-                  <div className="relative mt-1">
-                    <CalendarIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                    <Input
-                      id={dateInputId}
-                      type="date"
-                      value={date}
-                      onChange={(e) => setDate(e.target.value)}
-                      className="pl-9 text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Card de Paciente Selecionado */}
+              {/* Card de Paciente Selecionado com destaque */}
               {selectedPatient ? (
-                <div className="bg-emerald-50/70 border border-emerald-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
+                <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-2xs">
                       {selectedPatient.name.charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-900 flex items-center gap-2">
-                        <span>{selectedPatient.name}</span>
+                      <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                        <span className="text-base">{selectedPatient.name}</span>
+                        {selectedPatient.nume && (
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[11px] bg-blue-50 text-blue-800 border-blue-200 font-bold"
+                          >
+                            Nº {selectedPatient.nume}
+                          </Badge>
+                        )}
                         {selectedPatient.species && (
-                          <span className="text-xs font-normal text-slate-600">
-                            ({selectedPatient.species} {selectedPatient.breed || ''})
-                          </span>
+                          <Badge variant="secondary" className="text-xs">
+                            {selectedPatient.species}
+                            {selectedPatient.breed ? ` • ${selectedPatient.breed}` : ''}
+                          </Badge>
                         )}
                       </div>
-                      <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-0.5">
+                      <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
                         <User className="w-3.5 h-3.5 text-emerald-800" />
                         <strong>Tutor:</strong>{' '}
                         <span>{selectedPatient.expand?.tutor_id?.name || 'Não informado'}</span>
                         {selectedPatient.expand?.tutor_id?.phone && (
-                          <span className="text-slate-400">
+                          <span className="text-slate-400 font-mono">
                             • {selectedPatient.expand.tutor_id.phone}
                           </span>
                         )}
@@ -903,9 +610,48 @@ export default function PrescriptionPage() {
                 </div>
               ) : (
                 <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs text-slate-500">
-                  Nenhum animal selecionado. Use o campo de busca acima para escolher o paciente.
+                  Nenhum animal selecionado. Use a busca abaixo para encontrar o tutor ou animal e
+                  clicar em <strong>Selecionar</strong>.
                 </div>
               )}
+
+              {/* Data da Receita */}
+              <div className="w-full sm:w-60">
+                <Label htmlFor={dateInputId} className="text-xs font-semibold text-slate-700">
+                  Data da Receita *
+                </Label>
+                <div className="relative mt-1">
+                  <CalendarIcon className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                  <Input
+                    id={dateInputId}
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className="pl-9 text-sm bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Busca Principal Tutor + Animal Reutilizada (Mesma de /pacientes com Ação Selecionar) */}
+              <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <PawPrint className="w-3.5 h-3.5 text-emerald-700" />
+                    Buscar Animal ou Tutor para a Receita *
+                  </Label>
+                  <span className="text-[11px] text-muted-foreground">
+                    Mesma busca de /pacientes com seleção direta
+                  </span>
+                </div>
+
+                <MainTutorAnimalSearch
+                  selectionMode={true}
+                  selectActionLabel="Selecionar para Receita"
+                  enableNavigation={false}
+                  syncWithUrl={false}
+                  onSelectPatient={handleSelectPatientFromSearch}
+                />
+              </div>
             </CardContent>
           </Card>
 
