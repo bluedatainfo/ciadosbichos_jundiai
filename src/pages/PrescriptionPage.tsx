@@ -83,6 +83,7 @@ export default function PrescriptionPage() {
 
   // Estado do formulário
   const [selectedPatient, setSelectedPatient] = useState<SearchPatientResult | null>(null)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [date, setDate] = useState<string>(() => new Date().toISOString().split('T')[0])
   const [prescriptionText, setPrescriptionText] = useState<string>('')
 
@@ -142,6 +143,8 @@ export default function PrescriptionPage() {
           : undefined,
       },
     })
+
+    setIsSearchOpen(false)
 
     toast({
       title: 'Animal selecionado para receita',
@@ -434,6 +437,7 @@ export default function PrescriptionPage() {
 
     setDate(record.date || new Date().toISOString().split('T')[0])
     setPrescriptionText(record.content || '')
+    setIsSearchOpen(false)
 
     toast({
       title: 'Receituário carregado',
@@ -561,57 +565,44 @@ export default function PrescriptionPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Card de Paciente Selecionado com destaque */}
+              {/* Referência visual do paciente selecionado: chip/badge discreto */}
               {selectedPatient ? (
-                <div className="bg-emerald-50/80 border border-emerald-200 rounded-lg p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-base shrink-0 shadow-2xs">
-                      {selectedPatient.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-900 flex items-center gap-2 flex-wrap">
-                        <span className="text-base">{selectedPatient.name}</span>
-                        {selectedPatient.nume && (
-                          <Badge
-                            variant="outline"
-                            className="font-mono text-[11px] bg-blue-50 text-blue-800 border-blue-200 font-bold"
-                          >
-                            Nº {selectedPatient.nume}
-                          </Badge>
-                        )}
-                        {selectedPatient.species && (
-                          <Badge variant="secondary" className="text-xs">
-                            {selectedPatient.species}
-                            {selectedPatient.breed ? ` • ${selectedPatient.breed}` : ''}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <User className="w-3.5 h-3.5 text-emerald-800" />
-                        <strong>Tutor:</strong>{' '}
-                        <span>{selectedPatient.expand?.tutor_id?.name || 'Não informado'}</span>
-                        {selectedPatient.expand?.tutor_id?.phone && (
-                          <span className="text-slate-400 font-mono">
-                            • {selectedPatient.expand.tutor_id.phone}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                <div className="bg-emerald-50/90 border border-emerald-200 rounded-md px-3 py-2 flex items-center justify-between gap-3 text-xs text-emerald-950 animate-in fade-in">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <PawPrint className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span className="font-semibold text-slate-800">
+                      Paciente:{' '}
+                      <span className="text-emerald-900 font-bold">{selectedPatient.name}</span>
+                    </span>
+                    <span className="text-slate-400">—</span>
+                    <span className="text-slate-700">
+                      Tutor:{' '}
+                      <span className="font-medium text-slate-900">
+                        {selectedPatient.expand?.tutor_id?.name || 'Não informado'}
+                      </span>
+                    </span>
+                    {selectedPatient.nume && (
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-[10px] py-0 px-1.5 h-4 bg-blue-50 text-blue-800 border-blue-200 font-semibold"
+                      >
+                        Nº {selectedPatient.nume}
+                      </Badge>
+                    )}
                   </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedPatient(null)}
-                    className="text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 self-end sm:self-center h-8"
+                  <button
+                    type="button"
+                    onClick={() => setIsSearchOpen(true)}
+                    className="text-xs text-emerald-700 hover:text-emerald-900 underline font-medium hover:bg-emerald-100/60 px-2 py-0.5 rounded transition-colors shrink-0"
                   >
-                    Trocar Animal
-                  </Button>
+                    trocar
+                  </button>
                 </div>
               ) : (
                 <div className="bg-slate-50 border border-dashed border-slate-300 rounded-lg p-3 text-center text-xs text-slate-500">
                   Nenhum animal selecionado. Use a busca abaixo para encontrar o tutor ou animal e
-                  clicar em <strong>Selecionar</strong>.
+                  clicar em <strong>Selecionar para Receita</strong>.
                 </div>
               )}
 
@@ -633,25 +624,32 @@ export default function PrescriptionPage() {
               </div>
 
               {/* Busca Principal Tutor + Animal Reutilizada (Mesma de /pacientes com Ação Selecionar) */}
-              <div className="pt-2 border-t border-slate-200/80 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                    <PawPrint className="w-3.5 h-3.5 text-emerald-700" />
-                    Buscar Animal ou Tutor para a Receita *
-                  </Label>
-                  <span className="text-[11px] text-muted-foreground">
-                    Mesma busca de /pacientes com seleção direta
-                  </span>
-                </div>
+              {(!selectedPatient || isSearchOpen) && (
+                <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                      <PawPrint className="w-3.5 h-3.5 text-emerald-700" />
+                      Buscar Animal ou Tutor para a Receita *
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      Mesma busca de /pacientes com seleção direta
+                    </span>
+                  </div>
 
-                <MainTutorAnimalSearch
-                  selectionMode={true}
-                  selectActionLabel="Selecionar para Receita"
-                  enableNavigation={false}
-                  syncWithUrl={false}
-                  onSelectPatient={handleSelectPatientFromSearch}
-                />
-              </div>
+                  <MainTutorAnimalSearch
+                    selectionMode={true}
+                    selectActionLabel="Selecionar para Receita"
+                    enableNavigation={false}
+                    syncWithUrl={false}
+                    closeDrawerOnSelect={true}
+                    closeResultsOnSelect={true}
+                    onSelectPatient={(patient) => {
+                      handleSelectPatientFromSearch(patient)
+                      setIsSearchOpen(false)
+                    }}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 

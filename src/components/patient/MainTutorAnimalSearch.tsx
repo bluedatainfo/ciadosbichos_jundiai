@@ -67,6 +67,8 @@ interface MainTutorAnimalSearchProps {
   selectActionLabel?: string
   /** Se deve fechar o drawer automaticamente ao selecionar o animal (padrão: true quando selectionMode=true) */
   closeDrawerOnSelect?: boolean
+  /** Se deve fechar o painel de resultados da busca ao selecionar o animal (padrão: false) */
+  closeResultsOnSelect?: boolean
   /** Se deve sincronizar o estado da busca com o histórico da URL via popstate (padrão: true) */
   syncWithUrl?: boolean
 }
@@ -84,6 +86,7 @@ export function MainTutorAnimalSearch({
   selectionMode = false,
   selectActionLabel = 'Selecionar',
   closeDrawerOnSelect = true,
+  closeResultsOnSelect = false,
   syncWithUrl = true,
 }: MainTutorAnimalSearchProps) {
   const [searchTerm, setSearchTerm] = useState(initialState?.term || '')
@@ -388,6 +391,22 @@ export function MainTutorAnimalSearch({
     if (closeDrawerOnSelect) {
       setDrawerOpen(false)
       notifyStateChange({ drawerTutorId: null })
+    }
+    if (closeResultsOnSelect) {
+      setSearchTerm('')
+      setDebouncedSearch('')
+      setResults([])
+      setTotalItems(0)
+      setHasMore(false)
+      setHasSearched(false)
+      setDrawerOpen(false)
+      setSelectedDrawerTutor(null)
+      setDrawerAnimals([])
+      notifyStateChange({
+        term: '',
+        page: 1,
+        drawerTutorId: null,
+      })
     }
   }
 
