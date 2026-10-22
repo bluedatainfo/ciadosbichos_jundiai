@@ -58,6 +58,12 @@ import {
 import { removeAccents } from '@/lib/search-utils'
 import { MainTutorAnimalSearch } from '@/components/patient/MainTutorAnimalSearch'
 import {
+  resolveInitialPacientesState,
+  persistPacientesState,
+  PacientesNavState,
+  MainSearchNavState,
+} from '@/services/pacientes-navigation-state'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -80,22 +86,36 @@ const openWhatsApp = (phone: string) => {
 const PAGE_SIZE = 50
 
 export default function Patients() {
-  const [activeTab, setActiveTab] = useState<'patients' | 'tutors'>('patients')
+  const [initialNavState] = useState<PacientesNavState>(() => resolveInitialPacientesState())
 
-  const [patientSearch, setPatientSearch] = useState('')
-  const [debouncedPatientSearch, setDebouncedPatientSearch] = useState('')
-  const [patientSpeciesFilter, setPatientSpeciesFilter] = useState('all')
-  const [patientSortField, setPatientSortField] = useState<'name' | 'tutor' | null>(null)
-  const [patientSortDirection, setPatientSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [patientPage, setPatientPage] = useState(1)
+  const [activeTab, setActiveTab] = useState<'patients' | 'tutors'>(initialNavState.activeTab)
+
+  const [patientSearch, setPatientSearch] = useState(initialNavState.patientsTab.search)
+  const [debouncedPatientSearch, setDebouncedPatientSearch] = useState(
+    initialNavState.patientsTab.search,
+  )
+  const [patientSpeciesFilter, setPatientSpeciesFilter] = useState(
+    initialNavState.patientsTab.species,
+  )
+  const [patientSortField, setPatientSortField] = useState<'name' | 'tutor' | null>(
+    initialNavState.patientsTab.sortField,
+  )
+  const [patientSortDirection, setPatientSortDirection] = useState<'asc' | 'desc'>(
+    initialNavState.patientsTab.sortDirection,
+  )
+  const [patientPage, setPatientPage] = useState(initialNavState.patientsTab.page)
   const [totalPatients, setTotalPatients] = useState(0)
   const [patientsLoading, setPatientsLoading] = useState(false)
 
-  const [tutorSearch, setTutorSearch] = useState('')
-  const [debouncedTutorSearch, setDebouncedTutorSearch] = useState('')
-  const [tutorSortField, setTutorSortField] = useState<'name' | null>(null)
-  const [tutorSortDirection, setTutorSortDirection] = useState<'asc' | 'desc'>('asc')
-  const [tutorPage, setTutorPage] = useState(1)
+  const [tutorSearch, setTutorSearch] = useState(initialNavState.tutorsTab.search)
+  const [debouncedTutorSearch, setDebouncedTutorSearch] = useState(initialNavState.tutorsTab.search)
+  const [tutorSortField, setTutorSortField] = useState<'name' | null>(
+    initialNavState.tutorsTab.sortField,
+  )
+  const [tutorSortDirection, setTutorSortDirection] = useState<'asc' | 'desc'>(
+    initialNavState.tutorsTab.sortDirection,
+  )
+  const [tutorPage, setTutorPage] = useState(initialNavState.tutorsTab.page)
   const [totalTutors, setTotalTutors] = useState(0)
   const [tutorsLoading, setTutorsLoading] = useState(false)
 
@@ -161,7 +181,9 @@ export default function Patients() {
   const [newTutorCepLoading, setNewTutorCepLoading] = useState(false)
 
   // Estado para Modal de Pacientes do Tutor
-  const [isTutorPatientsDialogOpen, setIsTutorPatientsDialogOpen] = useState(false)
+  const [isTutorPatientsDialogOpen, setIsTutorPatientsDialogOpen] = useState(
+    Boolean(initialNavState.tutorsTab.modalTutorId),
+  )
   const [selectedTutorForPatients, setSelectedTutorForPatients] = useState<Tutor | null>(null)
   const [tutorPatientsList, setTutorPatientsList] = useState<Patient[]>([])
   const [tutorPatientsLoading, setTutorPatientsLoading] = useState(false)
@@ -172,6 +194,13 @@ export default function Patients() {
     }
     setSelectedTutorForPatients(tutor)
     setIsTutorPatientsDialogOpen(true)
+    persistPacientesState((prev) => ({
+      ...prev,
+      tutorsTab: {
+        ...prev.tutorsTab,
+        modalTutorId: tutor.id,
+      },
+    }))
     setTutorPatientsLoading(true)
     try {
       const list = await api.getPatientsByTutor(tutor.id)
@@ -188,6 +217,30 @@ export default function Patients() {
       setTutorPatientsLoading(false)
     }
   }
+
+  // Se veio com modalTutorId salvo no initialNavState, reabre o modal de animais do tutor
+  useEffect(() => {
+    if (initialNavState.tutorsTab.modalTutorId) {
+      const tutorId = initialNavState.tutorsTab.modalTutorId
+      setIsTutorPatientsDialogOpen(true)
+      setTutorPatientsLoading(true)
+      api
+        .getTutorsPaged({ page: 1, perPage: 1, search: '' }) // mock fetch or direct fetch
+        .then(async () => {
+          const { default: pb } = await import('@/lib/pocketbase/client')
+          const tutor = await pb.collection('tutors').getOne<Tutor>(tutorId)
+          setSelectedTutorForPatients(tutor)
+          const list = await api.getPatientsByTutor(tutorId)
+          setTutorPatientsList(list)
+        })
+        .catch((e) => {
+          console.warn('Erro ao restaurar modal de animais do tutor:', e)
+        })
+        .finally(() => {
+          setTutorPatientsLoading(false)
+        })
+    }
+  }, [])
 
   const handleNewTutorCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value.replace(/\D/g, '')
@@ -221,6 +274,14 @@ export default function Patients() {
     const t = setTimeout(() => {
       setDebouncedPatientSearch(patientSearch)
       setPatientPage(1)
+      persistPacientesState((prev) => ({
+        ...prev,
+        patientsTab: {
+          ...prev.patientsTab,
+          search: patientSearch,
+          page: 1,
+        },
+      }))
     }, 400)
     return () => clearTimeout(t)
   }, [patientSearch])
@@ -229,6 +290,14 @@ export default function Patients() {
     const t = setTimeout(() => {
       setDebouncedTutorSearch(tutorSearch)
       setTutorPage(1)
+      persistPacientesState((prev) => ({
+        ...prev,
+        tutorsTab: {
+          ...prev.tutorsTab,
+          search: tutorSearch,
+          page: 1,
+        },
+      }))
     }, 400)
     return () => clearTimeout(t)
   }, [tutorSearch])
@@ -996,10 +1065,30 @@ export default function Patients() {
         </Sheet>
       </div>
 
-      {/* Nova Busca Principal (Tutor + Animal) — Lógica Reutilizável */}
-      <MainTutorAnimalSearch onOpenTutorPatients={handleOpenTutorPatients} />
+      {/* Nova Busca Principal (Tutor + Animal) — Lógica Reutilizável com Mestre-Detalhe e Persistência */}
+      <MainTutorAnimalSearch
+        initialState={initialNavState.mainSearch}
+        onStateChange={(searchState: MainSearchNavState) => {
+          persistPacientesState((prev) => ({
+            ...prev,
+            mainSearch: searchState,
+          }))
+        }}
+        onOpenTutorPatients={handleOpenTutorPatients}
+      />
 
-      <Tabs defaultValue="patients" className="w-full">
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) => {
+          const tab = val as 'patients' | 'tutors'
+          setActiveTab(tab)
+          persistPacientesState((prev) => ({
+            ...prev,
+            activeTab: tab,
+          }))
+        }}
+        className="w-full"
+      >
         <TabsList className="mb-4 bg-slate-200/80 p-1 border border-slate-300/80 shadow-2xs">
           <TabsTrigger
             value="patients"
@@ -1960,7 +2049,21 @@ export default function Patients() {
       </Dialog>
 
       {/* Modal de Pacientes do Tutor */}
-      <Dialog open={isTutorPatientsDialogOpen} onOpenChange={setIsTutorPatientsDialogOpen}>
+      <Dialog
+        open={isTutorPatientsDialogOpen}
+        onOpenChange={(open) => {
+          setIsTutorPatientsDialogOpen(open)
+          if (!open) {
+            persistPacientesState((prev) => ({
+              ...prev,
+              tutorsTab: {
+                ...prev.tutorsTab,
+                modalTutorId: null,
+              },
+            }))
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

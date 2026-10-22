@@ -29,9 +29,14 @@ export interface TutorAnimalPair {
   relevanceScore: number
   /** Se o NOME DO TUTOR casou com a busca (grupo que vem primeiro no escopo "Tudo") */
   isTutorMatch: boolean
+  /** Indica se este item representa um card agrupado mestre de Tutor (sem repetir animais) */
+  isTutorMasterCard?: boolean
 }
+export type SearchScope = 'all' | 'tutor' | 'animal'
+
 export interface TutorAnimalSearchFilters {
   query?: string
+  scope?: SearchScope
   species?: string
   breed?: string
   phone?: string
@@ -97,6 +102,7 @@ export function buildMultiWordSearchFilter(
   species?: string,
   breed?: string,
   phone?: string,
+  scope: SearchScope = 'all',
 ): string {
   const filterParts: string[] = []
 
@@ -107,7 +113,7 @@ export function buildMultiWordSearchFilter(
     .filter((w) => w.length > 0)
 
   if (words.length > 0) {
-    // Para cada palavra, constrói condição OR entre campos de tutor e paciente
+    // Para cada palavra, constrói condição de acordo com o escopo
     const wordConditions: string[] = []
 
     for (const word of words) {
@@ -116,7 +122,18 @@ export function buildMultiWordSearchFilter(
       const cleanWord = escapePbFilter(word)
       const patientCodePart = `nume ~ "${cleanWord}" || ctrl ~ "${cleanWord}"`
 
-      const orTerms = [tutorNamePart, patientNamePart, patientCodePart].filter(Boolean)
+      let orTerms: string[] = []
+      if (scope === 'tutor') {
+        // Apenas nome do tutor
+        orTerms = [tutorNamePart].filter(Boolean)
+      } else if (scope === 'animal') {
+        // Apenas nome do paciente ou código NUME/CTRL
+        orTerms = [patientNamePart, patientCodePart].filter(Boolean)
+      } else {
+        // Escopo "Tudo": nome do tutor OU nome do paciente OU código
+        orTerms = [tutorNamePart, patientNamePart, patientCodePart].filter(Boolean)
+      }
+
       if (orTerms.length > 0) {
         wordConditions.push(`(${orTerms.join(' || ')})`)
       }
@@ -273,7 +290,14 @@ export async function searchTutorAnimalPairs(
   const perPage = filters.perPage || 50
   const query = filters.query?.trim() || ''
 
-  const pbFilter = buildMultiWordSearchFilter(query, filters.species, filters.breed, filters.phone)
+  const scope: SearchScope = filters.scope || 'all'
+  const pbFilter = buildMultiWordSearchFilter(
+    query,
+    filters.species,
+    filters.breed,
+    filters.phone,
+    scope,
+  )
 
   // Realiza a busca paginada na collection 'patients' com expand em 'tutor_id'
   const res = await pb.collection('patients').getList<Patient>(page, perPage, {
@@ -352,8 +376,37 @@ export async function searchTutorAnimalPairs(
       return b.relevanceScore - a.relevanceScore
     })
   }
+
+  // Agrupamento mestre-detalhe para casamentos por NOME DO TUTOR:
+  // Se o resultado casar pelo nome do tutor (escopo "Tudo" ou "Tutor"):
+  // exibir um único quadro por tutor (sem repetir o quadro para cada animal dele).
+  // Para casamentos pelo animal (isAnimalMatch e !isTutorMatch ou escopo animal):
+  // mantém o formato individual do animal em destaque.
+  const finalItems: TutorAnimalPair[] = []
+  const seenTutorIdsForTutorMatches = new Set<string>()
+
+  for (const pair of pairs) {
+    const isTutorMatchResult = pair.isTutorMatch || scope === 'tutor'
+
+    if (isTutorMatchResult && pair.tutor && pair.tutor.id) {
+      if (!seenTutorIdsForTutorMatches.has(pair.tutor.id)) {
+        seenTutorIdsForTutorMatches.add(pair.tutor.id)
+        finalItems.push({
+          ...pair,
+          isTutorMasterCard: true,
+        })
+      }
+    } else {
+      // Animal match puro ou resultado não tutor
+      finalItems.push({
+        ...pair,
+        isTutorMasterCard: false,
+      })
+    }
+  }
+
   return {
-    items: pairs,
+    items: finalItems,
     totalItems: res.totalItems,
     page: res.page,
     perPage: res.perPage,

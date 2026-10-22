@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowRight,
   BadgeAlert,
+  ExternalLink,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -28,11 +29,20 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import {
   searchTutorAnimalPairs,
   TutorAnimalPair,
   TutorAnimalSearchFilters,
+  SearchScope,
 } from '@/services/tutor-animal-search'
 import { Patient, Tutor } from '@/lib/types'
+import { MainSearchNavState, persistPacientesState } from '@/services/pacientes-navigation-state'
 
 interface MainTutorAnimalSearchProps {
   /** Callback opcional quando o usuário seleciona um paciente ou tutor */
@@ -44,6 +54,10 @@ interface MainTutorAnimalSearchProps {
   onOpenTutorPatients?: (tutor: Tutor) => void
   /** Espécies pré-carregadas para o filtro (opcional) */
   speciesOptions?: string[]
+  /** Estado inicial vindo da persistência de navegação */
+  initialState?: MainSearchNavState
+  /** Callback quando o estado interno da busca muda para persistência */
+  onStateChange?: (state: MainSearchNavState) => void
 }
 
 const DEFAULT_SPECIES = ['Canino', 'Felino', 'Cão', 'Gato', 'Ave', 'Silvestre', 'Outro']
@@ -54,27 +68,58 @@ export function MainTutorAnimalSearch({
   enableNavigation = true,
   onOpenTutorPatients,
   speciesOptions = DEFAULT_SPECIES,
+  initialState,
+  onStateChange,
 }: MainTutorAnimalSearchProps) {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [searchTerm, setSearchTerm] = useState(initialState?.term || '')
+  const [debouncedSearch, setDebouncedSearch] = useState(initialState?.term || '')
+  const [searchScope, setSearchScope] = useState<SearchScope>(initialState?.scope || 'all')
 
   // Filtros avançados
   const [isFilterOpen, setIsFilterOpen] = useState(false)
-  const [filterSpecies, setFilterSpecies] = useState('all')
-  const [filterBreed, setFilterBreed] = useState('')
-  const [filterPhone, setFilterPhone] = useState('')
+  const [filterSpecies, setFilterSpecies] = useState(initialState?.species || 'all')
+  const [filterBreed, setFilterBreed] = useState(initialState?.breed || '')
+  const [filterPhone, setFilterPhone] = useState(initialState?.phone || '')
 
   // Resultados e paginação
   const [results, setResults] = useState<TutorAnimalPair[]>([])
   const [totalItems, setTotalItems] = useState(0)
-  const [currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(initialState?.page || 1)
   const [hasMore, setHasMore] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
-  const [hasSearched, setHasSearched] = useState(false)
+  const [hasSearched, setHasSearched] = useState(
+    Boolean(initialState?.term?.trim()) ||
+      Boolean(initialState?.species && initialState.species !== 'all') ||
+      Boolean(initialState?.breed?.trim()) ||
+      Boolean(initialState?.phone?.trim()),
+  )
+
+  // Drawer lateral para visualização mestre-detalhe dos animais do tutor
+  const [drawerOpen, setDrawerOpen] = useState(Boolean(initialState?.drawerTutorId))
+  const [selectedDrawerTutor, setSelectedDrawerTutor] = useState<Tutor | null>(null)
+  const [drawerAnimals, setDrawerAnimals] = useState<Patient[]>([])
+  const [drawerAnimalsLoading, setDrawerAnimalsLoading] = useState(false)
 
   const activeFiltersCount =
     (filterSpecies !== 'all' ? 1 : 0) + (filterBreed.trim() ? 1 : 0) + (filterPhone.trim() ? 1 : 0)
+
+  // Atualiza a persistência de navegação sempre que os filtros mudarem
+  const notifyStateChange = (updates?: Partial<MainSearchNavState>) => {
+    const currentState: MainSearchNavState = {
+      term: searchTerm,
+      scope: searchScope,
+      species: filterSpecies,
+      breed: filterBreed,
+      phone: filterPhone,
+      page: currentPage,
+      drawerTutorId: selectedDrawerTutor?.id || null,
+      ...updates,
+    }
+    if (onStateChange) {
+      onStateChange(currentState)
+    }
+  }
 
   // Debounce do termo de busca principal (350ms)
   useEffect(() => {
@@ -84,7 +129,7 @@ export function MainTutorAnimalSearch({
     return () => clearTimeout(t)
   }, [searchTerm])
 
-  // Executa busca sempre que busca ou filtros mudarem
+  // Executa busca sempre que busca, escopo ou filtros mudarem
   useEffect(() => {
     const hasActiveSearch =
       Boolean(debouncedSearch.trim()) ||
@@ -97,12 +142,66 @@ export function MainTutorAnimalSearch({
       setTotalItems(0)
       setHasMore(false)
       setHasSearched(false)
+      notifyStateChange({ term: debouncedSearch, page: 1 })
       return
     }
 
     setHasSearched(true)
-    performSearch(1, true)
-  }, [debouncedSearch, filterSpecies, filterBreed, filterPhone])
+    const initialPage = 1
+    setCurrentPage(initialPage)
+    performSearch(initialPage, true)
+    notifyStateChange({ term: debouncedSearch, scope: searchScope, page: initialPage })
+  }, [debouncedSearch, searchScope, filterSpecies, filterBreed, filterPhone])
+
+  // Se houver drawerTutorId salvo no initialState, recupera tutor e reabre o drawer
+  useEffect(() => {
+    if (initialState?.drawerTutorId) {
+      const tutorId = initialState.drawerTutorId
+      // Tenta recuperar da lista de resultados se já existir ou buscar via API
+      openDrawerForTutorId(tutorId)
+    }
+  }, [])
+
+  const openDrawerForTutorId = async (
+    tutorId: string,
+    initialTutorObj?: Tutor,
+    cachedAnimals?: Patient[],
+  ) => {
+    setDrawerOpen(true)
+    notifyStateChange({ drawerTutorId: tutorId })
+
+    if (initialTutorObj && cachedAnimals && cachedAnimals.length > 0) {
+      setSelectedDrawerTutor(initialTutorObj)
+      setDrawerAnimals(cachedAnimals)
+      return
+    }
+
+    setDrawerAnimalsLoading(true)
+    try {
+      const { default: pb } = await import('@/lib/pocketbase/client')
+      let tutorObj = initialTutorObj
+      if (!tutorObj) {
+        try {
+          tutorObj = await pb.collection('tutors').getOne<Tutor>(tutorId)
+        } catch {
+          /* ignora se não encontrar tutor */
+        }
+      }
+      if (tutorObj) {
+        setSelectedDrawerTutor(tutorObj)
+      }
+
+      const patients = await pb.collection('patients').getFullList<Patient>({
+        filter: `tutor_id = "${tutorId}"`,
+        sort: 'name',
+      })
+      setDrawerAnimals(patients)
+    } catch (e) {
+      console.warn('Erro ao carregar animais no drawer do tutor:', e)
+    } finally {
+      setDrawerAnimalsLoading(false)
+    }
+  }
 
   const performSearch = async (pageToLoad: number, isInitial: boolean) => {
     if (isInitial) {
@@ -114,6 +213,7 @@ export function MainTutorAnimalSearch({
     try {
       const filters: TutorAnimalSearchFilters = {
         query: debouncedSearch,
+        scope: searchScope,
         species: filterSpecies,
         breed: filterBreed,
         phone: filterPhone,
@@ -127,10 +227,19 @@ export function MainTutorAnimalSearch({
         setResults(res.items)
       } else {
         setResults((prev) => {
-          const existingIds = new Set(prev.map((i) => i.matchedPatient?.id || i.tutor.id))
-          const newOnes = res.items.filter(
-            (i) => !existingIds.has(i.matchedPatient?.id || i.tutor.id),
+          const existingKeys = new Set(
+            prev.map((i) =>
+              i.isTutorMasterCard
+                ? `tutor-${i.tutor.id}`
+                : `patient-${i.matchedPatient?.id || i.tutor.id}`,
+            ),
           )
+          const newOnes = res.items.filter((i) => {
+            const key = i.isTutorMasterCard
+              ? `tutor-${i.tutor.id}`
+              : `patient-${i.matchedPatient?.id || i.tutor.id}`
+            return !existingKeys.has(key)
+          })
           return [...prev, ...newOnes]
         })
       }
@@ -138,6 +247,15 @@ export function MainTutorAnimalSearch({
       setTotalItems(res.totalItems)
       setCurrentPage(res.page)
       setHasMore(res.hasMore)
+
+      // Se o drawer estava aberto para um tutor salvo, atualiza o objeto do tutor caso apareça nos resultados
+      if (initialState?.drawerTutorId && !selectedDrawerTutor) {
+        const matchingPair = res.items.find((p) => p.tutor?.id === initialState.drawerTutorId)
+        if (matchingPair) {
+          setSelectedDrawerTutor(matchingPair.tutor)
+          setDrawerAnimals(matchingPair.associatedPatients)
+        }
+      }
     } catch (err) {
       console.error('Erro na busca principal Tutor + Animal:', err)
       if (isInitial) {
@@ -153,12 +271,15 @@ export function MainTutorAnimalSearch({
 
   const handleLoadMore = () => {
     if (isLoadingMore || !hasMore) return
-    performSearch(currentPage + 1, false)
+    const nextPage = currentPage + 1
+    performSearch(nextPage, false)
+    notifyStateChange({ page: nextPage })
   }
 
   const handleClearSearch = () => {
     setSearchTerm('')
     setDebouncedSearch('')
+    setSearchScope('all')
     setFilterSpecies('all')
     setFilterBreed('')
     setFilterPhone('')
@@ -166,6 +287,18 @@ export function MainTutorAnimalSearch({
     setTotalItems(0)
     setHasMore(false)
     setHasSearched(false)
+    setDrawerOpen(false)
+    setSelectedDrawerTutor(null)
+    setDrawerAnimals([])
+    notifyStateChange({
+      term: '',
+      scope: 'all',
+      species: 'all',
+      breed: '',
+      phone: '',
+      page: 1,
+      drawerTutorId: null,
+    })
   }
 
   const handleClearFiltersOnly = () => {
@@ -174,7 +307,10 @@ export function MainTutorAnimalSearch({
     setFilterPhone('')
   }
 
-  const openWhatsApp = (phone: string) => {
+  const openWhatsApp = (phone: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation()
+    }
     const cleanPhone = phone?.replace(/\D/g, '') || ''
     if (cleanPhone) {
       const number = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`
@@ -182,16 +318,68 @@ export function MainTutorAnimalSearch({
     }
   }
 
+  const handleTutorCardClick = (pair: TutorAnimalPair) => {
+    if (onSelectTutor) {
+      onSelectTutor(pair.tutor)
+    }
+    setSelectedDrawerTutor(pair.tutor)
+    setDrawerAnimals(pair.associatedPatients)
+    setDrawerOpen(true)
+    notifyStateChange({ drawerTutorId: pair.tutor.id })
+  }
+
+  const handleDrawerClose = (open: boolean) => {
+    setDrawerOpen(open)
+    if (!open) {
+      notifyStateChange({ drawerTutorId: null })
+    }
+  }
+
   return (
     <div className="space-y-3">
-      {/* Barra Principal de Busca com Botão de Filtro */}
+      {/* Barra Principal de Busca com Seletor de Escopo e Botão de Filtro */}
       <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center">
+        {/* Seletor de Escopo: Tudo | Tutor | Animal */}
+        <div className="w-full sm:w-36 shrink-0">
+          <Select
+            value={searchScope}
+            onValueChange={(val: SearchScope) => {
+              setSearchScope(val)
+              notifyStateChange({ scope: val })
+            }}
+          >
+            <SelectTrigger
+              className="h-11 bg-white border-slate-300 shadow-2xs text-xs font-semibold text-slate-800"
+              title="Escopo da pesquisa"
+            >
+              <SelectValue placeholder="Escopo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">
+                <span className="font-medium">Tudo (Tutor + Animal)</span>
+              </SelectItem>
+              <SelectItem value="tutor">
+                <span className="font-medium">Apenas Tutor</span>
+              </SelectItem>
+              <SelectItem value="animal">
+                <span className="font-medium">Apenas Animal</span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por Tutor e/ou Animal (ex: 'Francisco Maria', 'Pipoca', 'Sansão')..."
+            placeholder={
+              searchScope === 'tutor'
+                ? "Buscar pelo Nome do Tutor (ex: 'Francisco Maria', 'Silva')..."
+                : searchScope === 'animal'
+                  ? "Buscar pelo Nome do Animal ou Nº Oficial (ex: 'Pipoca', 'Sansão', '1042')..."
+                  : "Buscar por Tutor e/ou Animal (ex: 'Francisco Maria', 'Pipoca', 'Sansão')..."
+            }
             className="pl-10 pr-9 bg-white border-slate-300 shadow-2xs h-11 text-sm focus-visible:ring-primary focus-visible:border-primary"
           />
           {searchTerm && (
@@ -397,6 +585,14 @@ export function MainTutorAnimalSearch({
                 <span className="text-sm font-semibold text-slate-900">
                   Resultados da Busca Principal (Tutor + Animal)
                 </span>
+                {searchScope !== 'all' && (
+                  <Badge
+                    variant="outline"
+                    className="text-[11px] font-medium border-primary/30 text-primary"
+                  >
+                    {searchScope === 'tutor' ? 'Escopo: Tutor' : 'Escopo: Animal'}
+                  </Badge>
+                )}
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-2">
                 {isLoading ? (
@@ -413,7 +609,7 @@ export function MainTutorAnimalSearch({
               </div>
             </div>
 
-            {/* Lista de Resultados como Dupla Identificável */}
+            {/* Lista de Resultados */}
             {isLoading && results.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground">
                 <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
@@ -431,17 +627,103 @@ export function MainTutorAnimalSearch({
                 {results.map((pair, index) => {
                   const patient = pair.matchedPatient
                   const tutor = pair.tutor
-                  const isAnimalFocus = pair.isAnimalMatch && Boolean(patient)
 
+                  // Item 1: Apresentação mestre-detalhe na nova busca
+                  // Quando o resultado casar pelo NOME DO TUTOR (escopo "Tudo" ou "Tutor"):
+                  // Exibir UM ÚNICO QUADRO POR TUTOR — nome, telefone/WhatsApp e indicador de "X animais",
+                  // sem repetir os dados dos animais no quadro.
+                  // Ao clicar no quadro do tutor, abre painel lateral (drawer/sheet padrão shadcn)
+                  // listando TODOS os animais daquele tutor com os botões já existentes hoje.
+                  if (pair.isTutorMasterCard) {
+                    const animalCount = pair.associatedPatients.length
+                    return (
+                      <div
+                        key={`tutor-master-${tutor.id}-${index}`}
+                        onClick={() => handleTutorCardClick(pair)}
+                        className="group bg-white hover:bg-slate-50/95 border border-slate-200 hover:border-primary/50 rounded-lg p-3 sm:p-4 transition-all shadow-2xs hover:shadow-sm cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-3"
+                      >
+                        {/* Lado Esquerdo: Quadro do Tutor Mestre */}
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
+                              <User className="w-3 h-3 text-slate-500" /> Tutor(a)
+                            </span>
+                            <span className="text-base font-bold text-slate-900 group-hover:text-primary transition-colors">
+                              {tutor.name}
+                            </span>
+                            {tutor.phone && (
+                              <span className="text-xs font-mono text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                                {tutor.phone}
+                              </span>
+                            )}
+                            {tutor.phone && (
+                              <button
+                                type="button"
+                                onClick={(e) => openWhatsApp(tutor.phone, e)}
+                                className="text-green-600 hover:text-green-700 p-0.5 inline-flex items-center hover:scale-110 transition-transform"
+                                title="WhatsApp do tutor"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </button>
+                            )}
+                            {tutor.city && (
+                              <span className="text-xs text-slate-500">
+                                • {tutor.city}
+                                {tutor.state ? `/${tutor.state}` : ''}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Indicador de "X animais" — sem repetir os dados dos animais no quadro */}
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <Badge
+                              variant="secondary"
+                              className="bg-primary/10 text-primary border border-primary/25 font-semibold text-xs px-2.5 py-0.5 gap-1.5"
+                            >
+                              <PawPrint className="w-3.5 h-3.5" />
+                              <span>
+                                {animalCount === 0
+                                  ? 'Nenhum animal vinculado'
+                                  : animalCount === 1
+                                    ? '1 animal'
+                                    : `${animalCount} animais`}
+                              </span>
+                            </Badge>
+                            <span className="text-xs text-slate-400">
+                              (Clique para ver a lista completa de animais)
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Lado Direito: Ação para Abrir Drawer */}
+                        <div className="flex items-center gap-2 shrink-0 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs gap-1 border-primary/30 text-primary group-hover:bg-primary group-hover:text-white transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleTutorCardClick(pair)
+                            }}
+                          >
+                            <span>Ver Animais ({animalCount})</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // Item 1.3: Quando o casamento for pelo NOME DO ANIMAL (escopo "Tudo" ou "Animal"):
+                  // manter o formato atual: animal em destaque (espécie/raça) com o tutor identificado.
                   return (
                     <div
-                      key={`${pair.tutor.id}-${patient?.id || index}`}
+                      key={`patient-focus-${tutor.id}-${patient?.id || index}`}
                       className="group bg-white hover:bg-slate-50/90 border border-slate-200 rounded-lg p-3 sm:p-3.5 transition-all shadow-2xs hover:border-primary/40 hover:shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3"
                     >
-                      {/* Lado Esquerdo: Tutor e/ou Animal em Foco */}
+                      {/* Lado Esquerdo: Animal em Destaque + Tutor Identificado */}
                       <div className="flex-1 min-w-0 space-y-1.5">
-                        {/* Se o foco for pelo animal (busca casou com o animal) */}
-                        {isAnimalFocus && patient ? (
+                        {patient && (
                           <div>
                             {/* Destaque do Animal */}
                             <div className="flex items-center gap-2 flex-wrap">
@@ -511,7 +793,7 @@ export function MainTutorAnimalSearch({
                               {tutor.phone && (
                                 <button
                                   type="button"
-                                  onClick={() => openWhatsApp(tutor.phone)}
+                                  onClick={(e) => openWhatsApp(tutor.phone, e)}
                                   className="text-green-600 hover:text-green-700 p-0.5 inline-flex items-center"
                                   title="WhatsApp do tutor"
                                 >
@@ -526,57 +808,17 @@ export function MainTutorAnimalSearch({
                               )}
                             </div>
                           </div>
-                        ) : (
-                          /* Foco pelo Tutor (fluxo típico: a recepção busca primeiro o tutor) */
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                                <User className="w-3 h-3 text-slate-500" /> Tutor(a)
-                              </span>
-                              <span className="text-base font-bold text-slate-900">
-                                {tutor.name}
-                              </span>
-                              {tutor.phone && (
-                                <span className="text-xs font-mono text-slate-600 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200">
-                                  {tutor.phone}
-                                </span>
-                              )}
-                              {tutor.phone && (
-                                <button
-                                  type="button"
-                                  onClick={() => openWhatsApp(tutor.phone)}
-                                  className="text-green-600 hover:text-green-700 p-0.5 inline-flex items-center"
-                                  title="WhatsApp do tutor"
-                                >
-                                  <MessageCircle className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                              {tutor.city && (
-                                <span className="text-xs text-slate-500">
-                                  • {tutor.city}
-                                  {tutor.state ? `/${tutor.state}` : ''}
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Informações complementares do tutor se houver */}
-                            {tutor.cpf && (
-                              <div className="text-[11px] text-slate-500 mt-0.5 font-mono">
-                                CPF: {tutor.cpf}
-                              </div>
-                            )}
-                          </div>
                         )}
 
                         {/* Animais Associados ao Lado / Abaixo com badges clicáveis */}
                         <div className="pt-1 flex items-center gap-1.5 flex-wrap">
                           <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
                             <PawPrint className="w-3.5 h-3.5 text-slate-400" />
-                            Animais associados ({pair.associatedPatients.length}):
+                            Outros animais deste tutor ({pair.associatedPatients.length}):
                           </span>
                           {pair.associatedPatients.length === 0 ? (
                             <span className="text-xs text-slate-400 italic">
-                              Nenhum animal vinculado
+                              Nenhum outro animal vinculado
                             </span>
                           ) : (
                             pair.associatedPatients.map((assoc) => {
@@ -634,17 +876,15 @@ export function MainTutorAnimalSearch({
                           </Link>
                         )}
 
-                        {onOpenTutorPatients && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onOpenTutorPatients(tutor)}
-                            className="h-8 text-xs text-slate-600 hover:text-slate-900"
-                            title="Ver todos os animais deste tutor"
-                          >
-                            <span>Ver Todos</span>
-                          </Button>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleTutorCardClick(pair)}
+                          className="h-8 text-xs text-slate-600 hover:text-slate-900"
+                          title="Ver todos os animais deste tutor em painel lateral"
+                        >
+                          <span>Ver Todos</span>
+                        </Button>
                       </div>
                     </div>
                   )
@@ -677,6 +917,149 @@ export function MainTutorAnimalSearch({
           </CardContent>
         </Card>
       )}
+
+      {/* Drawer Lateral (Sheet shadcn) para Apresentação Mestre-Detalhe dos Animais do Tutor */}
+      <Sheet open={drawerOpen} onOpenChange={handleDrawerClose}>
+        <SheetContent side="right" className="w-full sm:max-w-lg overflow-y-auto p-6 flex flex-col">
+          <SheetHeader className="pb-3 border-b">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+                <User className="w-4 h-4" />
+              </div>
+              <div>
+                <SheetTitle className="text-lg font-bold text-slate-900">
+                  {selectedDrawerTutor?.name || 'Animais do Tutor'}
+                </SheetTitle>
+                <SheetDescription className="text-xs text-slate-500">
+                  {selectedDrawerTutor?.phone && (
+                    <span className="font-mono mr-2">{selectedDrawerTutor.phone}</span>
+                  )}
+                  {selectedDrawerTutor?.city && (
+                    <span>
+                      {selectedDrawerTutor.city}
+                      {selectedDrawerTutor.state ? `/${selectedDrawerTutor.state}` : ''}
+                    </span>
+                  )}
+                </SheetDescription>
+              </div>
+            </div>
+            {selectedDrawerTutor?.phone && (
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => openWhatsApp(selectedDrawerTutor.phone, e)}
+                  className="h-8 text-xs gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+                  <span>Conversar no WhatsApp</span>
+                </Button>
+              </div>
+            )}
+          </SheetHeader>
+
+          <div className="mt-4 flex-1 space-y-3">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-700 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <PawPrint className="w-4 h-4 text-primary" />
+                Animais Vinculados ({drawerAnimals.length})
+              </span>
+            </div>
+
+            {drawerAnimalsLoading ? (
+              <div className="py-12 text-center text-muted-foreground text-sm">
+                <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary mb-2" />
+                Carregando animais do tutor...
+              </div>
+            ) : drawerAnimals.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground text-sm border rounded-lg bg-slate-50">
+                Nenhum animal cadastrado para este tutor.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {drawerAnimals.map((animal) => (
+                  <div
+                    key={animal.id}
+                    className="p-3.5 bg-slate-50 hover:bg-slate-100/90 border border-slate-200 rounded-lg transition-all flex items-center justify-between gap-3 group"
+                  >
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-900 group-hover:text-primary transition-colors">
+                          {animal.name}
+                        </span>
+                        {animal.nume ? (
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[11px] bg-blue-50 text-blue-800 border-blue-200 font-bold"
+                            title="Número Oficial do Paciente (NUME)"
+                          >
+                            Nº {animal.nume}
+                          </Badge>
+                        ) : animal.ctrl && animal.ctrl !== '0' ? (
+                          <Badge
+                            variant="outline"
+                            className="font-mono text-[10px] bg-slate-100 text-slate-600 border-slate-200"
+                            title="Código Legado CTRL"
+                          >
+                            CTRL: {animal.ctrl}
+                          </Badge>
+                        ) : null}
+                        {animal.deceased && (
+                          <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                            Óbito
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                        <Badge
+                          variant="secondary"
+                          className={
+                            animal.species?.toLowerCase() === 'cão' ||
+                            animal.species?.toLowerCase() === 'cachorro' ||
+                            animal.species?.toLowerCase() === 'canino'
+                              ? 'bg-blue-50 text-blue-700 text-[10px] px-1.5 py-0'
+                              : 'bg-purple-50 text-purple-700 text-[10px] px-1.5 py-0'
+                          }
+                        >
+                          {animal.species}
+                        </Badge>
+                        <span>{animal.breed || 'SRD'}</span>
+                        {animal.gender && <span>• {animal.gender}</span>}
+                        {animal.weight && <span>• {animal.weight} kg</span>}
+                      </div>
+                    </div>
+
+                    {/* Botão de Ação Direta para a Ficha Clínica */}
+                    <div className="shrink-0">
+                      {enableNavigation ? (
+                        <Link to={`/pacientes/${animal.id}`}>
+                          <Button
+                            size="sm"
+                            className="h-8 text-xs gap-1.5 bg-primary text-white hover:bg-primary/90"
+                          >
+                            <span>Ficha Clínica</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => onSelectPatient?.(animal)}
+                          className="h-8 text-xs gap-1.5 bg-primary text-white hover:bg-primary/90"
+                        >
+                          <span>Ficha Clínica</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
