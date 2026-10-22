@@ -119,88 +119,82 @@ export function persistPacientesState(
 /**
  * Monta os parâmetros de URL a partir do estado e atualiza com replaceState
  */
+export function buildPacientesQueryString(state: PacientesNavState): string {
+  const params = new URLSearchParams()
+
+  // Aba ativa
+  if (state.activeTab === 'tutors') {
+    params.set('tab', 'tutors')
+  }
+
+  // Busca principal
+  if (state.mainSearch.term.trim()) {
+    params.set('q', state.mainSearch.term.trim())
+  }
+
+  if (state.mainSearch.scope && state.mainSearch.scope !== 'all') {
+    params.set('escopo', state.mainSearch.scope)
+  }
+
+  if (state.mainSearch.species && state.mainSearch.species !== 'all') {
+    params.set('sp', state.mainSearch.species)
+  }
+
+  if (state.mainSearch.breed.trim()) {
+    params.set('br', state.mainSearch.breed.trim())
+  }
+
+  if (state.mainSearch.phone.trim()) {
+    params.set('ph', state.mainSearch.phone.trim())
+  }
+
+  if (state.mainSearch.page > 1) {
+    params.set('page', String(state.mainSearch.page))
+  }
+
+  if (state.mainSearch.drawerTutorId) {
+    params.set('drawerTutor', state.mainSearch.drawerTutorId)
+  }
+
+  // Aba de tutores - modal aberto
+  if (state.tutorsTab.modalTutorId) {
+    params.set('tutorModal', state.tutorsTab.modalTutorId)
+  }
+
+  // Aba de tutores - busca
+  if (state.tutorsTab.search.trim()) {
+    params.set('t_q', state.tutorsTab.search.trim())
+  }
+
+  // Aba de pacientes - busca
+  if (state.patientsTab.search.trim()) {
+    params.set('p_q', state.patientsTab.search.trim())
+  }
+
+  return params.toString()
+}
+
+/**
+ * Monta os parâmetros de URL a partir do estado e atualiza com replaceState
+ */
 export function syncStateToUrl(state: PacientesNavState) {
   if (typeof window === 'undefined') return
   try {
-    const params = new URLSearchParams(window.location.search)
-
-    // Aba ativa
-    if (state.activeTab === 'tutors') {
-      params.set('tab', 'tutors')
-    } else {
-      params.delete('tab')
-    }
-
-    // Busca principal
-    if (state.mainSearch.term.trim()) {
-      params.set('q', state.mainSearch.term.trim())
-    } else {
-      params.delete('q')
-    }
-
-    if (state.mainSearch.scope && state.mainSearch.scope !== 'all') {
-      params.set('escopo', state.mainSearch.scope)
-    } else {
-      params.delete('escopo')
-    }
-
-    if (state.mainSearch.species && state.mainSearch.species !== 'all') {
-      params.set('sp', state.mainSearch.species)
-    } else {
-      params.delete('sp')
-    }
-
-    if (state.mainSearch.breed.trim()) {
-      params.set('br', state.mainSearch.breed.trim())
-    } else {
-      params.delete('br')
-    }
-
-    if (state.mainSearch.phone.trim()) {
-      params.set('ph', state.mainSearch.phone.trim())
-    } else {
-      params.delete('ph')
-    }
-
-    if (state.mainSearch.page > 1) {
-      params.set('page', String(state.mainSearch.page))
-    } else {
-      params.delete('page')
-    }
-
-    if (state.mainSearch.drawerTutorId) {
-      params.set('drawerTutor', state.mainSearch.drawerTutorId)
-    } else {
-      params.delete('drawerTutor')
-    }
-
-    // Aba de tutores - modal aberto
-    if (state.tutorsTab.modalTutorId) {
-      params.set('tutorModal', state.tutorsTab.modalTutorId)
-    } else {
-      params.delete('tutorModal')
-    }
-
-    // Aba de tutores - busca
-    if (state.tutorsTab.search.trim()) {
-      params.set('t_q', state.tutorsTab.search.trim())
-    } else {
-      params.delete('t_q')
-    }
-
-    // Aba de pacientes - busca
-    if (state.patientsTab.search.trim()) {
-      params.set('p_q', state.patientsTab.search.trim())
-    } else {
-      params.delete('p_q')
-    }
-
-    const newQuery = params.toString()
+    const newQuery = buildPacientesQueryString(state)
     const newUrl = newQuery ? `${window.location.pathname}?${newQuery}` : window.location.pathname
     window.history.replaceState(null, '', newUrl)
   } catch (e) {
     console.warn('Erro ao sincronizar URL:', e)
   }
+}
+
+/**
+ * Retorna a URL de retorno para /pacientes preservando o estado atual
+ */
+export function getPacientesReturnUrl(): string {
+  const state = getSavedPacientesState()
+  const qs = buildPacientesQueryString(state)
+  return qs ? `/pacientes?${qs}` : '/pacientes'
 }
 
 /**
@@ -211,8 +205,10 @@ export function resolveInitialPacientesState(): PacientesNavState {
 
   const saved = getSavedPacientesState()
   const params = new URLSearchParams(window.location.search)
+  const hasUrlParams = Array.from(params.keys()).length > 0
 
-  // Prioriza o que está na URL se presente
+  // Se a URL não tiver nenhum parâmetro de busca/filtro mas o sessionStorage tiver estado salvo,
+  // mantemos o estado salvo (ex: retorno pelo botão ou navegação direta)
   const tabParam = params.get('tab')
   const activeTab: 'patients' | 'tutors' =
     tabParam === 'tutors' ? 'tutors' : tabParam === 'patients' ? 'patients' : saved.activeTab
@@ -230,33 +226,58 @@ export function resolveInitialPacientesState(): PacientesNavState {
   const pqParam = params.get('p_q')
 
   const mainSearch: MainSearchNavState = {
-    term: qParam !== null ? qParam : saved.mainSearch.term,
+    term: qParam !== null ? qParam : hasUrlParams ? '' : saved.mainSearch.term,
     scope:
       escopoParam === 'tutor' || escopoParam === 'animal' || escopoParam === 'all'
         ? escopoParam
-        : saved.mainSearch.scope || 'all',
-    species: spParam !== null ? spParam : saved.mainSearch.species,
-    breed: brParam !== null ? brParam : saved.mainSearch.breed,
-    phone: phParam !== null ? phParam : saved.mainSearch.phone,
-    page: pageParam ? Math.max(1, parseInt(pageParam, 10) || 1) : saved.mainSearch.page,
-    drawerTutorId: drawerTutorParam !== null ? drawerTutorParam : saved.mainSearch.drawerTutorId,
+        : hasUrlParams
+          ? 'all'
+          : saved.mainSearch.scope || 'all',
+    species: spParam !== null ? spParam : hasUrlParams ? 'all' : saved.mainSearch.species,
+    breed: brParam !== null ? brParam : hasUrlParams ? '' : saved.mainSearch.breed,
+    phone: phParam !== null ? phParam : hasUrlParams ? '' : saved.mainSearch.phone,
+    page: pageParam
+      ? Math.max(1, parseInt(pageParam, 10) || 1)
+      : hasUrlParams
+        ? 1
+        : saved.mainSearch.page,
+    drawerTutorId:
+      drawerTutorParam !== null
+        ? drawerTutorParam
+        : hasUrlParams
+          ? null
+          : saved.mainSearch.drawerTutorId,
   }
 
   const tutorsTab: TutorsTabNavState = {
     ...saved.tutorsTab,
-    search: tqParam !== null ? tqParam : saved.tutorsTab.search,
-    modalTutorId: tutorModalParam !== null ? tutorModalParam : saved.tutorsTab.modalTutorId,
+    search: tqParam !== null ? tqParam : hasUrlParams ? '' : saved.tutorsTab.search,
+    modalTutorId:
+      tutorModalParam !== null
+        ? tutorModalParam
+        : hasUrlParams
+          ? null
+          : saved.tutorsTab.modalTutorId,
   }
 
   const patientsTab: PatientsTabNavState = {
     ...saved.patientsTab,
-    search: pqParam !== null ? pqParam : saved.patientsTab.search,
+    search: pqParam !== null ? pqParam : hasUrlParams ? '' : saved.patientsTab.search,
   }
 
-  return {
+  const resolved: PacientesNavState = {
     activeTab,
     mainSearch,
     patientsTab,
     tutorsTab,
   }
+
+  // Garante que o estado resolvido seja mantido no sessionStorage
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(resolved))
+  } catch (e) {
+    console.warn('Erro ao atualizar sessionStorage:', e)
+  }
+
+  return resolved
 }

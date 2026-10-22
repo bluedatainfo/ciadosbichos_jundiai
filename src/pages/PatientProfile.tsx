@@ -85,7 +85,17 @@ export default function PatientProfile() {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[60vh]">
         <h2 className="text-2xl font-bold mb-4 text-slate-800">Animal não encontrado</h2>
-        <Button onClick={() => navigate('/pacientes')}>Voltar para a lista de Animais</Button>
+        <Button
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1)
+            } else {
+              navigate('/pacientes')
+            }
+          }}
+        >
+          Voltar para a lista de Animais
+        </Button>
       </div>
     )
   }
@@ -107,8 +117,15 @@ export default function PatientProfile() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate('/pacientes')}
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1)
+                } else {
+                  navigate('/pacientes')
+                }
+              }}
               className="text-slate-500"
+              title="Voltar para busca de pacientes"
             >
               <ArrowLeft className="w-5 h-5" />
             </Button>

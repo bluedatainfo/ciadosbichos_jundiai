@@ -156,10 +156,24 @@ export function MainTutorAnimalSearch({
   // Se houver drawerTutorId salvo no initialState, recupera tutor e reabre o drawer
   useEffect(() => {
     if (initialState?.drawerTutorId) {
-      const tutorId = initialState.drawerTutorId
-      // Tenta recuperar da lista de resultados se já existir ou buscar via API
-      openDrawerForTutorId(tutorId)
+      openDrawerForTutorId(initialState.drawerTutorId)
     }
+  }, [])
+
+  // Sincronização ao navegar com o botão Voltar/Avançar do navegador (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const drawerTutorParam = params.get('drawerTutor')
+      if (drawerTutorParam) {
+        openDrawerForTutorId(drawerTutorParam)
+      } else {
+        setDrawerOpen(false)
+        setSelectedDrawerTutor(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const openDrawerForTutorId = async (

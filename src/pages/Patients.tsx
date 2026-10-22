@@ -60,6 +60,7 @@ import { MainTutorAnimalSearch } from '@/components/patient/MainTutorAnimalSearc
 import {
   resolveInitialPacientesState,
   persistPacientesState,
+  syncStateToUrl,
   PacientesNavState,
   MainSearchNavState,
 } from '@/services/pacientes-navigation-state'
@@ -194,13 +195,14 @@ export default function Patients() {
     }
     setSelectedTutorForPatients(tutor)
     setIsTutorPatientsDialogOpen(true)
-    persistPacientesState((prev) => ({
+    const nextState = persistPacientesState((prev) => ({
       ...prev,
       tutorsTab: {
         ...prev.tutorsTab,
         modalTutorId: tutor.id,
       },
     }))
+    syncStateToUrl(nextState)
     setTutorPatientsLoading(true)
     try {
       const list = await api.getPatientsByTutor(tutor.id)
@@ -219,27 +221,42 @@ export default function Patients() {
   }
 
   // Se veio com modalTutorId salvo no initialNavState, reabre o modal de animais do tutor
+  const restoreTutorModal = async (tutorId: string) => {
+    setIsTutorPatientsDialogOpen(true)
+    setTutorPatientsLoading(true)
+    try {
+      const { default: pb } = await import('@/lib/pocketbase/client')
+      const tutor = await pb.collection('tutors').getOne<Tutor>(tutorId)
+      setSelectedTutorForPatients(tutor)
+      const list = await api.getPatientsByTutor(tutorId)
+      setTutorPatientsList(list)
+    } catch (e) {
+      console.warn('Erro ao restaurar modal de animais do tutor:', e)
+    } finally {
+      setTutorPatientsLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (initialNavState.tutorsTab.modalTutorId) {
-      const tutorId = initialNavState.tutorsTab.modalTutorId
-      setIsTutorPatientsDialogOpen(true)
-      setTutorPatientsLoading(true)
-      api
-        .getTutorsPaged({ page: 1, perPage: 1, search: '' }) // mock fetch or direct fetch
-        .then(async () => {
-          const { default: pb } = await import('@/lib/pocketbase/client')
-          const tutor = await pb.collection('tutors').getOne<Tutor>(tutorId)
-          setSelectedTutorForPatients(tutor)
-          const list = await api.getPatientsByTutor(tutorId)
-          setTutorPatientsList(list)
-        })
-        .catch((e) => {
-          console.warn('Erro ao restaurar modal de animais do tutor:', e)
-        })
-        .finally(() => {
-          setTutorPatientsLoading(false)
-        })
+      restoreTutorModal(initialNavState.tutorsTab.modalTutorId)
     }
+  }, [])
+
+  // Sincronização ao navegar com o botão Voltar/Avançar do navegador (popstate) na aba de tutores
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search)
+      const tutorModalParam = params.get('tutorModal')
+      if (tutorModalParam) {
+        restoreTutorModal(tutorModalParam)
+      } else {
+        setIsTutorPatientsDialogOpen(false)
+        setSelectedTutorForPatients(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   const handleNewTutorCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -274,7 +291,7 @@ export default function Patients() {
     const t = setTimeout(() => {
       setDebouncedPatientSearch(patientSearch)
       setPatientPage(1)
-      persistPacientesState((prev) => ({
+      const nextState = persistPacientesState((prev) => ({
         ...prev,
         patientsTab: {
           ...prev.patientsTab,
@@ -282,6 +299,7 @@ export default function Patients() {
           page: 1,
         },
       }))
+      syncStateToUrl(nextState)
     }, 400)
     return () => clearTimeout(t)
   }, [patientSearch])
@@ -290,7 +308,7 @@ export default function Patients() {
     const t = setTimeout(() => {
       setDebouncedTutorSearch(tutorSearch)
       setTutorPage(1)
-      persistPacientesState((prev) => ({
+      const nextState = persistPacientesState((prev) => ({
         ...prev,
         tutorsTab: {
           ...prev.tutorsTab,
@@ -298,26 +316,51 @@ export default function Patients() {
           page: 1,
         },
       }))
+      syncStateToUrl(nextState)
     }, 400)
     return () => clearTimeout(t)
   }, [tutorSearch])
 
   const handleTogglePatientSort = (field: 'name' | 'tutor') => {
+    let nextDirection: 'asc' | 'desc' = 'asc'
+    let nextField: 'name' | 'tutor' = field
     if (patientSortField === field) {
-      setPatientSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      nextDirection = patientSortDirection === 'asc' ? 'desc' : 'asc'
+      setPatientSortDirection(nextDirection)
     } else {
-      setPatientSortField(field)
+      setPatientSortField(nextField)
       setPatientSortDirection('asc')
     }
+    const nextState = persistPacientesState((prev) => ({
+      ...prev,
+      patientsTab: {
+        ...prev.patientsTab,
+        sortField: nextField,
+        sortDirection: nextDirection,
+      },
+    }))
+    syncStateToUrl(nextState)
   }
 
   const handleToggleTutorSort = (field: 'name') => {
+    let nextDirection: 'asc' | 'desc' = 'asc'
+    let nextField: 'name' = field
     if (tutorSortField === field) {
-      setTutorSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+      nextDirection = tutorSortDirection === 'asc' ? 'desc' : 'asc'
+      setTutorSortDirection(nextDirection)
     } else {
-      setTutorSortField(field)
+      setTutorSortField(nextField)
       setTutorSortDirection('asc')
     }
+    const nextState = persistPacientesState((prev) => ({
+      ...prev,
+      tutorsTab: {
+        ...prev.tutorsTab,
+        sortField: nextField,
+        sortDirection: nextDirection,
+      },
+    }))
+    syncStateToUrl(nextState)
   }
 
   const loadPatients = async () => {
@@ -1069,10 +1112,11 @@ export default function Patients() {
       <MainTutorAnimalSearch
         initialState={initialNavState.mainSearch}
         onStateChange={(searchState: MainSearchNavState) => {
-          persistPacientesState((prev) => ({
+          const nextState = persistPacientesState((prev) => ({
             ...prev,
             mainSearch: searchState,
           }))
+          syncStateToUrl(nextState)
         }}
         onOpenTutorPatients={handleOpenTutorPatients}
       />
@@ -1082,10 +1126,11 @@ export default function Patients() {
         onValueChange={(val) => {
           const tab = val as 'patients' | 'tutors'
           setActiveTab(tab)
-          persistPacientesState((prev) => ({
+          const nextState = persistPacientesState((prev) => ({
             ...prev,
             activeTab: tab,
           }))
+          syncStateToUrl(nextState)
         }}
         className="w-full"
       >
@@ -1378,7 +1423,14 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPatientPage(1)}
+                      onClick={() => {
+                        setPatientPage(1)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          patientsTab: { ...prev.patientsTab, page: 1 },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={patientPage <= 1 || patientsLoading}
                       className="h-8 px-2"
                       title="Primeira página"
@@ -1388,7 +1440,15 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPatientPage((p) => Math.max(1, p - 1))}
+                      onClick={() => {
+                        const newP = Math.max(1, patientPage - 1)
+                        setPatientPage(newP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          patientsTab: { ...prev.patientsTab, page: newP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={patientPage <= 1 || patientsLoading}
                       className="h-8 px-3 gap-1"
                     >
@@ -1397,11 +1457,16 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setPatientPage((p) =>
-                          p < Math.ceil(totalPatients / PAGE_SIZE) ? p + 1 : p,
-                        )
-                      }
+                      onClick={() => {
+                        const maxP = Math.ceil(totalPatients / PAGE_SIZE)
+                        const newP = patientPage < maxP ? patientPage + 1 : patientPage
+                        setPatientPage(newP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          patientsTab: { ...prev.patientsTab, page: newP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={
                         patientPage >= Math.ceil(totalPatients / PAGE_SIZE) || patientsLoading
                       }
@@ -1412,7 +1477,15 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setPatientPage(Math.ceil(totalPatients / PAGE_SIZE))}
+                      onClick={() => {
+                        const maxP = Math.ceil(totalPatients / PAGE_SIZE)
+                        setPatientPage(maxP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          patientsTab: { ...prev.patientsTab, page: maxP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={
                         patientPage >= Math.ceil(totalPatients / PAGE_SIZE) || patientsLoading
                       }
@@ -1609,7 +1682,14 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setTutorPage(1)}
+                      onClick={() => {
+                        setTutorPage(1)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          tutorsTab: { ...prev.tutorsTab, page: 1 },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={tutorPage <= 1 || tutorsLoading}
                       className="h-8 px-2"
                       title="Primeira página"
@@ -1619,7 +1699,15 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setTutorPage((p) => Math.max(1, p - 1))}
+                      onClick={() => {
+                        const newP = Math.max(1, tutorPage - 1)
+                        setTutorPage(newP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          tutorsTab: { ...prev.tutorsTab, page: newP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={tutorPage <= 1 || tutorsLoading}
                       className="h-8 px-3 gap-1"
                     >
@@ -1628,9 +1716,16 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        setTutorPage((p) => (p < Math.ceil(totalTutors / PAGE_SIZE) ? p + 1 : p))
-                      }
+                      onClick={() => {
+                        const maxP = Math.ceil(totalTutors / PAGE_SIZE)
+                        const newP = tutorPage < maxP ? tutorPage + 1 : tutorPage
+                        setTutorPage(newP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          tutorsTab: { ...prev.tutorsTab, page: newP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={tutorPage >= Math.ceil(totalTutors / PAGE_SIZE) || tutorsLoading}
                       className="h-8 px-3 gap-1"
                     >
@@ -1639,7 +1734,15 @@ export default function Patients() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => setTutorPage(Math.ceil(totalTutors / PAGE_SIZE))}
+                      onClick={() => {
+                        const maxP = Math.ceil(totalTutors / PAGE_SIZE)
+                        setTutorPage(maxP)
+                        const next = persistPacientesState((prev) => ({
+                          ...prev,
+                          tutorsTab: { ...prev.tutorsTab, page: maxP },
+                        }))
+                        syncStateToUrl(next)
+                      }}
                       disabled={tutorPage >= Math.ceil(totalTutors / PAGE_SIZE) || tutorsLoading}
                       className="h-8 px-2"
                       title="Última página"
@@ -2054,13 +2157,15 @@ export default function Patients() {
         onOpenChange={(open) => {
           setIsTutorPatientsDialogOpen(open)
           if (!open) {
-            persistPacientesState((prev) => ({
+            setSelectedTutorForPatients(null)
+            const next = persistPacientesState((prev) => ({
               ...prev,
               tutorsTab: {
                 ...prev.tutorsTab,
                 modalTutorId: null,
               },
             }))
+            syncStateToUrl(next)
           }
         }}
       >

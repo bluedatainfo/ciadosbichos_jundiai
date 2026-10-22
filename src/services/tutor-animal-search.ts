@@ -269,13 +269,22 @@ export function calculateRelevance(
     score += 1500
   }
 
-  // Define se o destaque principal deve ser o animal
-  // (se o nome do animal tiver correspondência mais forte com os termos)
-  const isAnimalMatch = animalHits > tutorHits || normPatientName.includes(normQuery)
-
-  // Define se a busca casou pelo NOME DO TUTOR (termo no início ou contido no nome do tutor)
+  // Define se o casamento ocorreu pelo NOME DO TUTOR
   const isTutorMatch =
-    tutorHits > 0 || normTutorName.startsWith(normQuery) || normTutorName.includes(normQuery)
+    tutorHits > 0 ||
+    (normQuery.length > 0 &&
+      (normTutorName.startsWith(normQuery) || normTutorName.includes(normQuery)))
+
+  // Define se o casamento ocorreu pelo ANIMAL (nome ou código)
+  const isPatientCodeMatch =
+    Boolean(patient.nume && patient.nume.trim().toLowerCase().includes(normQuery)) ||
+    Boolean(patient.ctrl && patient.ctrl !== '0' && patient.ctrl.toLowerCase().includes(normQuery))
+
+  const isAnimalMatch =
+    animalHits > 0 ||
+    (normQuery.length > 0 &&
+      (normPatientName.startsWith(normQuery) || normPatientName.includes(normQuery))) ||
+    isPatientCodeMatch
 
   return { score, isAnimalMatch, isTutorMatch }
 }
@@ -378,17 +387,31 @@ export async function searchTutorAnimalPairs(
   }
 
   // Agrupamento mestre-detalhe para casamentos por NOME DO TUTOR:
-  // Se o resultado casar pelo nome do tutor (escopo "Tudo" ou "Tutor"):
-  // exibir um único quadro por tutor (sem repetir o quadro para cada animal dele).
-  // Para casamentos pelo animal (isAnimalMatch e !isTutorMatch ou escopo animal):
-  // mantém o formato individual do animal em destaque.
+  // Correção Item 1:
+  // 1. Quando o resultado casar pelo NOME DO TUTOR (escopo "Tudo" ou "Tutor"):
+  //    exibir UM ÚNICO QUADRO POR TUTOR — nome, telefone/WhatsApp e indicador de "X animais" —
+  //    sem repetir os dados dos animais no quadro;
+  // 2. Ao clicar no quadro do tutor, abrir PAINEL LATERAL (drawer/sheet padrão shadcn) listando
+  //    TODOS os animais daquele tutor, cada um com os botões já existentes hoje na listagem (ficha clínica etc.);
+  // 3. Quando o casamento for pelo NOME DO ANIMAL (escopo "Tudo" ou "Animal"):
+  //    manter o formato atual: animal em destaque (espécie/raça) com o tutor identificado.
   const finalItems: TutorAnimalPair[] = []
   const seenTutorIdsForTutorMatches = new Set<string>()
 
   for (const pair of pairs) {
-    const isTutorMatchResult = pair.isTutorMatch || scope === 'tutor'
+    // Se o escopo for explicitamente 'animal', sempre exibe no formato de animal em destaque
+    if (scope === 'animal') {
+      finalItems.push({
+        ...pair,
+        isTutorMasterCard: false,
+      })
+      continue
+    }
 
-    if (isTutorMatchResult && pair.tutor && pair.tutor.id) {
+    // Se o escopo for 'tutor' OU (escopo 'all' e o casamento foi pelo NOME DO TUTOR):
+    const treatAsTutorMatch = scope === 'tutor' || pair.isTutorMatch
+
+    if (treatAsTutorMatch && pair.tutor && pair.tutor.id) {
       if (!seenTutorIdsForTutorMatches.has(pair.tutor.id)) {
         seenTutorIdsForTutorMatches.add(pair.tutor.id)
         finalItems.push({
@@ -397,7 +420,7 @@ export async function searchTutorAnimalPairs(
         })
       }
     } else {
-      // Animal match puro ou resultado não tutor
+      // Casamento apenas pelo nome do animal (ou sem tutor identificado)
       finalItems.push({
         ...pair,
         isTutorMasterCard: false,
