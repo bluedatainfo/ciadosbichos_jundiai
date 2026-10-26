@@ -3,8 +3,8 @@
  *
  * Módulo de Backup Diário Automático e Sob Demanda
  *
- * 1. Cron automático diário às 03:00 (cronAdd('daily_backup_csv', '0 3 * * *', ...))
- *    - Exporta em apenas LEITURA: patients, tutors, clinical_records, vaccines, appointments
+ * 1. Cron automático diário às 03:00 UTC (cronAdd('daily_backup_csv', '0 3 * * *', ...))
+ *    - Exporta em apenas LEITURA: tutors, patients, clinical_records, vaccines, appointments
  *    - Formato CSV com cabeçalho UTF-8 e BOM (\uFEFF) para compatibilidade com Microsoft Excel
  *    - Delimitador ';' e campos escapados com aspas duplas ("...")
  *    - Histórico retido por 7 dias com limpeza automática de arquivos mais antigos
@@ -13,9 +13,11 @@
  *    - POST /backend/v1/backups/run : Executa o backup sob demanda com retorno dos arquivos criados
  *    - GET /backend/v1/backups/list : Lista todos os arquivos .csv gerados (nome, tamanho, data)
  *    - GET /backend/v1/backups/download : Download do arquivo .csv via query ?file=nome.csv
+ *    - POST /backend/v1/backups/clean-history : Limpeza de arquivos de backup CSV existentes
  *
  * REGRA ABSOLUTA: O sistema está em produção com dados reais. Este script executa estritamente
- * leitura via findRecordsByFilter, jamais gravando, alterando ou destruindo qualquer registro de tabela.
+ * leitura via queries indexadas com arrayOf(new DynamicModel(...)), jamais gravando, alterando
+ * ou destruindo qualquer registro de tabela.
  *
  * ATENÇÃO AO AMBIENTE GOJA / POCKETBASE:
  * Cada callback registrado (cronAdd / routerAdd) executa em seu próprio contexto / pool de VM Goja.
@@ -24,9 +26,9 @@
  * inteiramente DENTRO do corpo de cada callback.
  */
 
-// 1. REGISTRO DO CRON DIÁRIO ÀS 03:00
+// 1. REGISTRO DO CRON DIÁRIO ÀS 03:00 UTC
 cronAdd('daily_backup_csv', '0 3 * * *', function () {
-  console.log('[Backup Cron] Disparando rotina diária automática de backup (03:00)...')
+  console.log('[Backup Cron] Disparando rotina diária automática de backup (03:00 UTC)...')
 
   function escapeCsvValue(val) {
     if (val === null || val === undefined) return '""'
@@ -97,6 +99,24 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        name: '',
+        phone: '',
+        phone_secondary: '',
+        email: '',
+        cpf: '',
+        rg: '',
+        cep: '',
+        address: '',
+        neighborhood: '',
+        city: '',
+        state: '',
+        indication: '',
+        additional_info: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'patients',
@@ -142,6 +162,27 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        nume: '',
+        ctrl: '',
+        name: '',
+        species: '',
+        breed: '',
+        birth_date: '',
+        gender: '',
+        weight: 0.1,
+        pelagem: '',
+        last_visit: '',
+        microchip: '',
+        deceased: false,
+        status_notes: '',
+        registration_date: '',
+        import_key: '',
+        tutor_id: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'clinical_records',
@@ -165,6 +206,16 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        description: '',
+        diagnosis: '',
+        treatment: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'vaccines',
@@ -190,6 +241,17 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        name: '',
+        date: '',
+        completed: false,
+        notes: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'appointments',
@@ -217,8 +279,21 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        date: '',
+        type: '',
+        status: '',
+        notes: '',
+        source: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
   ]
+
   var dirRoot = null
   try {
     dirRoot = $os.openRoot(backupDir)
@@ -231,6 +306,20 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
     var fileName = 'backup_' + item.name + '_' + dateStr + '.csv'
     var filePath = backupDir + '/' + fileName
     var fileHandle = null
+
+    // Contagem esperada prévia na base de dados para validação estrita
+    var expectedCount = 0
+    try {
+      var countRows = arrayOf(new DynamicModel({ total: 0 }))
+      ;(appInstance ? appInstance.db() : $app.db())
+        .newQuery('SELECT COUNT(*) AS total FROM ' + item.name)
+        .all(countRows)
+      if (countRows && countRows.length > 0 && countRows[0].total !== undefined) {
+        expectedCount = Number(countRows[0].total || 0)
+      }
+    } catch (errCount) {
+      console.log('[Backup Cron] Aviso ao contar registros de ' + item.name + ':', errCount)
+    }
 
     try {
       var totalRows = 0
@@ -262,12 +351,18 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         if (lastId) {
           q.bind({ lastId: lastId })
         }
-        var rawRows = q.all()
-        if (!rawRows || rawRows.length === 0) break
+
+        // Padrão comprovado em produção: arrayOf(new DynamicModel(proto)) + q.all(rows)
+        var rows = arrayOf(new DynamicModel(item.modelProto))
+        q.all(rows)
+
+        if (!rows || rows.length === 0) {
+          break
+        }
 
         var chunkLines = []
-        for (var r = 0; r < rawRows.length; r++) {
-          var rec = rawRows[r]
+        for (var r = 0; r < rows.length; r++) {
+          var rec = rows[r]
           var lineVals = []
           for (var f = 0; f < item.fields.length; f++) {
             var fName = item.fields[f]
@@ -287,17 +382,20 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         }
 
         fileHandle.writeString(chunkLines.join(''))
-        totalRows += rawRows.length
+        totalRows += rows.length
         pageCount++
 
-        // Log de progresso a cada 10 páginas (20.000 registros)
         if (pageCount % 10 === 0) {
           console.log('[Backup Cron] ' + item.name + ': ' + totalRows + ' registros gravados...')
         }
 
-        if (rawRows.length < pageSize) break
-        lastId = String(rawRows[rawRows.length - 1].id || '')
-        if (!lastId) break
+        if (rows.length < pageSize) {
+          break
+        }
+        lastId = String(rows[rows.length - 1].id || '')
+        if (!lastId) {
+          break
+        }
       }
 
       // Fecha o arquivo e obtém tamanho
@@ -312,15 +410,40 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         fileSize = statInfo.size()
       } catch (_) {}
 
-      console.log(
-        '[Backup Cron] Arquivo ' +
-          fileName +
-          ' gerado com ' +
-          totalRows +
-          ' registros (' +
-          fileSize +
-          ' bytes).',
-      )
+      // Validação estrita: nunca engolir erro de contagem zero se a tabela possui registros
+      if (expectedCount > 0 && totalRows === 0) {
+        console.log(
+          '[Backup Cron ERROR] Coleção ' +
+            item.name +
+            ' esperava ' +
+            expectedCount +
+            ' registros mas exportou 0! Arquivo tem ' +
+            fileSize +
+            ' bytes.',
+        )
+      } else if (item.name === 'patients' && totalRows === 0) {
+        console.log(
+          '[Backup Cron ERROR CRÍTICO] patients exportou 0 registros! Esperados ~21k. Arquivo: ' +
+            fileName +
+            ' (' +
+            fileSize +
+            ' bytes)',
+        )
+      } else {
+        console.log(
+          '[Backup Cron] Coleção ' +
+            item.name +
+            ' concluída: exportados ' +
+            totalRows +
+            ' de ' +
+            expectedCount +
+            ' registros esperados. Arquivo ' +
+            fileName +
+            ' com ' +
+            fileSize +
+            ' bytes.',
+        )
+      }
     } catch (errCol) {
       if (fileHandle) {
         try {
@@ -329,8 +452,12 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
         fileHandle = null
       }
       console.log(
-        '[Backup Cron] Erro ao exportar ' + item.name + ':',
-        errCol ? errCol.message || String(errCol) : String(errCol),
+        '[Backup Cron ERROR] Falha ao exportar coleção ' +
+          item.name +
+          ' (esperados: ' +
+          expectedCount +
+          '): ' +
+          (errCol ? errCol.message || String(errCol) : String(errCol)),
       )
     }
   }
@@ -369,10 +496,6 @@ cronAdd('daily_backup_csv', '0 3 * * *', function () {
 
 // 2. ENDPOINT POST: Disparar Backup Agora (Sob Demanda)
 routerAdd('POST', '/backend/v1/backups/run', function (e) {
-  return runBackupExport(e)
-})
-
-function runBackupExport(e) {
   function escapeCsvValue(val) {
     if (val === null || val === undefined) return '""'
     var str = String(val)
@@ -435,6 +558,24 @@ function runBackupExport(e) {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        name: '',
+        phone: '',
+        phone_secondary: '',
+        email: '',
+        cpf: '',
+        rg: '',
+        cep: '',
+        address: '',
+        neighborhood: '',
+        city: '',
+        state: '',
+        indication: '',
+        additional_info: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'patients',
@@ -480,6 +621,27 @@ function runBackupExport(e) {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        nume: '',
+        ctrl: '',
+        name: '',
+        species: '',
+        breed: '',
+        birth_date: '',
+        gender: '',
+        weight: 0.1,
+        pelagem: '',
+        last_visit: '',
+        microchip: '',
+        deceased: false,
+        status_notes: '',
+        registration_date: '',
+        import_key: '',
+        tutor_id: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'clinical_records',
@@ -503,6 +665,16 @@ function runBackupExport(e) {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        description: '',
+        diagnosis: '',
+        treatment: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'vaccines',
@@ -528,6 +700,17 @@ function runBackupExport(e) {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        name: '',
+        date: '',
+        completed: false,
+        notes: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
     {
       name: 'appointments',
@@ -555,6 +738,18 @@ function runBackupExport(e) {
         'created',
         'updated',
       ],
+      modelProto: {
+        id: '',
+        patient_id: '',
+        date: '',
+        type: '',
+        status: '',
+        notes: '',
+        source: '',
+        import_hash: '',
+        created: '',
+        updated: '',
+      },
     },
   ]
 
@@ -632,6 +827,19 @@ function runBackupExport(e) {
       var filePath = BACKUP_DIR + '/' + fileName
       var fileHandle = null
 
+      var expectedCount = 0
+      try {
+        var countRows = arrayOf(new DynamicModel({ total: 0 }))
+        ;(appInstance ? appInstance.db() : $app.db())
+          .newQuery('SELECT COUNT(*) AS total FROM ' + item.name)
+          .all(countRows)
+        if (countRows && countRows.length > 0 && countRows[0].total !== undefined) {
+          expectedCount = Number(countRows[0].total || 0)
+        }
+      } catch (errCount) {
+        console.log('[Backup] Aviso ao contar registros de ' + item.name + ':', errCount)
+      }
+
       try {
         var totalRows = 0
         if (!dirRoot) {
@@ -640,7 +848,6 @@ function runBackupExport(e) {
         fileHandle = dirRoot.create(fileName)
 
         // UTF-8 com BOM (\uFEFF) para compatibilidade perfeita com Microsoft Excel
-        // Gravado diretamente no início do arquivo em disco
         var headerCols = []
         for (var h = 0; h < item.headers.length; h++) {
           headerCols.push('"' + item.headers[h] + '"')
@@ -663,12 +870,18 @@ function runBackupExport(e) {
           if (lastId) {
             q.bind({ lastId: lastId })
           }
-          var rawRows = q.all()
-          if (!rawRows || rawRows.length === 0) break
+
+          // Padrão comprovado em produção: arrayOf(new DynamicModel(proto)) + q.all(rows)
+          var rows = arrayOf(new DynamicModel(item.modelProto))
+          q.all(rows)
+
+          if (!rows || rows.length === 0) {
+            break
+          }
 
           var chunkLines = []
-          for (var r = 0; r < rawRows.length; r++) {
-            var rec = rawRows[r]
+          for (var r = 0; r < rows.length; r++) {
+            var rec = rows[r]
             var lineVals = []
             for (var f = 0; f < item.fields.length; f++) {
               var fName = item.fields[f]
@@ -689,17 +902,20 @@ function runBackupExport(e) {
 
           // Gravação direta no arquivo por página para liberar memória de forma incremental
           fileHandle.writeString(chunkLines.join(''))
-          totalRows += rawRows.length
+          totalRows += rows.length
           pageCount++
 
-          // Log de progresso a cada 10 páginas (20.000 registros)
           if (pageCount % 10 === 0) {
             console.log('[Backup] ' + item.name + ': ' + totalRows + ' registros gravados...')
           }
 
-          if (rawRows.length < pageSize) break
-          lastId = String(rawRows[rawRows.length - 1].id || '')
-          if (!lastId) break
+          if (rows.length < pageSize) {
+            break
+          }
+          lastId = String(rows[rows.length - 1].id || '')
+          if (!lastId) {
+            break
+          }
         }
 
         // Fechar arquivo em disco
@@ -714,22 +930,41 @@ function runBackupExport(e) {
           fileSize = statInfo.size()
         } catch (_) {}
 
+        // Validação de anomalia: esperado > 0 vs retornado == 0
+        var isAnomaly = false
+        var anomalyMsg = ''
+        if (expectedCount > 0 && totalRows === 0) {
+          isAnomaly = true
+          anomalyMsg =
+            'Coleção esperava ' + expectedCount + ' registros mas exportou 0 (apenas cabeçalho)!'
+          console.log('[Backup ERROR] ' + item.name + ': ' + anomalyMsg)
+        } else if (item.name === 'patients' && totalRows === 0) {
+          isAnomaly = true
+          anomalyMsg = 'ERRO CRÍTICO: patients exportou 0 registros (~21k esperados).'
+          console.log('[Backup ERROR] ' + anomalyMsg)
+        } else {
+          console.log(
+            '[Backup] Arquivo gerado com sucesso: ' +
+              fileName +
+              ' (' +
+              totalRows +
+              '/' +
+              expectedCount +
+              ' registros, ' +
+              fileSize +
+              ' bytes)',
+          )
+        }
+
         results.push({
           collection: item.name,
           fileName: fileName,
           totalRows: totalRows,
+          expectedRows: expectedCount,
           sizeBytes: fileSize,
-          status: 'success',
+          status: isAnomaly ? 'error' : 'success',
+          error: isAnomaly ? anomalyMsg : undefined,
         })
-        console.log(
-          '[Backup] Arquivo gerado com sucesso: ' +
-            fileName +
-            ' (' +
-            totalRows +
-            ' registros, ' +
-            fileSize +
-            ' bytes)',
-        )
       } catch (errCol) {
         if (fileHandle) {
           try {
@@ -738,10 +973,12 @@ function runBackupExport(e) {
           fileHandle = null
         }
         var msg = errCol ? errCol.message || String(errCol) : 'Erro desconhecido'
-        console.log('[Backup] Erro ao exportar ' + item.name + ': ' + msg)
+        console.log('[Backup ERROR] Falha ao exportar ' + item.name + ': ' + msg)
         results.push({
           collection: item.name,
           fileName: fileName,
+          totalRows: 0,
+          expectedRows: expectedCount,
           error: msg,
           status: 'error',
         })
@@ -759,7 +996,7 @@ function runBackupExport(e) {
     console.log(
       '[Backup] Processo sob demanda concluído: ' +
         results.length +
-        ' arquivos processados na data ' +
+        ' coleções processadas na data ' +
         dateStr,
     )
 
@@ -773,10 +1010,10 @@ function runBackupExport(e) {
     })
   } catch (err) {
     var topMsg = err ? err.message || String(err) : 'Erro desconhecido'
-    console.log('[Backup] Erro no endpoint /run: ' + topMsg)
+    console.log('[Backup ERROR] Erro no endpoint /run: ' + topMsg)
     return e.json(500, { error: 'Falha ao executar backup: ' + topMsg })
   }
-}
+})
 
 // 3. ENDPOINT GET: Listar Arquivos de Backup Gerados
 routerAdd('GET', '/backend/v1/backups/list', function (e) {
@@ -825,7 +1062,6 @@ routerAdd('GET', '/backend/v1/backups/list', function (e) {
         }
       }
     } catch (readErr) {
-      // Se a pasta não existe ainda ou erro na leitura, tenta $os.readDir ou retorna lista vazia
       try {
         entries = $os.readDir(BACKUP_DIR)
       } catch (_) {
@@ -876,7 +1112,7 @@ routerAdd('GET', '/backend/v1/backups/list', function (e) {
     })
   } catch (err) {
     var errMsg = err ? err.message || String(err) : 'Erro desconhecido'
-    console.log('[Backup] Erro no endpoint /list: ' + errMsg)
+    console.log('[Backup ERROR] Erro no endpoint /list: ' + errMsg)
     return e.json(500, { error: 'Falha ao listar backups: ' + errMsg })
   }
 })
@@ -916,7 +1152,6 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
 
     var fullPath = BACKUP_DIR + '/' + fileName
 
-    // Verifica existência do arquivo
     try {
       $os.stat(fullPath)
     } catch (errStat) {
@@ -926,7 +1161,6 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
     e.response.header().set('Content-Type', 'text/csv; charset=utf-8')
     e.response.header().set('Content-Disposition', 'attachment; filename="' + fileName + '"')
 
-    // Servir diretamente do filesystem via e.fileFS com $os.dirFS para streaming de alta performance
     try {
       if (typeof e.fileFS === 'function' && typeof $os.dirFS === 'function') {
         return e.fileFS($os.dirFS(BACKUP_DIR), fileName)
@@ -1013,7 +1247,77 @@ routerAdd('GET', '/backend/v1/backups/download', function (e) {
     return e.string(200, textContent)
   } catch (err) {
     var errMsg = err ? err.message || String(err) : 'Erro desconhecido'
-    console.log('[Backup] Erro no endpoint /download: ' + errMsg)
+    console.log('[Backup ERROR] Erro no endpoint /download: ' + errMsg)
     return e.json(500, { error: 'Falha ao baixar backup: ' + errMsg })
+  }
+})
+
+// 5. ENDPOINT POST: Limpeza de Histórico de Backups CSV Existentes
+// Exclui TODOS os arquivos CSV em BACKUP_DIR e registra quais foram removidos no log
+routerAdd('POST', '/backend/v1/backups/clean-history', function (e) {
+  var appInstance = e && e.app ? e.app : typeof $app !== 'undefined' ? $app : null
+  var resolvedDir = ''
+  try {
+    if (e && e.app && typeof e.app.dataDir === 'function') {
+      resolvedDir = e.app.dataDir()
+    }
+  } catch (_) {}
+  if (!resolvedDir) {
+    try {
+      if (typeof $app !== 'undefined' && $app && typeof $app.dataDir === 'function') {
+        resolvedDir = $app.dataDir()
+      }
+    } catch (_) {}
+  }
+  var BACKUP_DIR = resolvedDir ? resolvedDir + '/backups_csv' : 'pb_data/backups_csv'
+
+  try {
+    var entries = []
+    try {
+      entries = $os.readDir(BACKUP_DIR)
+    } catch (_) {
+      entries = []
+    }
+
+    var removedFiles = []
+    var errors = []
+
+    if (entries && entries.length > 0) {
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        if (entry.isDir()) continue
+        var name = entry.name()
+        if (!name.endsWith('.csv')) continue
+
+        var fullPath = BACKUP_DIR + '/' + name
+        try {
+          $os.remove(fullPath)
+          removedFiles.push(name)
+          console.log('[Backup CleanHistory] Arquivo inválido/antigo removido com sucesso: ' + name)
+        } catch (errRem) {
+          var remMsg = errRem ? errRem.message || String(errRem) : String(errRem)
+          console.log('[Backup CleanHistory ERROR] Falha ao remover ' + name + ': ' + remMsg)
+          errors.push({ file: name, error: remMsg })
+        }
+      }
+    }
+
+    console.log(
+      '[Backup CleanHistory] Total de arquivos CSV removidos: ' +
+        removedFiles.length +
+        '. Lista: ' +
+        (removedFiles.length > 0 ? removedFiles.join(', ') : '(nenhum arquivo encontrado)'),
+    )
+
+    return e.json(200, {
+      message: 'Limpeza de histórico de backups concluída.',
+      removedCount: removedFiles.length,
+      removedFiles: removedFiles,
+      errors: errors,
+    })
+  } catch (err) {
+    var topErr = err ? err.message || String(err) : 'Erro desconhecido'
+    console.log('[Backup CleanHistory ERROR]: ' + topErr)
+    return e.json(500, { error: 'Falha ao limpar histórico de backups: ' + topErr })
   }
 })
