@@ -601,13 +601,8 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
         <div>
           <Button
             type="button"
-            variant={isSearchOpen || searchTerm ? 'default' : 'outline'}
             onClick={() => setIsSearchOpen((prev) => !prev)}
-            className={`gap-2 h-9 text-xs font-semibold ${
-              isSearchOpen || searchTerm
-                ? 'bg-slate-800 hover:bg-slate-900 text-white shadow-xs'
-                : 'text-slate-700 hover:bg-slate-100 border-slate-300'
-            }`}
+            className="gap-2 bg-primary hover:bg-primary/90 h-9 text-xs font-semibold"
           >
             <Search className="w-4 h-4" />
             Pesquisa na Ficha
