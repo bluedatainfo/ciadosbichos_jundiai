@@ -20,6 +20,7 @@ import {
   Clock,
   RefreshCw,
   Edit2,
+  Trash2,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
@@ -27,6 +28,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -52,6 +55,10 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
   const [editingItem, setEditingItem] = useState<Vaccine | null>(null)
   const [editFormData, setEditFormData] = useState({ date: '', notes: '' })
   const [editSubmitting, setEditSubmitting] = useState(false)
+
+  // Estado para Exclusão do Retorno
+  const [deletingItem, setDeletingItem] = useState<Vaccine | null>(null)
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
 
   // Acompanha qual ID acabou de ser salvo para destacar o botão "Marcar como realizado"
   const [justSavedId, setJustSavedId] = useState<string | null>(null)
@@ -259,6 +266,69 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
       })
     } finally {
       setEditSubmitting(false)
+    }
+  }
+
+  const handleDeleteReturn = async () => {
+    if (!deletingItem) return
+    setDeleteSubmitting(true)
+    try {
+      // Guarda snapshot dos dados anteriores para a auditoria
+      const itemToDelete = deletingItem
+      const formattedDate = itemToDelete.date
+        ? formatDisplayDate(itemToDelete.date)
+        : 'Sem data informada'
+      const desc = itemToDelete.name || itemToDelete.notes || 'Retorno'
+
+      await api.deleteVaccine(itemToDelete.id)
+
+      // Registro na auditoria (dados anteriores → excluído)
+      auditService.log({
+        action: 'delete',
+        module: 'returns',
+        recordId: itemToDelete.id,
+        recordLabel: `Retorno de ${patient.name}`,
+        patientName: patient.name,
+        tutorName: patient.expand?.tutor_id?.name || '',
+        changes: {
+          date: {
+            label: 'Data Prevista / Realizada',
+            oldValue: formattedDate,
+            newValue: 'Excluído',
+          },
+          notes: {
+            label: 'Histórico / Descrição',
+            oldValue: desc,
+            newValue: 'Excluído',
+          },
+          completed: {
+            label: 'Status do Retorno',
+            oldValue: itemToDelete.completed ? 'Realizado' : 'Pendente',
+            newValue: 'Excluído',
+          },
+        },
+        details: `Exclusão de retorno do paciente ${patient.name}. Dados anteriores: Data: ${formattedDate} | Motivo: ${desc} | Status: ${itemToDelete.completed ? 'Realizado' : 'Pendente'}.`,
+      })
+
+      if (justSavedId === itemToDelete.id) {
+        setJustSavedId(null)
+      }
+      setDeletingItem(null)
+
+      toast({
+        title: 'Retorno excluído',
+        description: 'O retorno foi removido com sucesso.',
+      })
+
+      await loadReturns()
+    } catch (error) {
+      toast({
+        title: 'Erro ao excluir retorno',
+        description: getErrorMessage(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleteSubmitting(false)
     }
   }
 
@@ -545,6 +615,18 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
                           </Button>
                         )}
 
+                        {/* Botão de lixeira para excluir retorno ao lado de Editar */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setDeletingItem(retorno)}
+                          title="Excluir este retorno"
+                          className="h-8 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 hover:border-rose-300"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="sr-only">Excluir retorno</span>
+                        </Button>
+
                         {/* Botão "Marcar como realizado": exibido com destaque após salvar ou nos retornos destacados/pendentes */}
                         {!isCompleted ? (
                           <Button
@@ -633,6 +715,59 @@ export function ReturnsTab({ patient }: { patient: Patient }) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Confirmação para Excluir Retorno */}
+      <Dialog open={Boolean(deletingItem)} onOpenChange={(open) => !open && setDeletingItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <Trash2 className="w-5 h-5" /> Excluir este retorno?
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-600 pt-2">
+              Tem certeza de que deseja remover permanentemente este retorno da agenda do paciente?
+              Esta ação será registrada na auditoria do sistema.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deletingItem && (
+            <div className="bg-slate-50 p-3 rounded-md border border-slate-200 text-xs space-y-1 my-2">
+              <p>
+                <strong className="text-slate-700">Data:</strong>{' '}
+                {deletingItem.date ? formatDisplayDate(deletingItem.date) : 'Sem data informada'}
+              </p>
+              <p>
+                <strong className="text-slate-700">Descrição:</strong>{' '}
+                {deletingItem.name || deletingItem.notes || '-'}
+              </p>
+              <p>
+                <strong className="text-slate-700">Status:</strong>{' '}
+                {deletingItem.completed ? 'Realizado' : 'Pendente'}
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeletingItem(null)}
+              disabled={deleteSubmitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteReturn}
+              disabled={deleteSubmitting}
+              className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleteSubmitting ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>

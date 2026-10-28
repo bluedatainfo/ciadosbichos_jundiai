@@ -15,18 +15,22 @@ import {
   Download,
   FileText,
   Image as ImageIcon,
-  ExternalLink,
+  Search,
+  X,
+  ChevronRight,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import pb from '@/lib/pocketbase/client'
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import { removeAccents, getSearchVariants } from '@/lib/search-utils'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
@@ -59,6 +63,15 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
     treatment: '',
   })
   const [editLoading, setEditLoading] = useState(false)
+
+  // Estado de Exclusão de Registro Clínico
+  const [deletingRecord, setDeletingRecord] = useState<ClinicalRecord | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  // Estado de Pesquisa dentro da Ficha Clínica
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null)
 
   /**
    * Extrai a data cronológica real de um registro clínico:
@@ -453,6 +466,30 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
     }
   }
 
+  const handleDeleteRecord = async () => {
+    if (!deletingRecord) return
+    setDeleteLoading(true)
+    try {
+      const rec = deletingRecord
+      await api.deleteClinicalRecord(rec.id)
+
+      setDeletingRecord(null)
+      toast({
+        title: 'Lançamento excluído',
+        description: 'O lançamento foi removido da ficha clínica com sucesso.',
+      })
+      await loadRecords()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir lançamento',
+        description: err.message || 'Falha ao remover registro da ficha clínica.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
   const handleDeleteAttachment = async (recordId: string, filename: string) => {
     if (!confirm('Deseja excluir este anexo?')) return
     setLoading(true)
@@ -467,13 +504,125 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
     }
   }
 
+  /**
+   * Utilitários para busca na ficha clínica:
+   * Case-insensitive e sem acentos (insensível a acentuação)
+   * Pesquisa em description, diagnosis e treatment.
+   */
+  const searchNormalized = removeAccents(searchTerm.trim().toLowerCase())
+  const searchVariants = searchTerm.trim()
+    ? getSearchVariants(searchTerm.trim()).map((v) => v.toLowerCase())
+    : []
+
+  const searchResults = (() => {
+    if (!searchNormalized) return []
+    return records
+      .map((rec) => {
+        const fullText = [rec.description || '', rec.diagnosis || '', rec.treatment || ''].join(' ')
+        const normText = removeAccents(fullText.toLowerCase())
+
+        // Verifica se o texto normalizado contém o termo normalizado ou alguma variante
+        const foundIndex = normText.indexOf(searchNormalized)
+        if (foundIndex === -1 && !searchVariants.some((v) => fullText.toLowerCase().includes(v))) {
+          return null
+        }
+
+        // Gera trecho com contexto ao redor da primeira ocorrência encontrada
+        const matchIdx = foundIndex !== -1 ? foundIndex : 0
+        const start = Math.max(0, matchIdx - 40)
+        const end = Math.min(fullText.length, matchIdx + searchNormalized.length + 60)
+        let snippet = fullText.slice(start, end).trim()
+        if (start > 0) snippet = '...' + snippet
+        if (end < fullText.length) snippet = snippet + '...'
+
+        const dateInfo = getRecordDateInfo(rec)
+        return {
+          record: rec,
+          dateDisplay:
+            dateInfo.displayDate + (dateInfo.displayTime ? ` às ${dateInfo.displayTime}` : ''),
+          snippet,
+        }
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+  })()
+
+  // Rola suavemente até o card correspondente e aplica um destaque temporário
+  const scrollToRecord = (recordId: string) => {
+    setActiveHighlightId(recordId)
+    const el = document.getElementById(`clinical-record-${recordId}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
+
+  // Renderiza texto destacando as ocorrências do termo de busca (sem acento / com acento)
+  const renderHighlightedText = (text: string, term: string) => {
+    if (!term.trim() || !text) return text
+    const cleanTerm = removeAccents(term.trim().toLowerCase())
+    if (!cleanTerm) return text
+
+    const parts: { text: string; isMatch: boolean }[] = []
+    let remaining = text
+
+    while (remaining.length > 0) {
+      const normRemaining = removeAccents(remaining.toLowerCase())
+      const matchIndex = normRemaining.indexOf(cleanTerm)
+
+      if (matchIndex === -1) {
+        parts.push({ text: remaining, isMatch: false })
+        break
+      }
+
+      if (matchIndex > 0) {
+        parts.push({ text: remaining.slice(0, matchIndex), isMatch: false })
+      }
+
+      const matchText = remaining.slice(matchIndex, matchIndex + cleanTerm.length)
+      parts.push({ text: matchText, isMatch: true })
+
+      remaining = remaining.slice(matchIndex + cleanTerm.length)
+    }
+
+    return parts.map((part, i) =>
+      part.isMatch ? (
+        <mark key={i} className="bg-yellow-200 text-yellow-950 font-bold px-1 rounded">
+          {part.text}
+        </mark>
+      ) : (
+        <span key={i}>{part.text}</span>
+      ),
+    )
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="flex justify-end">
+      {/* Barra superior: Botão Pesquisa no canto esquerdo e Nova Evolução no canto direito */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <Button
+            type="button"
+            variant={isSearchOpen || searchTerm ? 'default' : 'outline'}
+            onClick={() => setIsSearchOpen((prev) => !prev)}
+            className={`gap-2 h-9 text-xs font-semibold ${
+              isSearchOpen || searchTerm
+                ? 'bg-slate-800 hover:bg-slate-900 text-white shadow-xs'
+                : 'text-slate-700 hover:bg-slate-100 border-slate-300'
+            }`}
+          >
+            <Search className="w-4 h-4" />
+            Pesquisa na Ficha
+            {searchTerm && (
+              <span className="ml-1 px-1.5 py-0.2 bg-white/20 text-white rounded text-[10px]">
+                {searchResults.length}
+              </span>
+            )}
+          </Button>
+        </div>
+
         {!isAttendant && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2 bg-primary hover:bg-primary/90">
+              <Button className="gap-2 bg-primary hover:bg-primary/90 h-9 text-xs font-semibold">
                 <Plus className="w-4 h-4" /> Nova Evolução Clínica
               </Button>
             </DialogTrigger>
@@ -524,123 +673,278 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
         )}
       </div>
 
+      {/* Painel expansível de Pesquisa da Ficha Clínica */}
+      {isSearchOpen && (
+        <Card className="border border-slate-200 bg-slate-50/70 shadow-xs animate-in fade-in slide-in-from-top-2 duration-200">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Input
+                  type="text"
+                  autoFocus
+                  placeholder="Pesquisar medicamento, sintoma, diagnóstico ou procedimento em toda a ficha..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 pr-8 bg-white h-9 text-xs sm:text-sm"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                    title="Limpar pesquisa"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('')
+                  setIsSearchOpen(false)
+                }}
+                className="h-9 text-xs"
+              >
+                Fechar
+              </Button>
+            </div>
+
+            {/* Status e Resultados da Busca */}
+            {searchTerm.trim() && (
+              <div className="pt-1">
+                {searchResults.length === 0 ? (
+                  <div className="p-4 text-center bg-white rounded-md border border-dashed border-slate-200 text-xs text-muted-foreground">
+                    Nenhum lançamento encontrado para o termo &ldquo;<strong>{searchTerm}</strong>
+                    &rdquo;.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-600 px-1">
+                      <span>
+                        Encontrado(s) <strong>{searchResults.length}</strong> lançamento(s) com o
+                        termo:
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSearchTerm('')}
+                        className="h-6 px-2 text-[11px] text-slate-500 hover:text-slate-800"
+                      >
+                        Limpar busca
+                      </Button>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                      {searchResults.map((res) => (
+                        <div
+                          key={res.record.id}
+                          onClick={() => scrollToRecord(res.record.id)}
+                          className={`p-2.5 rounded-md border text-xs cursor-pointer transition-colors bg-white hover:bg-yellow-50/60 ${
+                            activeHighlightId === res.record.id
+                              ? 'border-yellow-400 ring-2 ring-yellow-300 bg-yellow-50/80'
+                              : 'border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2 font-semibold text-slate-800 mb-1">
+                            <span className="flex items-center gap-1.5 text-primary">
+                              <Activity className="w-3.5 h-3.5" />
+                              {res.dateDisplay}
+                            </span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1 hover:text-primary">
+                              Ir ao lançamento <ChevronRight className="w-3 h-3" />
+                            </span>
+                          </div>
+                          <p className="text-slate-600 line-clamp-2 leading-relaxed">
+                            {renderHighlightedText(res.snippet, searchTerm)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Listagem de Lançamentos da Ficha Clínica (Ordem Decrescente Estrita Mantida) */}
       <div className="space-y-4">
         {records.length === 0 ? (
           <div className="text-center p-8 text-muted-foreground bg-slate-50 rounded-lg border border-dashed">
             Nenhum registro clínico encontrado para este paciente.
           </div>
         ) : (
-          records.map((record) => (
-            <Card key={record.id} className="border-none shadow-sm overflow-hidden">
-              <div className="bg-primary/5 px-6 py-3 border-b flex items-center justify-between">
-                <div className="font-semibold text-primary flex items-center gap-2">
-                  <span>{getRecordDateInfo(record).displayDate}</span>
-                  {getRecordDateInfo(record).displayTime && (
-                    <span className="text-xs font-normal text-muted-foreground">
-                      às {getRecordDateInfo(record).displayTime}
-                    </span>
+          records.map((record) => {
+            const isMatchInSearch = searchTerm.trim()
+              ? searchResults.some((sr) => sr.record.id === record.id)
+              : false
+            const isHighlightedCard = activeHighlightId === record.id
+
+            return (
+              <Card
+                key={record.id}
+                id={`clinical-record-${record.id}`}
+                className={`border shadow-sm overflow-hidden transition-all duration-300 ${
+                  isHighlightedCard
+                    ? 'ring-3 ring-yellow-400 border-yellow-400 bg-yellow-50/30'
+                    : isMatchInSearch
+                      ? 'border-yellow-300 bg-yellow-50/10'
+                      : 'border-slate-200/80'
+                }`}
+              >
+                <div className="bg-primary/5 px-6 py-3 border-b flex items-center justify-between flex-wrap gap-2">
+                  <div className="font-semibold text-primary flex items-center gap-2">
+                    <span>{getRecordDateInfo(record).displayDate}</span>
+                    {getRecordDateInfo(record).displayTime && (
+                      <span className="text-xs font-normal text-muted-foreground">
+                        às {getRecordDateInfo(record).displayTime}
+                      </span>
+                    )}
+                    {isMatchInSearch && (
+                      <span className="ml-2 px-2 py-0.5 text-[11px] font-bold rounded-full bg-yellow-100 text-yellow-800 border border-yellow-300">
+                        Termo encontrado
+                      </span>
+                    )}
+                  </div>
+
+                  {!isAttendant && (
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenEdit(record)}
+                        className="h-8 gap-1.5 text-xs border-primary/20 hover:bg-primary hover:text-white transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" /> Editar
+                      </Button>
+
+                      {/* Botão Excluir lançamento da ficha clínica ao lado de Editar */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDeletingRecord(record)}
+                        className="h-8 px-2 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200 hover:border-rose-300"
+                        title="Excluir este lançamento da ficha clínica"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span className="sr-only">Excluir lançamento</span>
+                      </Button>
+                    </div>
                   )}
                 </div>
-                {!isAttendant && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleOpenEdit(record)}
-                    className="h-8 gap-1.5 text-xs border-primary/20 hover:bg-primary hover:text-white transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" /> Editar
-                  </Button>
-                )}
-              </div>
-              <CardContent className="p-6 grid gap-6 md:grid-cols-3">
-                <div className="space-y-2">
-                  <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    <Activity className="w-4 h-4" /> Queixa / Evolução
-                  </h4>
-                  <p className="text-slate-800 whitespace-pre-wrap">{record.description}</p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                    Diagnóstico
-                  </h4>
-                  <p className="text-slate-800 font-medium">{record.diagnosis || '-'}</p>
-                </div>
-                <div className="space-y-2">
-                  <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                    Tratamento Prescrito
-                  </h4>
-                  <p className="text-slate-800 whitespace-pre-wrap">{record.treatment || '-'}</p>
-                </div>
-                {((record.files && record.files.length > 0) || !isAttendant) && (
-                  <div className="space-y-2 mt-4 col-span-full border-t pt-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
-                        Anexos
-                      </h4>
-                      {!isAttendant && (
-                        <div className="relative">
-                          <Input
-                            type="file"
-                            multiple
-                            className="absolute inset-0 opacity-0 cursor-pointer"
-                            onChange={(e) => {
-                              handleAddAttachment(record.id, e.target.files)
-                              e.target.value = ''
-                            }}
-                            disabled={loading}
-                          />
-                          <Button size="sm" variant="outline" className="gap-2 h-8">
-                            <UploadCloud className="w-3.5 h-3.5" /> Adicionar
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-3 mt-2">
-                      {record.files?.map((file) => {
-                        const fileUrl = pb.files.getURL(record, file)
-                        const isImg = /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(file)
-                        const isPdf = /\.pdf$/i.test(file)
 
-                        return (
-                          <div
-                            key={file}
-                            className="flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md border border-primary/10 hover:border-primary/30 transition-colors"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setViewingAttachment({ url: fileUrl, filename: file })}
-                              className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-left"
-                              title={`Visualizar ${file}`}
+                <CardContent className="p-6 grid gap-6 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                      <Activity className="w-4 h-4" /> Queixa / Evolução
+                    </h4>
+                    <p className="text-slate-800 whitespace-pre-wrap">
+                      {searchTerm.trim()
+                        ? renderHighlightedText(record.description || '', searchTerm)
+                        : record.description}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                      Diagnóstico
+                    </h4>
+                    <p className="text-slate-800 font-medium">
+                      {searchTerm.trim() && record.diagnosis
+                        ? renderHighlightedText(record.diagnosis, searchTerm)
+                        : record.diagnosis || '-'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                      Tratamento Prescrito
+                    </h4>
+                    <p className="text-slate-800 whitespace-pre-wrap">
+                      {searchTerm.trim() && record.treatment
+                        ? renderHighlightedText(record.treatment, searchTerm)
+                        : record.treatment || '-'}
+                    </p>
+                  </div>
+                  {((record.files && record.files.length > 0) || !isAttendant) && (
+                    <div className="space-y-2 mt-4 col-span-full border-t pt-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider">
+                          Anexos
+                        </h4>
+                        {!isAttendant && (
+                          <div className="relative">
+                            <Input
+                              type="file"
+                              multiple
+                              className="absolute inset-0 opacity-0 cursor-pointer"
+                              onChange={(e) => {
+                                handleAddAttachment(record.id, e.target.files)
+                                e.target.value = ''
+                              }}
+                              disabled={loading}
+                            />
+                            <Button size="sm" variant="outline" className="gap-2 h-8">
+                              <UploadCloud className="w-3.5 h-3.5" /> Adicionar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-3 mt-2">
+                        {record.files?.map((file) => {
+                          const fileUrl = pb.files.getURL(record, file)
+                          const isImg = /\.(jpe?g|png|webp|gif|svg|bmp)$/i.test(file)
+                          const isPdf = /\.pdf$/i.test(file)
+
+                          return (
+                            <div
+                              key={file}
+                              className="flex items-center gap-1.5 bg-primary/5 px-3 py-1.5 rounded-md border border-primary/10 hover:border-primary/30 transition-colors"
                             >
-                              {isImg ? (
-                                <ImageIcon className="w-4 h-4 shrink-0 text-primary" />
-                              ) : isPdf ? (
-                                <FileText className="w-4 h-4 shrink-0 text-primary" />
-                              ) : (
-                                <Paperclip className="w-4 h-4 shrink-0" />
-                              )}
-                              <span>{file.length > 20 ? file.substring(0, 20) + '...' : file}</span>
-                            </button>
-                            {!isAttendant && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteAttachment(record.id, file)}
-                                className="text-red-500 hover:text-red-700 ml-1 p-1"
-                                disabled={loading}
-                                title="Excluir anexo"
+                                onClick={() =>
+                                  setViewingAttachment({ url: fileUrl, filename: file })
+                                }
+                                className="text-sm font-medium text-primary hover:underline flex items-center gap-1.5 cursor-pointer text-left"
+                                title={`Visualizar ${file}`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                {isImg ? (
+                                  <ImageIcon className="w-4 h-4 shrink-0 text-primary" />
+                                ) : isPdf ? (
+                                  <FileText className="w-4 h-4 shrink-0 text-primary" />
+                                ) : (
+                                  <Paperclip className="w-4 h-4 shrink-0" />
+                                )}
+                                <span>
+                                  {file.length > 20 ? file.substring(0, 20) + '...' : file}
+                                </span>
                               </button>
-                            )}
-                          </div>
-                        )
-                      })}
+                              {!isAttendant && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAttachment(record.id, file)}
+                                  className="text-red-500 hover:text-red-700 ml-1 p-1"
+                                  disabled={loading}
+                                  title="Excluir anexo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))
+                  )}
+                </CardContent>
+              </Card>
+            )
+          })
         )}
       </div>
 
@@ -828,6 +1132,75 @@ export function ClinicalHistoryTab({ patient }: { patient: Patient }) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação para Exclusão de Lançamento da Ficha Clínica */}
+      <Dialog
+        open={Boolean(deletingRecord)}
+        onOpenChange={(open) => !open && setDeletingRecord(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700">
+              <Trash2 className="w-5 h-5" /> Excluir este lançamento da ficha clínica?
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-600 pt-2">
+              Tem certeza de que deseja remover permanentemente este atendimento da ficha clínica do
+              animal? A exclusão ficará registrada na auditoria e não afeta anexos de outros
+              lançamentos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deletingRecord && (
+            <div className="bg-slate-50 p-3 rounded-md border border-slate-200 text-xs space-y-1.5 my-2">
+              <p>
+                <strong className="text-slate-700">Data do Atendimento:</strong>{' '}
+                {getRecordDateInfo(deletingRecord).displayDate}
+                {getRecordDateInfo(deletingRecord).displayTime
+                  ? ` às ${getRecordDateInfo(deletingRecord).displayTime}`
+                  : ''}
+              </p>
+              {deletingRecord.description && (
+                <p className="line-clamp-3">
+                  <strong className="text-slate-700">Queixa / Evolução:</strong>{' '}
+                  {deletingRecord.description}
+                </p>
+              )}
+              {deletingRecord.diagnosis && (
+                <p>
+                  <strong className="text-slate-700">Diagnóstico:</strong>{' '}
+                  {deletingRecord.diagnosis}
+                </p>
+              )}
+              {deletingRecord.treatment && (
+                <p className="line-clamp-2">
+                  <strong className="text-slate-700">Tratamento:</strong> {deletingRecord.treatment}
+                </p>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeletingRecord(null)}
+              disabled={deleteLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteRecord}
+              disabled={deleteLoading}
+              className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleteLoading ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
