@@ -30,6 +30,7 @@ import {
   Phone,
   ShieldCheck,
   Layers,
+  Lock,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -103,11 +104,16 @@ export default function UsersPage() {
   }, [user])
   useRealtime('users', () => loadUsers(), user?.role === 'admin')
 
-  const buildInitialPermissions = () => {
-    // Para novo usuário: todos os módulos habilitados por padrão
+  const buildInitialPermissions = (targetRole: string = 'attendant') => {
+    // Para novo usuário: módulos do papel habilitados por padrão; módulos fora do papel nascem false
     const perms: Record<string, boolean> = {}
     SYSTEM_MODULES.forEach((m) => {
-      perms[m.id] = true
+      if (targetRole === 'admin') {
+        perms[m.id] = true
+      } else {
+        const isAllowedByRole = m.roles.includes(targetRole)
+        perms[m.id] = isAllowedByRole
+      }
     })
     return perms
   }
@@ -115,23 +121,53 @@ export default function UsersPage() {
   const openCreate = () => {
     setFormData({
       ...initialFormData,
-      module_permissions: buildInitialPermissions(),
+      module_permissions: buildInitialPermissions('attendant'),
     })
     setErrors({})
     setIsCreateOpen(true)
+  }
+
+  const handleRoleChange = (newRole: 'admin' | 'veterinarian' | 'attendant') => {
+    setFormData((prev) => {
+      const updatedPerms: Record<string, boolean> = {}
+      SYSTEM_MODULES.forEach((m) => {
+        if (newRole === 'admin') {
+          updatedPerms[m.id] = true
+        } else {
+          const isAllowedByRole = m.roles.includes(newRole)
+          if (!isAllowedByRole) {
+            updatedPerms[m.id] = false
+          } else {
+            updatedPerms[m.id] = prev.module_permissions[m.id] !== false
+          }
+        }
+      })
+
+      return {
+        ...prev,
+        role: newRole,
+        module_permissions: updatedPerms,
+      }
+    })
   }
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
     try {
-      // Se for admin, todos os módulos são garantidos como habilitados
+      // Se for admin, todos os módulos são garantidos como habilitados.
+      // Se for outro papel, módulos que NÃO pertencem ao papel são gravados como false.
       const permsToSave: Record<string, boolean> = {}
       SYSTEM_MODULES.forEach((m) => {
         if (formData.role === 'admin') {
           permsToSave[m.id] = true
         } else {
-          permsToSave[m.id] = formData.module_permissions[m.id] !== false
+          const isAllowedByRole = m.roles.includes(formData.role)
+          if (!isAllowedByRole) {
+            permsToSave[m.id] = false
+          } else {
+            permsToSave[m.id] = formData.module_permissions[m.id] !== false
+          }
         }
       })
 
@@ -162,11 +198,23 @@ export default function UsersPage() {
 
   const openEdit = (u: User) => {
     setUserToEdit(u)
-    // Prepara as permissões existentes (default: true para módulos não configurados)
+    const currentRole = u.role || 'attendant'
+    // Prepara as permissões existentes:
+    // Se o módulo não pertencer ao papel do usuário, travado em false.
+    // Caso contrário: default true para módulos não configurados, ou valor salvo.
     const perms: Record<string, boolean> = {}
     const existing = u.module_permissions || {}
     SYSTEM_MODULES.forEach((m) => {
-      perms[m.id] = existing[m.id] !== false
+      if (currentRole === 'admin') {
+        perms[m.id] = true
+      } else {
+        const isAllowedByRole = m.roles.includes(currentRole)
+        if (!isAllowedByRole) {
+          perms[m.id] = false
+        } else {
+          perms[m.id] = existing[m.id] !== false
+        }
+      }
     })
 
     setFormData({
@@ -174,7 +222,7 @@ export default function UsersPage() {
       email: u.email || '',
       phone: u.phone || '',
       password: '',
-      role: u.role || 'attendant',
+      role: currentRole,
       module_permissions: perms,
     })
     setErrors({})
@@ -196,13 +244,19 @@ export default function UsersPage() {
     setErrors({})
     try {
       // Regra de segurança: se o usuário sendo editado é admin, ou o papel for admin,
-      // ele não pode ter módulos desabilitados
+      // ele não pode ter módulos desabilitados.
+      // Para outros papéis: permissões de módulos fora do papel continuam gravadas como false.
       const permsToSave: Record<string, boolean> = {}
       SYSTEM_MODULES.forEach((m) => {
         if (formData.role === 'admin') {
           permsToSave[m.id] = true
         } else {
-          permsToSave[m.id] = formData.module_permissions[m.id] !== false
+          const isAllowedByRole = m.roles.includes(formData.role)
+          if (!isAllowedByRole) {
+            permsToSave[m.id] = false
+          } else {
+            permsToSave[m.id] = formData.module_permissions[m.id] !== false
+          }
         }
       })
 
@@ -413,10 +467,7 @@ export default function UsersPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-role">Papel</Label>
-              <Select
-                value={formData.role}
-                onValueChange={(val: any) => setFormData({ ...formData, role: val })}
-              >
+              <Select value={formData.role} onValueChange={(val: any) => handleRoleChange(val)}>
                 <SelectTrigger id="create-role">
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
@@ -454,8 +505,38 @@ export default function UsersPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
                   {SYSTEM_MODULES.map((mod) => {
-                    const isChecked = formData.module_permissions[mod.id] !== false
+                    const isAllowedByRole = mod.roles.includes(formData.role)
+                    const isChecked =
+                      isAllowedByRole && formData.module_permissions[mod.id] !== false
                     const Icon = mod.icon
+
+                    if (!isAllowedByRole) {
+                      return (
+                        <div
+                          key={mod.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 bg-slate-50/70 opacity-75"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-slate-600 leading-none truncate flex items-center gap-1.5">
+                                {mod.title}
+                                <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                              </p>
+                              <p className="text-[10px] text-amber-700 font-medium truncate mt-0.5">
+                                Disponível apenas para administradores
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={false}
+                            disabled={true}
+                            aria-label={`${mod.title} - Disponível apenas para administradores`}
+                          />
+                        </div>
+                      )
+                    }
+
                     return (
                       <div
                         key={mod.id}
@@ -544,7 +625,7 @@ export default function UsersPage() {
               <Label htmlFor="edit-role">Papel</Label>
               <Select
                 value={formData.role}
-                onValueChange={(val: any) => setFormData({ ...formData, role: val })}
+                onValueChange={(val: any) => handleRoleChange(val)}
                 disabled={userToEdit?.id === user?.id} // prevent self demotion
               >
                 <SelectTrigger id="edit-role">
@@ -585,8 +666,38 @@ export default function UsersPage() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
                   {SYSTEM_MODULES.map((mod) => {
-                    const isChecked = formData.module_permissions[mod.id] !== false
+                    const isAllowedByRole = mod.roles.includes(formData.role)
+                    const isChecked =
+                      isAllowedByRole && formData.module_permissions[mod.id] !== false
                     const Icon = mod.icon
+
+                    if (!isAllowedByRole) {
+                      return (
+                        <div
+                          key={mod.id}
+                          className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200/80 bg-slate-50/70 opacity-75"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <Icon className="w-4 h-4 text-slate-400 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-slate-600 leading-none truncate flex items-center gap-1.5">
+                                {mod.title}
+                                <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                              </p>
+                              <p className="text-[10px] text-amber-700 font-medium truncate mt-0.5">
+                                Disponível apenas para administradores
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            checked={false}
+                            disabled={true}
+                            aria-label={`${mod.title} - Disponível apenas para administradores`}
+                          />
+                        </div>
+                      )
+                    }
+
                     return (
                       <div
                         key={mod.id}
