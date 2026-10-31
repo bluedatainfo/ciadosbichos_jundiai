@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -24,12 +25,47 @@ import { AuditPage } from '@/pages/AuditPage'
 import PrescriptionPage from '@/pages/PrescriptionPage'
 import NotFound from '@/pages/NotFound'
 import { AuthProvider, useAuth } from '@/hooks/use-auth'
+import { useToast } from '@/hooks/use-toast'
+import { canUserAccessPath, getDefaultPathForUser } from '@/config/modules'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, loading } = useAuth()
   if (loading) return null
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return children
+}
+
+/**
+ * Guarda de módulo para rotas individuais:
+ * Se o usuário não tiver permissão para acessar o módulo da rota solicitada,
+ * redireciona para a tela inicial do usuário com a mensagem "Você não tem acesso a este módulo".
+ */
+const ModuleGuard = ({ children, path }: { children: React.ReactNode; path: string }) => {
+  const { user } = useAuth()
+  const { toast } = useToast()
+  const location = useLocation()
+  const hasAccess = canUserAccessPath(path, user)
+  const warnedPathRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!hasAccess && warnedPathRef.current !== location.pathname) {
+      warnedPathRef.current = location.pathname
+      toast({
+        title: 'Acesso negado',
+        description: 'Você não tem acesso a este módulo',
+        variant: 'destructive',
+      })
+    }
+  }, [hasAccess, location.pathname, toast])
+
+  if (!hasAccess) {
+    const fallbackPath = getDefaultPathForUser(user)
+    // Se o fallback for a própria rota que tentou (para evitar loop), manda para /login se deslogado
+    const target = fallbackPath === path ? '/login' : fallbackPath
+    return <Navigate to={target} replace />
+  }
+
+  return <>{children}</>
 }
 
 const AppRoutes = () => {
@@ -45,20 +81,118 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       >
-        <Route path="/" element={<Index />} />
-        <Route path="/pacientes" element={<Patients />} />
-        <Route path="/pacientes/:id" element={<PatientProfile />} />
-        <Route path="/receituario" element={<PrescriptionPage />} />
-        <Route path="/relatorios/retornos" element={<ReturnReportPage />} />
-        <Route path="/relatorios/aniversariantes" element={<BirthdayReportPage />} />
-        <Route path="/relatorios/vacinas" element={<PendingVaccinesReportPage />} />
-        <Route path="/relatorios/estatisticas" element={<SpeciesStatsReportPage />} />
-        <Route path="/agenda" element={<Agenda />} />
-        <Route path="/estoque" element={<Inventory />} />
-        <Route path="/importacao" element={<Import />} />
-        <Route path="/usuarios" element={<UsersPage />} />
-        <Route path="/configuracoes" element={<Settings />} />
-        <Route path="/auditoria" element={<AuditPage />} />
+        <Route
+          path="/"
+          element={
+            <ModuleGuard path="/">
+              <Index />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/pacientes"
+          element={
+            <ModuleGuard path="/pacientes">
+              <Patients />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/pacientes/:id"
+          element={
+            <ModuleGuard path="/pacientes">
+              <PatientProfile />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/receituario"
+          element={
+            <ModuleGuard path="/receituario">
+              <PrescriptionPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/relatorios/retornos"
+          element={
+            <ModuleGuard path="/relatorios/retornos">
+              <ReturnReportPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/relatorios/aniversariantes"
+          element={
+            <ModuleGuard path="/relatorios/aniversariantes">
+              <BirthdayReportPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/relatorios/vacinas"
+          element={
+            <ModuleGuard path="/relatorios/vacinas">
+              <PendingVaccinesReportPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/relatorios/estatisticas"
+          element={
+            <ModuleGuard path="/relatorios/estatisticas">
+              <SpeciesStatsReportPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/agenda"
+          element={
+            <ModuleGuard path="/agenda">
+              <Agenda />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/estoque"
+          element={
+            <ModuleGuard path="/estoque">
+              <Inventory />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/importacao"
+          element={
+            <ModuleGuard path="/importacao">
+              <Import />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/usuarios"
+          element={
+            <ModuleGuard path="/usuarios">
+              <UsersPage />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/configuracoes"
+          element={
+            <ModuleGuard path="/configuracoes">
+              <Settings />
+            </ModuleGuard>
+          }
+        />
+        <Route
+          path="/auditoria"
+          element={
+            <ModuleGuard path="/auditoria">
+              <AuditPage />
+            </ModuleGuard>
+          }
+        />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

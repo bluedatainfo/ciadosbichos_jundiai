@@ -21,7 +21,16 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { UserCog, Plus, MoreHorizontal, Pencil, Trash2, Phone } from 'lucide-react'
+import {
+  UserCog,
+  Plus,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Phone,
+  ShieldCheck,
+  Layers,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -32,6 +41,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,6 +59,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { extractFieldErrors } from '@/lib/pocketbase/errors'
+import { SYSTEM_MODULES } from '@/config/modules'
 
 export default function UsersPage() {
   const { user } = useAuth()
@@ -66,6 +77,7 @@ export default function UsersPage() {
     phone: '',
     password: '',
     role: 'attendant' as 'admin' | 'veterinarian' | 'attendant',
+    module_permissions: {} as Record<string, boolean>,
   }
 
   const [formData, setFormData] = useState(initialFormData)
@@ -91,8 +103,20 @@ export default function UsersPage() {
   }, [user])
   useRealtime('users', () => loadUsers(), user?.role === 'admin')
 
+  const buildInitialPermissions = () => {
+    // Para novo usuário: todos os módulos habilitados por padrão
+    const perms: Record<string, boolean> = {}
+    SYSTEM_MODULES.forEach((m) => {
+      perms[m.id] = true
+    })
+    return perms
+  }
+
   const openCreate = () => {
-    setFormData(initialFormData)
+    setFormData({
+      ...initialFormData,
+      module_permissions: buildInitialPermissions(),
+    })
     setErrors({})
     setIsCreateOpen(true)
   }
@@ -101,6 +125,16 @@ export default function UsersPage() {
     e.preventDefault()
     setErrors({})
     try {
+      // Se for admin, todos os módulos são garantidos como habilitados
+      const permsToSave: Record<string, boolean> = {}
+      SYSTEM_MODULES.forEach((m) => {
+        if (formData.role === 'admin') {
+          permsToSave[m.id] = true
+        } else {
+          permsToSave[m.id] = formData.module_permissions[m.id] !== false
+        }
+      })
+
       const data = {
         name: formData.name,
         email: formData.email,
@@ -109,6 +143,7 @@ export default function UsersPage() {
         passwordConfirm: formData.password,
         role: formData.role,
         emailVisibility: true,
+        module_permissions: permsToSave,
       }
       await pb.collection('users').create(data)
       setIsCreateOpen(false)
@@ -127,27 +162,57 @@ export default function UsersPage() {
 
   const openEdit = (u: User) => {
     setUserToEdit(u)
+    // Prepara as permissões existentes (default: true para módulos não configurados)
+    const perms: Record<string, boolean> = {}
+    const existing = u.module_permissions || {}
+    SYSTEM_MODULES.forEach((m) => {
+      perms[m.id] = existing[m.id] !== false
+    })
+
     setFormData({
       name: u.name || '',
       email: u.email || '',
       phone: u.phone || '',
       password: '',
       role: u.role || 'attendant',
+      module_permissions: perms,
     })
     setErrors({})
     setIsEditOpen(true)
+  }
+
+  const handleToggleModule = (moduleId: string, checked: boolean) => {
+    setFormData((prev) => ({
+      ...prev,
+      module_permissions: {
+        ...prev.module_permissions,
+        [moduleId]: checked,
+      },
+    }))
   }
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrors({})
     try {
+      // Regra de segurança: se o usuário sendo editado é admin, ou o papel for admin,
+      // ele não pode ter módulos desabilitados
+      const permsToSave: Record<string, boolean> = {}
+      SYSTEM_MODULES.forEach((m) => {
+        if (formData.role === 'admin') {
+          permsToSave[m.id] = true
+        } else {
+          permsToSave[m.id] = formData.module_permissions[m.id] !== false
+        }
+      })
+
       const data: any = {
         name: formData.name,
         email: formData.email,
         phone: formData.phone.trim(),
         role: formData.role,
         emailVisibility: true,
+        module_permissions: permsToSave,
       }
       if (formData.password) {
         data.password = formData.password
@@ -363,6 +428,63 @@ export default function UsersPage() {
               </Select>
               {errors.role && <p className="text-sm text-red-500">{errors.role}</p>}
             </div>
+
+            {/* Seção Módulos (Criação) */}
+            <div className="pt-2 border-t space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold flex items-center gap-1.5 text-slate-800">
+                    <Layers className="w-4 h-4 text-primary" /> Módulos do Sistema
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formData.role === 'admin'
+                      ? 'Administradores possuem acesso irrestrito a todos os módulos.'
+                      : 'Habilite ou desabilite os módulos visíveis e acessíveis para este usuário (padrão: habilitado).'}
+                  </p>
+                </div>
+              </div>
+
+              {formData.role === 'admin' ? (
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    Todos os módulos estão permanentemente liberados para o papel Administrador.
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-60 overflow-y-auto pr-1">
+                  {SYSTEM_MODULES.map((mod) => {
+                    const isChecked = formData.module_permissions[mod.id] !== false
+                    const Icon = mod.icon
+                    return (
+                      <div
+                        key={mod.id}
+                        className="flex items-center justify-between p-2.5 rounded-lg border bg-card hover:bg-accent/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <Icon className="w-4 h-4 text-primary shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-900 leading-none truncate">
+                              {mod.title}
+                            </p>
+                            {mod.description && (
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                {mod.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={isChecked}
+                          onCheckedChange={(checked) => handleToggleModule(mod.id, checked)}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="submit">Salvar</Button>
             </DialogFooter>
@@ -371,7 +493,7 @@ export default function UsersPage() {
       </Dialog>
 
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
@@ -436,6 +558,64 @@ export default function UsersPage() {
               </Select>
               {errors.role && <p className="text-sm text-red-500">{errors.role}</p>}
             </div>
+
+            {/* Seção Módulos (Edição) */}
+            <div className="pt-2 border-t space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold flex items-center gap-1.5 text-slate-800">
+                    <Layers className="w-4 h-4 text-primary" /> Módulos
+                  </Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {formData.role === 'admin'
+                      ? 'Usuários administradores não podem ter módulos desabilitados (proteção de acesso total).'
+                      : 'Habilite ou desabilite os módulos visíveis no menu e acessíveis para este usuário.'}
+                  </p>
+                </div>
+              </div>
+
+              {formData.role === 'admin' ? (
+                <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>
+                    O administrador possui acesso completo e irrestrito a todos os módulos do
+                    sistema.
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                  {SYSTEM_MODULES.map((mod) => {
+                    const isChecked = formData.module_permissions[mod.id] !== false
+                    const Icon = mod.icon
+                    return (
+                      <div
+                        key={mod.id}
+                        className="flex items-center justify-between p-2.5 rounded-lg border bg-card hover:bg-accent/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                          <Icon className="w-4 h-4 text-primary shrink-0" />
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-900 leading-none truncate">
+                              {mod.title}
+                            </p>
+                            {mod.description && (
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                                {mod.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <Switch
+                          checked={isChecked}
+                          onCheckedChange={(checked) => handleToggleModule(mod.id, checked)}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             <DialogFooter>
               <Button type="submit">Salvar</Button>
             </DialogFooter>

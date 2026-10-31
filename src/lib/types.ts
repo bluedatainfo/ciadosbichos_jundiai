@@ -25,6 +25,7 @@ export type User = {
   phone?: string
   role: 'admin' | 'veterinarian' | 'attendant'
   avatar?: string
+  module_permissions?: Record<string, boolean> | null
 }
 
 export type InventoryItem = {

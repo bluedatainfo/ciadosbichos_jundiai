@@ -27,97 +27,25 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import {
-  LayoutDashboard,
-  Users,
-  FileSignature,
-  CalendarDays,
-  Settings,
-  UserCircle,
-  LogOut,
-  Package,
-  UserCog,
-  Upload,
-  HelpCircle,
-  BookOpen,
-  FileBarChart,
-  ChevronDown,
-  ShieldCheck,
-} from 'lucide-react'
+import { UserCircle, LogOut, HelpCircle, BookOpen, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useManual } from '@/hooks/use-manual'
-
-const menuItems = [
-  {
-    title: 'Dashboard',
-    path: '/',
-    icon: LayoutDashboard,
-    roles: ['admin', 'veterinarian', 'attendant'],
-  },
-  {
-    title: 'Animais & Tutores',
-    path: '/pacientes',
-    icon: Users,
-    roles: ['admin', 'veterinarian', 'attendant'],
-  },
-  {
-    title: 'Receituário',
-    path: '/receituario',
-    icon: FileSignature,
-    roles: ['admin', 'veterinarian', 'attendant'],
-  },
-  {
-    title: 'Relatórios',
-    path: '/relatorios',
-    icon: FileBarChart,
-    roles: ['admin', 'veterinarian', 'attendant'],
-    subItems: [
-      {
-        title: 'Retornos',
-        path: '/relatorios/retornos',
-        roles: ['admin', 'veterinarian', 'attendant'],
-      },
-      {
-        title: 'Aniversariantes',
-        path: '/relatorios/aniversariantes',
-        roles: ['admin', 'veterinarian', 'attendant'],
-      },
-      {
-        title: 'Vacinas Pendentes',
-        path: '/relatorios/vacinas',
-        roles: ['admin', 'veterinarian', 'attendant'],
-      },
-      {
-        title: 'Estatísticas de Espécies',
-        path: '/relatorios/estatisticas',
-        roles: ['admin', 'veterinarian', 'attendant'],
-      },
-    ],
-  },
-  {
-    title: 'Agenda de Retornos',
-    path: '/agenda',
-    icon: CalendarDays,
-    roles: ['admin', 'veterinarian', 'attendant'],
-  },
-  {
-    title: 'Estoque',
-    path: '/estoque',
-    icon: Package,
-    roles: ['admin', 'veterinarian', 'attendant'],
-  },
-  { title: 'Auditoria', path: '/auditoria', icon: ShieldCheck, roles: ['admin'] },
-  { title: 'Equipe & Usuários', path: '/usuarios', icon: UserCog, roles: ['admin'] },
-  { title: 'Importação de Dados', path: '/importacao', icon: Upload, roles: ['admin'] },
-  { title: 'Configurações', path: '/configuracoes', icon: Settings, roles: ['admin'] },
-]
+import { SYSTEM_MODULES, isModuleEnabledForUser } from '@/config/modules'
 
 export default function Layout() {
   const location = useLocation()
   const { signOut, user } = useAuth()
   const { openManual, currentModule } = useManual()
   const { clinicName, clinicLogoUrl } = useClinicSettings()
+
+  // Filtra itens de menu pelo papel e pelo controle de permissão por usuário
+  const visibleMenuItems = SYSTEM_MODULES.filter((item) => {
+    // 1. Papel tem acesso?
+    if (!item.roles.includes(user?.role || 'attendant')) return false
+    // 2. Módulo está habilitado para o usuário?
+    return isModuleEnabledForUser(item.id, user)
+  })
 
   return (
     <SidebarProvider>
@@ -152,80 +80,78 @@ export default function Layout() {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {menuItems
-                    .filter((item) => item.roles.includes(user?.role || 'attendant'))
-                    .map((item) => {
-                      if (item.subItems && item.subItems.length > 0) {
-                        const isSubActive = item.subItems.some(
-                          (sub) =>
-                            location.pathname === sub.path ||
-                            location.pathname.startsWith(sub.path + '/'),
-                        )
-                        return (
-                          <Collapsible
-                            key={item.title}
-                            asChild
-                            defaultOpen={isSubActive || location.pathname.startsWith('/relatorios')}
-                            className="group/collapsible"
-                          >
-                            <SidebarMenuItem>
-                              <CollapsibleTrigger asChild>
-                                <SidebarMenuButton
-                                  tooltip={item.title}
-                                  isActive={isSubActive}
-                                  className="w-full justify-between text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <item.icon className="w-5 h-5 text-emerald-400/90" />
-                                    <span className="font-medium">{item.title}</span>
-                                  </div>
-                                  <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 text-slate-400" />
-                                </SidebarMenuButton>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                <SidebarMenuSub className="border-l-emerald-850/60">
-                                  {item.subItems
-                                    .filter((sub) => sub.roles.includes(user?.role || 'attendant'))
-                                    .map((sub) => (
-                                      <SidebarMenuSubItem key={sub.title}>
-                                        <SidebarMenuSubButton
-                                          asChild
-                                          isActive={location.pathname === sub.path}
-                                          className="text-slate-300 hover:text-white hover:bg-emerald-900/50 data-[active=true]:bg-emerald-700/50 data-[active=true]:text-white font-medium"
-                                        >
-                                          <Link to={sub.path}>
-                                            <span>{sub.title}</span>
-                                          </Link>
-                                        </SidebarMenuSubButton>
-                                      </SidebarMenuSubItem>
-                                    ))}
-                                </SidebarMenuSub>
-                              </CollapsibleContent>
-                            </SidebarMenuItem>
-                          </Collapsible>
-                        )
-                      }
-
-                      const isActive =
-                        location.pathname === item.path ||
-                        (item.path !== '/' && location.pathname.startsWith(item.path))
-
-                      return (
-                        <SidebarMenuItem key={item.title}>
-                          <SidebarMenuButton
-                            asChild
-                            isActive={isActive}
-                            tooltip={item.title}
-                            className="text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
-                          >
-                            <Link to={item.path} className="flex items-center gap-3">
-                              <item.icon className="w-5 h-5 text-emerald-400/90" />
-                              <span className="font-medium">{item.title}</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
+                  {visibleMenuItems.map((item) => {
+                    if (item.subItems && item.subItems.length > 0) {
+                      const isSubActive = item.subItems.some(
+                        (sub) =>
+                          location.pathname === sub.path ||
+                          location.pathname.startsWith(sub.path + '/'),
                       )
-                    })}
+                      return (
+                        <Collapsible
+                          key={item.title}
+                          asChild
+                          defaultOpen={isSubActive || location.pathname.startsWith('/relatorios')}
+                          className="group/collapsible"
+                        >
+                          <SidebarMenuItem>
+                            <CollapsibleTrigger asChild>
+                              <SidebarMenuButton
+                                tooltip={item.title}
+                                isActive={isSubActive}
+                                className="w-full justify-between text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <item.icon className="w-5 h-5 text-emerald-400/90" />
+                                  <span className="font-medium">{item.title}</span>
+                                </div>
+                                <ChevronDown className="w-4 h-4 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180 text-slate-400" />
+                              </SidebarMenuButton>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <SidebarMenuSub className="border-l-emerald-850/60">
+                                {item.subItems
+                                  .filter((sub) => sub.roles.includes(user?.role || 'attendant'))
+                                  .map((sub) => (
+                                    <SidebarMenuSubItem key={sub.title}>
+                                      <SidebarMenuSubButton
+                                        asChild
+                                        isActive={location.pathname === sub.path}
+                                        className="text-slate-300 hover:text-white hover:bg-emerald-900/50 data-[active=true]:bg-emerald-700/50 data-[active=true]:text-white font-medium"
+                                      >
+                                        <Link to={sub.path}>
+                                          <span>{sub.title}</span>
+                                        </Link>
+                                      </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                  ))}
+                              </SidebarMenuSub>
+                            </CollapsibleContent>
+                          </SidebarMenuItem>
+                        </Collapsible>
+                      )
+                    }
+
+                    const isActive =
+                      location.pathname === item.path ||
+                      (item.path !== '/' && location.pathname.startsWith(item.path))
+
+                    return (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={isActive}
+                          tooltip={item.title}
+                          className="text-slate-300 hover:text-white hover:bg-emerald-900/40 data-[active=true]:bg-emerald-800/60 data-[active=true]:text-emerald-100 transition-colors"
+                        >
+                          <Link to={item.path} className="flex items-center gap-3">
+                            <item.icon className="w-5 h-5 text-emerald-400/90" />
+                            <span className="font-medium">{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    )
+                  })}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
