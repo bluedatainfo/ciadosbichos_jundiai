@@ -149,6 +149,7 @@ export default function Patients() {
     name: '',
     species: 'Cão',
     breed: '',
+    pelagem: '',
     birth_date: '',
     gender: 'Macho',
     weight: '',
@@ -593,6 +594,7 @@ export default function Patients() {
         name: formData.name,
         species: formData.species,
         breed: formData.breed,
+        pelagem: formData.pelagem ? formData.pelagem.trim() : '',
         birth_date: formData.birth_date ? new Date(formData.birth_date).toISOString() : '',
         gender: formData.gender as 'Macho' | 'Fêmea',
         weight: parseFloat(formData.weight) || 0,
@@ -612,6 +614,7 @@ export default function Patients() {
           name: { label: 'Nome', oldValue: null, newValue: newPatient.name },
           species: { label: 'Espécie', oldValue: null, newValue: newPatient.species },
           breed: { label: 'Raça', oldValue: null, newValue: newPatient.breed },
+          pelagem: { label: 'Pelagem', oldValue: null, newValue: newPatient.pelagem || null },
           gender: { label: 'Sexo', oldValue: null, newValue: newPatient.gender },
           weight: { label: 'Peso (kg)', oldValue: null, newValue: newPatient.weight },
           nume: { label: 'Nº Oficial (NUME)', oldValue: null, newValue: newPatient.nume || null },
@@ -637,6 +640,7 @@ export default function Patients() {
         name: '',
         species: 'Cão',
         breed: '',
+        pelagem: '',
         birth_date: '',
         gender: 'Macho',
         weight: '',
@@ -907,29 +911,45 @@ export default function Patients() {
               ) : (
                 <div className="space-y-4 border p-4 rounded-md bg-slate-50">
                   <h4 className="font-medium text-sm">Dados do Novo Tutor</h4>
-                  <Input
-                    placeholder="Nome *"
-                    value={formData.newTutorName}
-                    onChange={(e) => setFormData({ ...formData, newTutorName: e.target.value })}
-                    required
-                  />
-                  <Input
-                    placeholder="Telefone *"
-                    value={formData.newTutorPhone}
-                    onChange={(e) => setFormData({ ...formData, newTutorPhone: e.target.value })}
-                    required
-                  />
-                  <Input
-                    placeholder="Email"
-                    type="email"
-                    value={formData.newTutorEmail}
-                    onChange={(e) => setFormData({ ...formData, newTutorEmail: e.target.value })}
-                  />
-                  <Input
-                    placeholder="CPF"
-                    value={formData.newTutorCpf}
-                    onChange={(e) => setFormData({ ...formData, newTutorCpf: e.target.value })}
-                  />
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nome do Tutor *</Label>
+                    <Input
+                      placeholder="Nome completo do tutor *"
+                      value={formData.newTutorName}
+                      onChange={(e) => setFormData({ ...formData, newTutorName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Telefone *</Label>
+                    <Input
+                      placeholder="(00) 00000-0000 *"
+                      value={formData.newTutorPhone}
+                      onChange={(e) => setFormData({ ...formData, newTutorPhone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Email</Label>
+                      <Input
+                        placeholder="email@exemplo.com"
+                        type="email"
+                        value={formData.newTutorEmail}
+                        onChange={(e) =>
+                          setFormData({ ...formData, newTutorEmail: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">CPF</Label>
+                      <Input
+                        placeholder="000.000.000-00"
+                        value={formData.newTutorCpf}
+                        onChange={(e) => setFormData({ ...formData, newTutorCpf: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
                   {/* Endereço Completo do Novo Tutor */}
                   <div className="pt-2 border-t space-y-3">
@@ -1037,7 +1057,8 @@ export default function Patients() {
               <div className="space-y-4 pt-4">
                 <h4 className="font-medium text-sm border-b pb-2">Dados do Animal</h4>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="col-span-2">
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Nome do Animal *</Label>
                     <Input
                       placeholder="Nome do Animal *"
                       value={formData.name}
@@ -1045,7 +1066,8 @@ export default function Patients() {
                       required
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nº Oficial (NUME)</Label>
                     <Input
                       placeholder="Nº Oficial (NUME)"
                       value={formData.nume}
@@ -1056,19 +1078,48 @@ export default function Patients() {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Espécie *</Label>
+                    <Input
+                      placeholder="Ex: Cão, Gato..."
+                      value={formData.species}
+                      onChange={(e) => setFormData({ ...formData, species: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Raça</Label>
+                    <Input
+                      placeholder="Ex: SRD, Poodle..."
+                      value={formData.breed}
+                      onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Pelagem</Label>
                   <Input
-                    placeholder="Espécie"
-                    value={formData.species}
-                    onChange={(e) => setFormData({ ...formData, species: e.target.value })}
-                    required
-                  />
-                  <Input
-                    placeholder="Raça"
-                    value={formData.breed}
-                    onChange={(e) => setFormData({ ...formData, breed: e.target.value })}
+                    placeholder="Ex: Preto, Branco, Caramelo, Malhado..."
+                    value={formData.pelagem}
+                    onChange={(e) => setFormData({ ...formData, pelagem: e.target.value })}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Sexo</Label>
+                    <Select
+                      value={formData.gender}
+                      onValueChange={(v) => setFormData({ ...formData, gender: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Macho">Macho</SelectItem>
+                        <SelectItem value="Fêmea">Fêmea</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Nascimento</Label>
                     <Input
@@ -1082,23 +1133,12 @@ export default function Patients() {
                     <Input
                       type="number"
                       step="0.1"
+                      placeholder="Ex: 5.5"
                       value={formData.weight}
                       onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
                     />
                   </div>
                 </div>
-                <Select
-                  value={formData.gender}
-                  onValueChange={(v) => setFormData({ ...formData, gender: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Macho">Macho</SelectItem>
-                    <SelectItem value="Fêmea">Fêmea</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
               <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? 'Salvando...' : 'Salvar Cadastro'}
