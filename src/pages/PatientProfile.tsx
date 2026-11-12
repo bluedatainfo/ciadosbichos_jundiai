@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, User, Activity, Printer, RefreshCw, AlertTriangle, Clock } from 'lucide-react'
 import { getReturnAlerts, ReturnAlert } from '@/services/return-alerts'
 import pb from '@/lib/pocketbase/client'
+import { calculateAge } from '@/lib/utils'
 import { GeneralInfoTab } from '@/components/patient/GeneralInfoTab'
 import { ReturnsTab } from '@/components/patient/ReturnsTab'
 import { ClinicalHistoryTab } from '@/components/patient/ClinicalHistoryTab'
@@ -102,12 +103,8 @@ export default function PatientProfile() {
 
   const photoUrl = patient?.photo ? pb.files.getURL(patient, patient.photo) : null
 
-  const getAge = (dateStr: string) => {
-    if (!dateStr) return '-'
-    const diff = Date.now() - new Date(dateStr).getTime()
-    const age = new Date(diff)
-    return Math.abs(age.getUTCFullYear() - 1970) + ' anos'
-  }
+  // Idade no cabeçalho: usa o helper central calculateAge (meses/dias para filhotes)
+  const getAge = (dateStr: string) => (dateStr ? calculateAge(dateStr) : '-')
 
   return (
     <>
